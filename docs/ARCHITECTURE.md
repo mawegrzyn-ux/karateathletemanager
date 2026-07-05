@@ -174,6 +174,10 @@ Key flows:
 
 ## Nginx
 
+SSL is live via Certbot (auto-renews through `certbot.timer`). Full config
+lives at [`nginx/nadakarate.com.conf`](../nginx/nadakarate.com.conf) and on
+the server at `/etc/nginx/sites-available/nadakarate.com` — shape:
+
 ```nginx
 server {
     server_name nadakarate.com www.nadakarate.com;
@@ -183,10 +187,13 @@ server {
     location /api/ {
         proxy_pass http://127.0.0.1:3001;
         proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
         client_max_body_size 20M;
     }
 
@@ -194,7 +201,20 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # SSL managed by Certbot
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2|woff|ttf)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/nadakarate.com/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/nadakarate.com/privkey.pem; # managed by Certbot
+}
+
+server {
+    listen 80;
+    server_name nadakarate.com www.nadakarate.com;
+    return 301 https://$host$request_uri; # managed by Certbot
 }
 ```
 
