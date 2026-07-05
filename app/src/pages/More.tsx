@@ -1,7 +1,28 @@
+import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+
 export default function More() {
+  const { user, logout } = useAuth();
+
   return (
-    <div className="p-4">
+    <div className="flex flex-col gap-4 p-4">
       <h1 className="text-xl font-semibold">More</h1>
+
+      {user?.role === "admin" && (
+        <Link
+          to="/admin/users"
+          className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
+        >
+          Manage users
+        </Link>
+      )}
+
+      <button
+        onClick={() => logout()}
+        className="min-h-[44px] rounded-lg border border-slate-300 px-4 font-medium text-slate-700"
+      >
+        Log out
+      </button>
     </div>
   );
 }
