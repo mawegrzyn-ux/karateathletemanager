@@ -8,7 +8,7 @@ const router = Router();
 const FIELDS = `id, first_name, last_name, email, phone, qualifications,
                 role, athlete_id, is_active, created_at`;
 
-router.use(authorize("admin"));
+router.use(authorize("admin", "coach"));
 
 router.get(
   "/",
@@ -23,6 +23,10 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
     const {
       first_name,
       last_name,
@@ -86,6 +90,10 @@ router.get(
 router.patch(
   "/:id",
   asyncHandler(async (req, res) => {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
     const {
       first_name,
       last_name,
@@ -142,6 +150,10 @@ router.patch(
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
     const { rowCount } = await pool.query(
       `DELETE FROM nk_coaches WHERE id = $1`,
       [req.params.id]

@@ -110,18 +110,48 @@ nk_announcements        (news/notices for athletes)
 nk_settings             (app config, club name, etc.)
 nk_users                (auth accounts: email/password, role, status)
 nk_parent_athletes      (parent user_id <-> athlete_id, many-to-many)
+nk_coach_associations   (coach_id + association_id: association-admin grants)
 ```
 
-### Clubs & Associations API
+`nk_coach_clubs` also carries an `is_admin` boolean (club-admin grant per
+coach per club); `nk_coach_associations` existing as a row **is** the
+association-admin grant, no flag needed.
 
-Admin-only CRUD, mirroring the `/api/admin/users` pattern:
+### Clubs & Associations API — scoped admin
 
-- `GET/POST /api/admin/associations`, `PATCH/DELETE /api/admin/associations/:id`
-- `GET/POST /api/admin/clubs`, `PATCH/DELETE /api/admin/clubs/:id`
-- `GET/PUT /api/admin/clubs/:id/athletes` and `.../coaches` — replace-the-whole-set membership endpoints (same pattern as `nk_parent_athletes`)
+Read access (`GET` list/detail) is open to any `admin` or `coach` — same
+as athletes/coaches — so reference pickers (e.g. a club's association
+selector) always see the full list. Write access is scoped:
 
-The Clubs admin UI's membership pickers are name-based `<select>`s backed
-by `GET /api/athletes` and `GET /api/admin/coaches`.
+- `POST` (create) and `DELETE` on both clubs and associations: **admin
+  only**, unconditionally.
+- `PATCH /api/admin/clubs/:id`: admin, or the coach holding `is_admin` on
+  that club in `nk_coach_clubs` (resolved via `req.user.coach_id`).
+- `GET/PUT /api/admin/clubs/:id/athletes` and `.../coaches`: same admin-
+  or-club-admin check — a club-admin coach can add/remove membership.
+- `PATCH /api/admin/clubs/:id/coaches/:coachId {is_admin}`: **admin
+  only** — granting/revoking another coach's club-admin status isn't
+  something a club-admin coach can do to avoid privilege escalation.
+- `PATCH /api/admin/associations/:id`: admin, or the coach with a row in
+  `nk_coach_associations` for that association.
+- `GET/PUT /api/admin/associations/:id/admins`: **admin only** — manages
+  the `nk_coach_associations` grants.
+- Resolution logic lives in `api/src/utils/permissions.js`
+  (`isClubAdmin`, `isAssociationAdmin`).
+
+Frontend: `/admin/clubs` and `/admin/associations` are reachable by both
+`admin` and `coach` roles (`RequireAuth roles={["admin","coach"]}` in
+`App.tsx`), but the "+" create button, delete button, the coach
+club-admin ★ toggle, and the association's "Coach admins" picker only
+render when `useAuth().user.role === 'admin'` — a coach viewing a club
+they administer sees an editable club with membership management, no
+create/delete, no admin-granting controls.
+
+A user account is linked to "this is that athlete/coach" via
+`nk_users.athlete_id`/`.coach_id`, set from the admin Users page's detail
+drawer (`PATCH /api/admin/users/:id`, already existing). A coach's
+club/association admin rights only resolve once their account is linked
+this way.
 
 ### Athletes & Coaches API
 

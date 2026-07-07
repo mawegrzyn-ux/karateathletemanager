@@ -84,7 +84,7 @@ export default function App() {
         <Route
           path="/admin/associations"
           element={
-            <RequireAuth roles={["admin"]}>
+            <RequireAuth roles={["admin", "coach"]}>
               <AdminAssociations />
             </RequireAuth>
           }
@@ -92,7 +92,7 @@ export default function App() {
         <Route
           path="/admin/clubs"
           element={
-            <RequireAuth roles={["admin"]}>
+            <RequireAuth roles={["admin", "coach"]}>
               <AdminClubs />
             </RequireAuth>
           }
