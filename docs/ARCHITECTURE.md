@@ -158,9 +158,11 @@ this way.
 - `GET /api/athletes?q=` (name search), `POST`, `GET/PATCH /:id` — `admin`
   and `coach` roles. `DELETE /:id` is admin-only (extra inline check,
   since it's more destructive than the other operations here).
-- `GET/POST /api/admin/coaches`, `GET/PATCH/DELETE /api/admin/coaches/:id`
-  — admin-only for all methods, consistent with Users/Clubs/Associations.
-  `athlete_id` optionally links a coach who is also an athlete.
+- `GET /api/admin/coaches`, `GET /api/admin/coaches/:id` — `admin` and
+  `coach` roles (read-open, same shape as clubs/associations, so the
+  coach/athlete pickers on those pages work for coach viewers too).
+  `POST`/`PATCH`/`DELETE` are admin-only (inline check). `athlete_id`
+  optionally links a coach who is also an athlete.
 - The "Athletes" bottom-nav tab shows the full manager UI to `admin`/`coach`
   roles; other roles see a placeholder ("ask your coach") since athlete/
   parent self-service viewing is a separate future feature.
@@ -170,12 +172,20 @@ this way.
 Self-service email/password registration, gated by admin approval — not
 third-party OAuth. Roles: `admin`, `coach`, `athlete`, `parent`.
 
-- `POST /api/auth/register` `{email,password}` — creates an `nk_users` row.
-  The **first ever** registration is auto-promoted to `role: 'admin'`,
-  `status: 'active'` (bootstrap, so there's always someone who can approve
-  others). Every subsequent registration starts as `role: null`,
-  `status: 'pending'`.
+- `POST /api/auth/register` `{email,password,wants_athlete?,wants_coach?,
+  requested_club_id?}` — creates an `nk_users` row. The **first ever**
+  registration is auto-promoted to `role: 'admin'`, `status: 'active'`
+  (bootstrap, so there's always someone who can approve others). Every
+  subsequent registration starts as `role: null`, `status: 'pending'`.
+  `wants_athlete`/`wants_coach`/`requested_club_id` are pure signup intent
+  — stored on the user row and never touched again after activation.
+  `GET /api/public/clubs` (unauthenticated) feeds the registration club
+  picker, since it runs before any session exists.
 - `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`.
+- `POST /api/auth/switch-role` `{role: 'athlete'|'coach'}` — self-service;
+  400 unless the caller already has the matching `athlete_id`/`coach_id`.
+  Lets someone with both a linked athlete and coach profile flip which
+  role they're currently acting as (surfaced as pills on the More page).
 - Session is a JWT (holding only the user id) in an `httpOnly`, `sameSite:
   lax` cookie. `api/src/middleware/auth.js` verifies it and re-reads the
   user's current role/status from `nk_users` on every request, so an
@@ -183,13 +193,38 @@ third-party OAuth. Roles: `admin`, `coach`, `athlete`, `parent`.
 - `api/src/middleware/authorize(...roles)` gates routes: no session → 401;
   `status !== 'active'` → 403; role not in the given list → 403.
 - `nk_users.athlete_id` / `.coach_id` identify "this user IS this
-  athlete/coach" (set by an admin). `nk_parent_athletes` links a `parent`
-  user to the athlete(s) — their kids — they should see.
+  athlete/coach" (set by an admin, or auto-created — see below).
+  `nk_parent_athletes` links a `parent` user to the athlete(s) — their
+  kids — they should see.
 - Admin-only management: `GET/PATCH /api/admin/users`,
   `PUT /api/admin/users/:id/parent-athletes`. Frontend: `/admin/users`
   (linked from the "More" tab for admins), gated by `RequireAuth`.
 - Pending/disabled users can log in but are shown a "waiting for
   approval" screen (`PendingApproval.tsx`) instead of the app.
+
+### Activation auto-provisions athlete/coach profiles
+
+`api/src/utils/activateUser.js` (`activateUser(client, user)`) is called,
+inside the same transaction, any time a user's `status` becomes
+`'active'` — from `PATCH /api/admin/users/:id` (admin) or from a
+club-admin's approval below. For a user with `wants_athlete`/
+`wants_coach` set and no `athlete_id`/`coach_id` yet, it creates the
+missing `nk_athletes`/`nk_coaches` row(s) from the user's name/email/
+phone, links `nk_athlete_clubs`/`nk_coach_clubs` if `requested_club_id`
+is set, and — only if `role` is still null — assigns `role: 'coach'`
+(preferred, since it's the superset of access) or `'athlete'`. It never
+overwrites a role or profile link an admin already set manually, and
+no-ops entirely if both profiles already exist, so it's safe to call
+on every activation.
+
+A coach who admins a specific club (see the scoped-admin section above)
+can approve signups requesting *that* club without full admin access:
+`GET /api/admin/clubs/:id/pending-members` and
+`POST /api/admin/clubs/:id/pending-members/:userId/approve` (both gated
+by `isClubAdmin`) list/activate `status='pending'` users whose
+`requested_club_id` matches the club; approval verifies the request was
+actually for that club before running `activateUser`. Surfaced as a
+"Pending members" section in the club's detail drawer in `Clubs.tsx`.
 
 ## Database
 

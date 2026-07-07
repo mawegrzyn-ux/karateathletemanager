@@ -39,6 +39,7 @@ export default function Associations() {
     "closed"
   );
   const [form, setForm] = useState(EMPTY_FORM);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     load();
@@ -140,6 +141,9 @@ export default function Associations() {
     );
 
   const editing = drawer !== "closed" && drawer !== "create" ? drawer : null;
+  const filteredAssociations = associations.filter((a) =>
+    a.name.toLowerCase().includes(query.trim().toLowerCase())
+  );
 
   return (
     <div className="flex flex-col gap-3 p-4">
@@ -148,8 +152,15 @@ export default function Associations() {
         {isAdmin && <AddButton onClick={openCreate} />}
       </div>
 
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search associations..."
+        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+      />
+
       <div className="flex flex-col gap-2">
-        {associations.map((a) => (
+        {filteredAssociations.map((a) => (
           <button
             key={a.id}
             onClick={() => setDrawer(a)}

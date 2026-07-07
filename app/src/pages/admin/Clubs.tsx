@@ -36,6 +36,15 @@ interface Membership {
   coachAdminIds: number[];
 }
 
+interface PendingMember {
+  id: number;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  wants_athlete: boolean;
+  wants_coach: boolean;
+}
+
 const EMPTY_FORM = {
   name: "",
   location: "",
@@ -58,6 +67,7 @@ export default function Clubs() {
   const [error, setError] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<"closed" | "create" | Club>("closed");
   const [form, setForm] = useState(EMPTY_FORM);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     load();
@@ -211,6 +221,15 @@ export default function Clubs() {
   const editingMembership = editing
     ? memberships[editing.id] ?? { athleteIds: [], coachIds: [], coachAdminIds: [] }
     : null;
+  const canSeePending =
+    editingMembership !== null &&
+    (isAdmin ||
+      (user?.coach_id != null &&
+        editingMembership.coachAdminIds.includes(user.coach_id)));
+
+  const filteredClubs = clubs.filter((c) =>
+    c.name.toLowerCase().includes(query.trim().toLowerCase())
+  );
 
   return (
     <div className="flex flex-col gap-3 p-4">
@@ -219,8 +238,15 @@ export default function Clubs() {
         {isAdmin && <AddButton onClick={openCreate} />}
       </div>
 
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search clubs..."
+        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+      />
+
       <div className="flex flex-col gap-2">
-        {clubs.map((c) => (
+        {filteredClubs.map((c) => (
           <button
             key={c.id}
             onClick={() => setDrawer(c)}
@@ -368,6 +394,8 @@ export default function Clubs() {
               }
             />
 
+            {canSeePending && <PendingMembers clubId={editing.id} />}
+
             {isAdmin && (
               <DeleteButton
                 onClick={() => deleteClub(editing.id)}
@@ -377,6 +405,75 @@ export default function Clubs() {
           </div>
         )}
       </Drawer>
+    </div>
+  );
+}
+
+function PendingMembers({ clubId }: { clubId: number }) {
+  const api = useApi();
+  const [pending, setPending] = useState<PendingMember[] | null>(null);
+
+  useEffect(() => {
+    setPending(null);
+    api
+      .get<{ pendingMembers: PendingMember[] }>(
+        `/admin/clubs/${clubId}/pending-members`
+      )
+      .then((res) => setPending(res.pendingMembers))
+      .catch(() => setPending([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  async function approve(userId: number) {
+    await api.post(
+      `/admin/clubs/${clubId}/pending-members/${userId}/approve`,
+      {}
+    );
+    setPending((prev) => (prev ? prev.filter((p) => p.id !== userId) : prev));
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
+      <span className="text-xs font-medium text-slate-600">
+        Pending members{pending ? ` (${pending.length})` : ""}
+      </span>
+      {pending === null ? (
+        <Spinner />
+      ) : (
+        <div className="flex flex-col gap-1">
+          {pending.map((p) => (
+            <div
+              key={p.id}
+              className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
+            >
+              <div className="flex flex-col">
+                <span className="font-medium">
+                  {p.first_name || p.last_name
+                    ? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim()
+                    : p.email}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {[p.wants_athlete && "athlete", p.wants_coach && "coach"]
+                    .filter(Boolean)
+                    .join(", ")}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => approve(p.id)}
+                className="min-h-[44px] rounded-lg bg-red-700 px-3 text-sm font-medium text-white"
+              >
+                Approve
+              </button>
+            </div>
+          ))}
+          {pending.length === 0 && (
+            <p className="px-1 py-2 text-sm text-slate-500">
+              No pending requests.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

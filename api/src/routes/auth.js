@@ -20,7 +20,8 @@ function setSessionCookie(res, userId) {
 router.post(
   "/register",
   asyncHandler(async (req, res) => {
-    const { email, password } = req.body ?? {};
+    const { email, password, wants_athlete, wants_coach, requested_club_id } =
+      req.body ?? {};
 
     if (typeof email !== "string" || !EMAIL_RE.test(email)) {
       return res.status(400).json({ error: { message: "Invalid email" } });
@@ -30,19 +31,38 @@ router.post(
         error: { message: "Password must be at least 8 characters" },
       });
     }
+    if (wants_athlete !== undefined && typeof wants_athlete !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: { message: "wants_athlete must be a boolean" } });
+    }
+    if (wants_coach !== undefined && typeof wants_coach !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: { message: "wants_coach must be a boolean" } });
+    }
 
     const passwordHash = await bcrypt.hash(password, 12);
 
     try {
       const { rows } = await pool.query(
-        `INSERT INTO nk_users (email, password_hash, role, status)
+        `INSERT INTO nk_users
+           (email, password_hash, role, status, wants_athlete, wants_coach, requested_club_id)
          VALUES (
            $1, $2,
            CASE WHEN (SELECT COUNT(*) FROM nk_users) = 0 THEN 'admin' ELSE NULL END,
-           CASE WHEN (SELECT COUNT(*) FROM nk_users) = 0 THEN 'active' ELSE 'pending' END
+           CASE WHEN (SELECT COUNT(*) FROM nk_users) = 0 THEN 'active' ELSE 'pending' END,
+           COALESCE($3, FALSE), COALESCE($4, FALSE), $5
          )
-         RETURNING id, email, role, status, first_name, last_name, phone`,
-        [email.toLowerCase(), passwordHash]
+         RETURNING id, email, role, status, athlete_id, coach_id,
+                   first_name, last_name, phone`,
+        [
+          email.toLowerCase(),
+          passwordHash,
+          wants_athlete,
+          wants_coach,
+          requested_club_id ?? null,
+        ]
       );
 
       const user = rows[0];
@@ -53,6 +73,11 @@ router.post(
         return res.status(409).json({
           error: { message: "An account with that email already exists" },
         });
+      }
+      if (err.code === "23503") {
+        return res
+          .status(400)
+          .json({ error: { message: "Selected club does not exist" } });
       }
       throw err;
     }
@@ -71,7 +96,8 @@ router.post(
     }
 
     const { rows } = await pool.query(
-      `SELECT id, email, password_hash, role, status, first_name, last_name, phone
+      `SELECT id, email, password_hash, role, status, athlete_id, coach_id,
+              first_name, last_name, phone
        FROM nk_users WHERE email = $1`,
       [email.toLowerCase()]
     );
@@ -91,6 +117,8 @@ router.post(
         email: user.email,
         role: user.role,
         status: user.status,
+        athlete_id: user.athlete_id,
+        coach_id: user.coach_id,
         first_name: user.first_name,
         last_name: user.last_name,
         phone: user.phone,
@@ -143,6 +171,42 @@ router.patch(
        RETURNING id, email, role, status, athlete_id, coach_id,
                  first_name, last_name, phone`,
       [first_name, last_name, phone, req.user.id]
+    );
+
+    res.json({ user: rows[0] });
+  })
+);
+
+router.post(
+  "/switch-role",
+  asyncHandler(async (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ error: { message: "Not authenticated" } });
+    }
+
+    const { role } = req.body ?? {};
+    if (role !== "athlete" && role !== "coach") {
+      return res
+        .status(400)
+        .json({ error: { message: "role must be 'athlete' or 'coach'" } });
+    }
+    if (role === "athlete" && !req.user.athlete_id) {
+      return res
+        .status(400)
+        .json({ error: { message: "You don't have an athlete profile" } });
+    }
+    if (role === "coach" && !req.user.coach_id) {
+      return res
+        .status(400)
+        .json({ error: { message: "You don't have a coach profile" } });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE nk_users SET role = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, email, role, status, athlete_id, coach_id,
+                 first_name, last_name, phone`,
+      [role, req.user.id]
     );
 
     res.json({ user: rows[0] });

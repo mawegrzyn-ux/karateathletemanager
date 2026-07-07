@@ -3,6 +3,7 @@ const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
 const asyncHandler = require("../utils/asyncHandler");
 const { isClubAdmin } = require("../utils/permissions");
+const { activateUser } = require("../utils/activateUser");
 
 const router = Router();
 
@@ -246,6 +247,74 @@ router.patch(
         .json({ error: { message: "That coach is not a member of this club" } });
     }
     res.json({ id: Number(req.params.coachId), is_admin });
+  })
+);
+
+router.get(
+  "/:id/pending-members",
+  asyncHandler(async (req, res) => {
+    if (!(await isClubAdmin(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT id, email, first_name, last_name, wants_athlete, wants_coach
+       FROM nk_users
+       WHERE requested_club_id = $1 AND status = 'pending'
+       ORDER BY created_at ASC`,
+      [req.params.id]
+    );
+    res.json({ pendingMembers: rows });
+  })
+);
+
+router.post(
+  "/:id/pending-members/:userId/approve",
+  asyncHandler(async (req, res) => {
+    if (!(await isClubAdmin(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        `UPDATE nk_users SET status = 'active', updated_at = NOW()
+         WHERE id = $1 AND requested_club_id = $2 AND status = 'pending'
+         RETURNING id, email, role, status, athlete_id, coach_id,
+                   first_name, last_name, phone,
+                   wants_athlete, wants_coach, requested_club_id`,
+        [req.params.userId, req.params.id]
+      );
+
+      if (rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({
+          error: { message: "No pending request from that user for this club" },
+        });
+      }
+
+      const user = await activateUser(client, rows[0]);
+      await client.query("COMMIT");
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          athlete_id: user.athlete_id,
+          coach_id: user.coach_id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          phone: user.phone,
+        },
+      });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   })
 );
 

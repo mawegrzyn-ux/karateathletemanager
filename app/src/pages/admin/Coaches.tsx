@@ -44,6 +44,7 @@ export default function Coaches() {
   const [error, setError] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<"closed" | "create" | Coach>("closed");
   const [form, setForm] = useState(EMPTY_FORM);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -102,6 +103,11 @@ export default function Coaches() {
     );
 
   const editing = drawer !== "closed" && drawer !== "create" ? drawer : null;
+  const filteredCoaches = coaches.filter((c) =>
+    `${c.first_name} ${c.last_name}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase())
+  );
 
   return (
     <div className="flex flex-col gap-3 p-4">
@@ -110,8 +116,15 @@ export default function Coaches() {
         <AddButton onClick={openCreate} />
       </div>
 
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search coaches..."
+        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+      />
+
       <div className="flex flex-col gap-2">
-        {coaches.map((c) => (
+        {filteredCoaches.map((c) => (
           <button
             key={c.id}
             onClick={() => setDrawer(c)}

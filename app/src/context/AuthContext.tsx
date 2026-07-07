@@ -16,6 +16,8 @@ export interface User {
   email: string;
   role: Role | null;
   status: Status;
+  athlete_id: number | null;
+  coach_id: number | null;
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
@@ -27,13 +29,24 @@ export interface ProfileUpdate {
   phone?: string;
 }
 
+export interface RegisterOptions {
+  wants_athlete?: boolean;
+  wants_coach?: boolean;
+  requested_club_id?: number | null;
+}
+
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    options?: RegisterOptions
+  ) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (update: ProfileUpdate) => Promise<void>;
+  switchRole: (role: "athlete" | "coach") => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -68,14 +81,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const register = useCallback(async (email: string, password: string) => {
-    const { user } = await api.post<{ user: User }>("/auth/register", {
-      email,
-      password,
-    });
-    setUser(user);
+  const register = useCallback(
+    async (email: string, password: string, options?: RegisterOptions) => {
+      const { user } = await api.post<{ user: User }>("/auth/register", {
+        email,
+        password,
+        ...options,
+      });
+      setUser(user);
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    []
+  );
 
   const logout = useCallback(async () => {
     await api.post("/auth/logout", {});
@@ -89,9 +106,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const switchRole = useCallback(async (role: "athlete" | "coach") => {
+    const { user } = await api.post<{ user: User }>("/auth/switch-role", {
+      role,
+    });
+    setUser(user);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, register, logout, updateProfile }}
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        logout,
+        updateProfile,
+        switchRole,
+      }}
     >
       {children}
     </AuthContext.Provider>

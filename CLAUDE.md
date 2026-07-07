@@ -74,6 +74,20 @@ and not a separate "current members" list:
   replaces the selection rather than adding to it. Never use a `<select>`
   dropdown for this kind of assignment, single- or multi-select.
 
+## UI convention: list filter search
+
+Every top-level entity list (Associations, Clubs, Athletes, Coaches, and
+any future one) gets a plain search `<input>` directly under the page
+header, above the list — no submit button, filters instantly as you type
+(substring, case-insensitive, empty query shows everyone). This is a
+simpler sibling of the membership-picker search above: same box/feel, but
+it just filters the page's own already-loaded list client-side rather
+than adding/removing an assignment. `Athletes.tsx` is the one exception —
+it round-trips to the server (`GET /athletes?q=`) instead of filtering
+client-side, since athlete rosters can be large; new list pages should
+default to the simple client-side filter unless there's a similar reason
+not to.
+
 ## Other conventions
 
 - Backend routes: one Express Router per resource in `api/src/routes/`,
