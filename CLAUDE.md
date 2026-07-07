@@ -67,6 +67,12 @@ and not a separate "current members" list:
   assigned people are flagged in place ("✓ Added", tap to remove) rather
   than hidden or edited through a different control; not-yet-assigned
   people show "+ Add" (tap to add).
+- Same pattern for a **single-select** relationship (e.g. a club's one
+  optional association — see `AssociationPicker` in the same file):
+  identical search box + result list, but the currently-selected row
+  shows "✓ Selected" instead of "Added", and selecting a different row
+  replaces the selection rather than adding to it. Never use a `<select>`
+  dropdown for this kind of assignment, single- or multi-select.
 
 ## Other conventions
 
