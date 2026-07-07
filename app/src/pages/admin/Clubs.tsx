@@ -7,6 +7,12 @@ interface Association {
   name: string;
 }
 
+interface Person {
+  id: number;
+  first_name: string;
+  last_name: string;
+}
+
 interface Club {
   id: number;
   name: string;
@@ -26,6 +32,8 @@ export default function Clubs() {
   const api = useApi();
   const [clubs, setClubs] = useState<Club[] | null>(null);
   const [associations, setAssociations] = useState<Association[]>([]);
+  const [allAthletes, setAllAthletes] = useState<Person[]>([]);
+  const [allCoaches, setAllCoaches] = useState<Person[]>([]);
   const [memberships, setMemberships] = useState<Record<number, Membership>>(
     {}
   );
@@ -39,12 +47,17 @@ export default function Clubs() {
 
   async function load() {
     try {
-      const [clubsRes, associationsRes] = await Promise.all([
-        api.get<{ clubs: Club[] }>("/admin/clubs"),
-        api.get<{ associations: Association[] }>("/admin/associations"),
-      ]);
+      const [clubsRes, associationsRes, athletesRes, coachesRes] =
+        await Promise.all([
+          api.get<{ clubs: Club[] }>("/admin/clubs"),
+          api.get<{ associations: Association[] }>("/admin/associations"),
+          api.get<{ athletes: Person[] }>("/athletes"),
+          api.get<{ coaches: Person[] }>("/admin/coaches"),
+        ]);
       setClubs(clubsRes.clubs);
       setAssociations(associationsRes.associations);
+      setAllAthletes(athletesRes.athletes);
+      setAllCoaches(coachesRes.coaches);
 
       const entries = await Promise.all(
         clubsRes.clubs.map(async (c) => {
@@ -210,15 +223,15 @@ export default function Clubs() {
 
             <MemberEditor
               label="Athletes"
-              singularLabel="Athlete"
               ids={membership.athleteIds}
+              options={allAthletes}
               onAdd={(value) => addMember(c.id, "athlete", value)}
               onRemove={(id) => removeMember(c.id, "athlete", id)}
             />
             <MemberEditor
               label="Coaches"
-              singularLabel="Coach"
               ids={membership.coachIds}
+              options={allCoaches}
               onAdd={(value) => addMember(c.id, "coach", value)}
               onRemove={(id) => removeMember(c.id, "coach", id)}
             />
@@ -231,18 +244,23 @@ export default function Clubs() {
 
 function MemberEditor({
   label,
-  singularLabel,
   ids,
+  options,
   onAdd,
   onRemove,
 }: {
   label: string;
-  singularLabel: string;
   ids: number[];
+  options: Person[];
   onAdd: (value: string) => void;
   onRemove: (id: number) => void;
 }) {
-  const [value, setValue] = useState("");
+  const [selected, setSelected] = useState("");
+  const nameFor = (id: number) => {
+    const person = options.find((o) => o.id === id);
+    return person ? `${person.first_name} ${person.last_name}` : `#${id}`;
+  };
+  const available = options.filter((o) => !ids.includes(o.id));
 
   return (
     <div className="flex flex-col gap-1 rounded-lg bg-slate-50 p-2">
@@ -257,22 +275,28 @@ function MemberEditor({
             className="rounded-full bg-slate-200 px-2 py-1 text-xs"
             title="Remove"
           >
-            #{id} ✕
+            {nameFor(id)} ✕
           </button>
         ))}
       </div>
       <div className="flex gap-2">
-        <input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={`${singularLabel} ID`}
-          inputMode="numeric"
+        <select
+          value={selected}
+          onChange={(e) => setSelected(e.target.value)}
           className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-2"
-        />
+        >
+          <option value="">Select...</option>
+          {available.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.first_name} {o.last_name}
+            </option>
+          ))}
+        </select>
         <button
           onClick={() => {
-            onAdd(value);
-            setValue("");
+            if (!selected) return;
+            onAdd(selected);
+            setSelected("");
           }}
           className="min-h-[44px] rounded-lg border border-slate-300 px-3 text-sm"
         >

@@ -30,6 +30,12 @@ export default function More() {
             Manage clubs
           </Link>
           <Link
+            to="/admin/coaches"
+            className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
+          >
+            Manage coaches
+          </Link>
+          <Link
             to="/admin/associations"
             className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
           >
