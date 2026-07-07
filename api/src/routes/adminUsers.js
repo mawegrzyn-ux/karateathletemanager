@@ -2,6 +2,7 @@ const { Router } = require("express");
 const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
 const asyncHandler = require("../utils/asyncHandler");
+const { activateUser } = require("../utils/activateUser");
 
 const router = Router();
 const ROLES = ["admin", "coach", "athlete", "parent"];
@@ -41,8 +42,10 @@ router.patch(
       return res.status(400).json({ error: { message: "Invalid status" } });
     }
 
+    const client = await pool.connect();
     try {
-      const { rows } = await pool.query(
+      await client.query("BEGIN");
+      const { rows } = await client.query(
         `UPDATE nk_users SET
            role       = COALESCE($1, role),
            status     = COALESCE($2, status),
@@ -54,7 +57,8 @@ router.patch(
            updated_at = NOW()
          WHERE id = $8
          RETURNING id, email, role, status, athlete_id, coach_id,
-                   first_name, last_name, phone`,
+                   first_name, last_name, phone,
+                   wants_athlete, wants_coach, requested_club_id`,
         [
           role,
           status,
@@ -68,16 +72,39 @@ router.patch(
       );
 
       if (rows.length === 0) {
+        await client.query("ROLLBACK");
         return res.status(404).json({ error: { message: "User not found" } });
       }
-      res.json({ user: rows[0] });
+
+      let user = rows[0];
+      if (user.status === "active") {
+        user = await activateUser(client, user);
+      }
+
+      await client.query("COMMIT");
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          athlete_id: user.athlete_id,
+          coach_id: user.coach_id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          phone: user.phone,
+        },
+      });
     } catch (err) {
+      await client.query("ROLLBACK");
       if (err.code === "23503") {
         return res
           .status(400)
           .json({ error: { message: "Linked athlete/coach does not exist" } });
       }
       throw err;
+    } finally {
+      client.release();
     }
   })
 );

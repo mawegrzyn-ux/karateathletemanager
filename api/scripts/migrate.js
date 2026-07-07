@@ -181,6 +181,11 @@ const migrations = [
      association_id INTEGER NOT NULL REFERENCES nk_associations(id) ON DELETE CASCADE,
      PRIMARY KEY (coach_id, association_id)
   )`,
+
+  `ALTER TABLE nk_users
+     ADD COLUMN IF NOT EXISTS wants_athlete BOOLEAN NOT NULL DEFAULT FALSE,
+     ADD COLUMN IF NOT EXISTS wants_coach   BOOLEAN NOT NULL DEFAULT FALSE,
+     ADD COLUMN IF NOT EXISTS requested_club_id INTEGER REFERENCES nk_clubs(id) ON DELETE SET NULL`,
 ];
 
 async function migrate() {
