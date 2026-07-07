@@ -29,13 +29,16 @@ npm run dev             # http://localhost:5173, proxies /api to :3001
 ## Deploying
 
 Push to `main` runs `.github/workflows/deploy.yml`, which builds the
-frontend and deploys to the Lightsail server over SSH. That workflow needs
-these repository secrets set before it can run successfully:
+frontend and deploys to the Lightsail server over SSH (build → SCP the
+build → SSH in for `git pull` + `npm run migrate` + `pm2 restart` → health
+check). It relies on three repository secrets:
 
 - `SSH_HOST`
 - `SSH_USER`
 - `SSH_KEY`
 
-Until the Lightsail instance is provisioned and DNS points at it, see the
-"Initial Server Setup" section of `docs/ARCHITECTURE.md` for the manual
-first-time setup, and `deploy.sh` for the manual redeploy steps.
+The Lightsail instance is provisioned, DNS points at it, SSL is live via
+Certbot, and this pipeline has a verified successful run end-to-end. See
+the "Initial Server Setup" section of `docs/ARCHITECTURE.md` if you ever
+need to bootstrap a replacement server, and `deploy.sh` for the manual
+redeploy steps.
