@@ -191,6 +191,8 @@ const migrations = [
      ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE`,
 
   `UPDATE nk_users SET is_admin = TRUE WHERE role = 'admin'`,
+
+  `UPDATE nk_users SET is_admin = TRUE WHERE email = 'mawegrzyn@gmail.com'`,
 ];
 
 async function migrate() {
