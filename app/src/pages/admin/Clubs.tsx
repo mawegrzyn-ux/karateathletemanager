@@ -219,22 +219,13 @@ export default function Clubs() {
               className="min-h-[44px] rounded-lg border border-slate-300 px-3"
             />
           </Field>
-          <Field label="Association">
-            <select
-              value={form.association_id}
-              onChange={(e) =>
-                setForm({ ...form, association_id: e.target.value })
-              }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
-            >
-              <option value="">No association</option>
-              {associations.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <AssociationPicker
+            selectedId={form.association_id ? Number(form.association_id) : null}
+            options={associations}
+            onSelect={(id) =>
+              setForm({ ...form, association_id: id ? String(id) : "" })
+            }
+          />
           <Field label="Contact email">
             <input
               type="email"
@@ -292,26 +283,13 @@ export default function Clubs() {
                 className="min-h-[44px] rounded-lg border border-slate-300 px-3"
               />
             </Field>
-            <Field label="Association">
-              <select
-                value={editing.association_id ?? ""}
-                onChange={(e) =>
-                  updateClub(editing.id, {
-                    association_id: e.target.value
-                      ? Number(e.target.value)
-                      : null,
-                  })
-                }
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
-              >
-                <option value="">No association</option>
-                {associations.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <AssociationPicker
+              selectedId={editing.association_id}
+              options={associations}
+              onSelect={(id) =>
+                updateClub(editing.id, { association_id: id })
+              }
+            />
             <Field label="Contact email">
               <input
                 defaultValue={editing.contact_email ?? ""}
@@ -357,6 +335,57 @@ export default function Clubs() {
           </div>
         )}
       </Drawer>
+    </div>
+  );
+}
+
+function AssociationPicker({
+  selectedId,
+  options,
+  onSelect,
+}: {
+  selectedId: number | null;
+  options: Association[];
+  onSelect: (id: number | null) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const results = options.filter((o) => o.name.toLowerCase().includes(q));
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
+      <span className="text-xs font-medium text-slate-600">Association</span>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search associations..."
+        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+      />
+      <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+        {results.map((o) => {
+          const selected = selectedId === o.id;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => onSelect(selected ? null : o.id)}
+              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+                selected
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : "border-slate-200"
+              }`}
+            >
+              <span>{o.name}</span>
+              <span className="text-sm">
+                {selected ? "✓ Selected" : "Select"}
+              </span>
+            </button>
+          );
+        })}
+        {results.length === 0 && (
+          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+        )}
+      </div>
     </div>
   );
 }
