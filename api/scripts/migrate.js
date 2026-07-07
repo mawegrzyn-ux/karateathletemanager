@@ -193,6 +193,10 @@ const migrations = [
   `UPDATE nk_users SET is_admin = TRUE WHERE role = 'admin'`,
 
   `UPDATE nk_users SET is_admin = TRUE WHERE email = 'mawegrzyn@gmail.com'`,
+
+  `ALTER TABLE nk_athletes
+     ADD COLUMN IF NOT EXISTS link_pin VARCHAR(6),
+     ADD COLUMN IF NOT EXISTS link_pin_expires_at TIMESTAMPTZ`,
 ];
 
 async function migrate() {

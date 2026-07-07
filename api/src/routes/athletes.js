@@ -184,4 +184,54 @@ router.delete(
   })
 );
 
+router.post(
+  "/:id/generate-pin",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!req.user.is_admin && req.user.role !== "coach" && !isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    let pin;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = String(Math.floor(Math.random() * 1000000)).padStart(
+        6,
+        "0"
+      );
+      const { rows } = await pool.query(
+        `SELECT 1 FROM nk_athletes
+         WHERE link_pin = $1 AND link_pin_expires_at > NOW()`,
+        [candidate]
+      );
+      if (rows.length === 0) {
+        pin = candidate;
+        break;
+      }
+    }
+    if (!pin) {
+      return res
+        .status(500)
+        .json({ error: { message: "Could not generate a PIN, try again" } });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE nk_athletes SET
+         link_pin = $1,
+         link_pin_expires_at = NOW() + INTERVAL '1 hour'
+       WHERE id = $2
+       RETURNING link_pin, link_pin_expires_at`,
+      [pin, req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: { message: "Athlete not found" } });
+    }
+    res.json({
+      pin: rows[0].link_pin,
+      expires_at: rows[0].link_pin_expires_at,
+    });
+  })
+);
+
 module.exports = router;

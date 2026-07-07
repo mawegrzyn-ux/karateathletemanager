@@ -254,6 +254,39 @@ by `isClubAdmin`) list/activate `status='pending'` users whose
 actually for that club before running `activateUser`. Surfaced as a
 "Pending members" section in the club's detail drawer in `Clubs.tsx`.
 
+### PIN-based parent↔athlete linking
+
+`nk_parent_athletes` (parent user ↔ athlete, many-to-many) is populated
+self-service, without ever showing a parent-to-be a searchable list of
+athletes (GDPR — no directory of children's names is ever exposed):
+
+- `nk_athletes.link_pin` / `.link_pin_expires_at` hold at most one
+  active PIN per athlete at a time. `POST /api/athletes/:id/generate-pin`
+  (allowed for the athlete themself, their coach, or an admin — same
+  access shape as `GET /:id`) generates a random zero-padded 6-digit
+  code, retrying on the rare collision against another athlete's still-
+  valid PIN, and sets a 1-hour expiry. Surfaced as a "Link a parent"
+  section on the athlete's own read-only profile view
+  (`MyAthleteProfile` in `Athletes.tsx`).
+- `POST /api/auth/link-child` `{pin}` — self-service, any authenticated
+  user. Matches the PIN against `nk_athletes` (must be non-expired),
+  inserts the `nk_parent_athletes` row, clears the athlete's PIN
+  (single-use), and sets `role = COALESCE(role, 'parent')` — same
+  never-overwrite auto-role pattern as `activateUser`. Surfaced as a
+  "Link a child" section on `Profile.tsx`, which also lists the user's
+  already-linked children via `GET /api/auth/my-children`.
+- `api/src/utils/pinRateLimit.js` — a small in-memory per-user attempt
+  cap (5 wrong guesses locks that user out of `/link-child` for 5
+  minutes) guarding the 6-digit PIN against brute-force guessing. Reset
+  on a successful link.
+- `nk_users.is_parent` is a computed `EXISTS(SELECT 1 FROM
+  nk_parent_athletes WHERE user_id = ...)`, included in `req.user` and
+  every auth response — mirrors how `athlete_id`/`coach_id` already
+  drive the More-page "Acting as" switcher (`POST /api/auth/switch-role`
+  now also accepts `'parent'`, valid only when `is_parent` is true). The
+  switcher shows a pill for each identity the account actually has
+  whenever 2 or more of {athlete, coach, parent} apply.
+
 ## Database
 
 - Engine: PostgreSQL 14+

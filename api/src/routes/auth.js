@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const pool = require("../db/pool");
 const { signSession, SESSION_MAX_AGE_MS } = require("../utils/jwt");
 const asyncHandler = require("../utils/asyncHandler");
+const pinRateLimit = require("../utils/pinRateLimit");
 
 const router = Router();
 
@@ -55,7 +56,11 @@ router.post(
            COALESCE($3, FALSE), COALESCE($4, FALSE), $5
          )
          RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
-                   first_name, last_name, phone`,
+                   first_name, last_name, phone,
+                   EXISTS(
+                     SELECT 1 FROM nk_parent_athletes
+                     WHERE user_id = nk_users.id
+                   ) AS is_parent`,
         [
           email.toLowerCase(),
           passwordHash,
@@ -97,7 +102,10 @@ router.post(
 
     const { rows } = await pool.query(
       `SELECT id, email, password_hash, role, status, is_admin, athlete_id, coach_id,
-              first_name, last_name, phone
+              first_name, last_name, phone,
+              EXISTS(
+                SELECT 1 FROM nk_parent_athletes WHERE user_id = nk_users.id
+              ) AS is_parent
        FROM nk_users WHERE email = $1`,
       [email.toLowerCase()]
     );
@@ -123,6 +131,7 @@ router.post(
         first_name: user.first_name,
         last_name: user.last_name,
         phone: user.phone,
+        is_parent: user.is_parent,
       },
     });
   })
@@ -170,7 +179,11 @@ router.patch(
          updated_at = NOW()
        WHERE id = $4
        RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
-                 first_name, last_name, phone`,
+                 first_name, last_name, phone,
+                 EXISTS(
+                   SELECT 1 FROM nk_parent_athletes
+                   WHERE user_id = nk_users.id
+                 ) AS is_parent`,
       [first_name, last_name, phone, req.user.id]
     );
 
@@ -186,10 +199,10 @@ router.post(
     }
 
     const { role } = req.body ?? {};
-    if (role !== "athlete" && role !== "coach") {
-      return res
-        .status(400)
-        .json({ error: { message: "role must be 'athlete' or 'coach'" } });
+    if (role !== "athlete" && role !== "coach" && role !== "parent") {
+      return res.status(400).json({
+        error: { message: "role must be 'athlete', 'coach', or 'parent'" },
+      });
     }
     if (role === "athlete" && !req.user.athlete_id) {
       return res
@@ -201,16 +214,122 @@ router.post(
         .status(400)
         .json({ error: { message: "You don't have a coach profile" } });
     }
+    if (role === "parent" && !req.user.is_parent) {
+      return res
+        .status(400)
+        .json({ error: { message: "You don't have any linked children" } });
+    }
 
     const { rows } = await pool.query(
       `UPDATE nk_users SET role = $1, updated_at = NOW()
        WHERE id = $2
        RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
-                 first_name, last_name, phone`,
+                 first_name, last_name, phone,
+                 EXISTS(
+                   SELECT 1 FROM nk_parent_athletes
+                   WHERE user_id = nk_users.id
+                 ) AS is_parent`,
       [role, req.user.id]
     );
 
     res.json({ user: rows[0] });
+  })
+);
+
+router.get(
+  "/my-children",
+  asyncHandler(async (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ error: { message: "Not authenticated" } });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT a.id, a.first_name, a.last_name
+       FROM nk_parent_athletes pa
+       JOIN nk_athletes a ON a.id = pa.athlete_id
+       WHERE pa.user_id = $1
+       ORDER BY a.last_name, a.first_name`,
+      [req.user.id]
+    );
+    res.json({ children: rows });
+  })
+);
+
+router.post(
+  "/link-child",
+  asyncHandler(async (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ error: { message: "Not authenticated" } });
+    }
+
+    if (pinRateLimit.checkLocked(req.user.id)) {
+      return res.status(429).json({
+        error: {
+          message: "Too many attempts. Try again in a few minutes.",
+        },
+      });
+    }
+
+    const { pin } = req.body ?? {};
+    if (typeof pin !== "string" || !/^\d{6}$/.test(pin)) {
+      return res
+        .status(400)
+        .json({ error: { message: "PIN must be 6 digits" } });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        `SELECT id, first_name, last_name FROM nk_athletes
+         WHERE link_pin = $1 AND link_pin_expires_at > NOW()`,
+        [pin]
+      );
+
+      if (rows.length === 0) {
+        await client.query("ROLLBACK");
+        pinRateLimit.recordFailure(req.user.id);
+        return res
+          .status(400)
+          .json({ error: { message: "Invalid or expired PIN" } });
+      }
+
+      const athlete = rows[0];
+
+      await client.query(
+        `INSERT INTO nk_parent_athletes (user_id, athlete_id)
+         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [req.user.id, athlete.id]
+      );
+      await client.query(
+        `UPDATE nk_athletes SET link_pin = NULL, link_pin_expires_at = NULL
+         WHERE id = $1`,
+        [athlete.id]
+      );
+      const { rows: userRows } = await client.query(
+        `UPDATE nk_users SET role = COALESCE(role, 'parent'), updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
+                   first_name, last_name, phone,
+                   EXISTS(
+                     SELECT 1 FROM nk_parent_athletes
+                     WHERE user_id = nk_users.id
+                   ) AS is_parent`,
+        [req.user.id]
+      );
+
+      await client.query("COMMIT");
+      pinRateLimit.reset(req.user.id);
+      res.json({
+        user: userRows[0],
+        child: { id: athlete.id, first_name: athlete.first_name, last_name: athlete.last_name },
+      });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   })
 );
 
