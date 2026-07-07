@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useApi } from "../../hooks/useApi";
 import type { Role, Status } from "../../context/AuthContext";
-import { Badge, Spinner, Drawer, Field } from "../../components/ui";
+import { Badge, Spinner, Drawer, Field, DeleteButton } from "../../components/ui";
 
 interface ManagedUser {
   id: number;
@@ -57,6 +57,12 @@ export default function AdminUsers() {
     setUsers((prev) =>
       prev ? prev.map((u) => (u.id === id ? user : u)) : prev
     );
+  }
+
+  async function deleteUser(id: number) {
+    await api.del(`/admin/users/${id}`);
+    setUsers((prev) => (prev ? prev.filter((u) => u.id !== id) : prev));
+    setSelectedId(null);
   }
 
   if (error) return <div className="p-4 text-red-700">{error}</div>;
@@ -199,6 +205,15 @@ export default function AdminUsers() {
               selectedId={editing.coach_id}
               options={coaches}
               onSelect={(id) => updateUser(editing.id, { coach_id: id })}
+            />
+
+            <DeleteButton
+              onClick={() => deleteUser(editing.id)}
+              itemLabel={
+                editing.first_name || editing.last_name
+                  ? `${editing.first_name ?? ""} ${editing.last_name ?? ""}`.trim()
+                  : editing.email
+              }
             />
           </div>
         )}
