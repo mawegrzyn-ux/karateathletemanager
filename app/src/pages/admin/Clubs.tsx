@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useApi } from "../../hooks/useApi";
+import { useAuth } from "../../context/AuthContext";
 import {
   Spinner,
   Drawer,
@@ -32,6 +33,7 @@ interface Club {
 interface Membership {
   athleteIds: number[];
   coachIds: number[];
+  coachAdminIds: number[];
 }
 
 const EMPTY_FORM = {
@@ -44,6 +46,8 @@ const EMPTY_FORM = {
 
 export default function Clubs() {
   const api = useApi();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [clubs, setClubs] = useState<Club[] | null>(null);
   const [associations, setAssociations] = useState<Association[]>([]);
   const [allAthletes, setAllAthletes] = useState<Person[]>([]);
@@ -78,11 +82,19 @@ export default function Clubs() {
         clubsRes.clubs.map(async (c) => {
           const [athletes, coaches] = await Promise.all([
             api.get<{ athleteIds: number[] }>(`/admin/clubs/${c.id}/athletes`),
-            api.get<{ coachIds: number[] }>(`/admin/clubs/${c.id}/coaches`),
+            api.get<{ coaches: { id: number; is_admin: boolean }[] }>(
+              `/admin/clubs/${c.id}/coaches`
+            ),
           ]);
           return [
             c.id,
-            { athleteIds: athletes.athleteIds, coachIds: coaches.coachIds },
+            {
+              athleteIds: athletes.athleteIds,
+              coachIds: coaches.coaches.map((co) => co.id),
+              coachAdminIds: coaches.coaches
+                .filter((co) => co.is_admin)
+                .map((co) => co.id),
+            },
           ] as const;
         })
       );
@@ -107,7 +119,7 @@ export default function Clubs() {
     setClubs((prev) => (prev ? [...prev, club] : [club]));
     setMemberships((prev) => ({
       ...prev,
-      [club.id]: { athleteIds: [], coachIds: [] },
+      [club.id]: { athleteIds: [], coachIds: [], coachAdminIds: [] },
     }));
     setDrawer("closed");
   }
@@ -136,7 +148,7 @@ export default function Clubs() {
   ) {
     const id = Number(idValue);
     if (!Number.isInteger(id) || id <= 0) return;
-    const current = memberships[clubId] ?? { athleteIds: [], coachIds: [] };
+    const current = memberships[clubId] ?? { athleteIds: [], coachIds: [], coachAdminIds: [] };
     const key = kind === "athlete" ? "athleteIds" : "coachIds";
     if (current[key].includes(id)) return;
     const nextIds = [...current[key], id];
@@ -154,7 +166,7 @@ export default function Clubs() {
     kind: "athlete" | "coach",
     id: number
   ) {
-    const current = memberships[clubId] ?? { athleteIds: [], coachIds: [] };
+    const current = memberships[clubId] ?? { athleteIds: [], coachIds: [], coachAdminIds: [] };
     const key = kind === "athlete" ? "athleteIds" : "coachIds";
     const nextIds = current[key].filter((existing) => existing !== id);
     const path =
@@ -164,6 +176,27 @@ export default function Clubs() {
     const body = kind === "athlete" ? { athleteIds: nextIds } : { coachIds: nextIds };
     await api.put(path, body);
     setMemberships((prev) => ({ ...prev, [clubId]: { ...current, [key]: nextIds } }));
+  }
+
+  async function toggleCoachAdmin(
+    clubId: number,
+    coachId: number,
+    nextIsAdmin: boolean
+  ) {
+    await api.patch(`/admin/clubs/${clubId}/coaches/${coachId}`, {
+      is_admin: nextIsAdmin,
+    });
+    setMemberships((prev) => {
+      const current = prev[clubId] ?? {
+        athleteIds: [],
+        coachIds: [],
+        coachAdminIds: [],
+      };
+      const coachAdminIds = nextIsAdmin
+        ? [...current.coachAdminIds, coachId]
+        : current.coachAdminIds.filter((id) => id !== coachId);
+      return { ...prev, [clubId]: { ...current, coachAdminIds } };
+    });
   }
 
   if (error) return <div className="p-4 text-red-700">{error}</div>;
@@ -176,14 +209,14 @@ export default function Clubs() {
 
   const editing = drawer !== "closed" && drawer !== "create" ? drawer : null;
   const editingMembership = editing
-    ? memberships[editing.id] ?? { athleteIds: [], coachIds: [] }
+    ? memberships[editing.id] ?? { athleteIds: [], coachIds: [], coachAdminIds: [] }
     : null;
 
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Clubs</h1>
-        <AddButton onClick={openCreate} />
+        {isAdmin && <AddButton onClick={openCreate} />}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -326,12 +359,21 @@ export default function Clubs() {
               options={allCoaches}
               onAdd={(value) => addMember(editing.id, "coach", value)}
               onRemove={(id) => removeMember(editing.id, "coach", id)}
+              adminIds={editingMembership.coachAdminIds}
+              onToggleAdmin={
+                isAdmin
+                  ? (id, nextIsAdmin) =>
+                      toggleCoachAdmin(editing.id, id, nextIsAdmin)
+                  : undefined
+              }
             />
 
-            <DeleteButton
-              onClick={() => deleteClub(editing.id)}
-              itemLabel={editing.name}
-            />
+            {isAdmin && (
+              <DeleteButton
+                onClick={() => deleteClub(editing.id)}
+                itemLabel={editing.name}
+              />
+            )}
           </div>
         )}
       </Drawer>
@@ -396,12 +438,16 @@ function MemberEditor({
   options,
   onAdd,
   onRemove,
+  adminIds,
+  onToggleAdmin,
 }: {
   label: string;
   ids: number[];
   options: Person[];
   onAdd: (value: string) => void;
   onRemove: (id: number) => void;
+  adminIds?: number[];
+  onToggleAdmin?: (id: number, nextIsAdmin: boolean) => void;
 }) {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
@@ -423,23 +469,39 @@ function MemberEditor({
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
         {results.map((o) => {
           const added = ids.includes(o.id);
+          const isRowAdmin = adminIds?.includes(o.id) ?? false;
           return (
-            <button
+            <div
               key={o.id}
-              onClick={() =>
-                added ? onRemove(o.id) : onAdd(String(o.id))
-              }
-              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+              className={`flex items-center gap-1 rounded-lg border px-3 ${
                 added
                   ? "border-green-200 bg-green-50 text-green-800"
                   : "border-slate-200"
               }`}
             >
-              <span>
-                {o.first_name} {o.last_name}
-              </span>
-              <span className="text-sm">{added ? "✓ Added" : "+ Add"}</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => (added ? onRemove(o.id) : onAdd(String(o.id)))}
+                className="flex min-h-[44px] flex-1 items-center justify-between text-left"
+              >
+                <span>
+                  {o.first_name} {o.last_name}
+                </span>
+                <span className="text-sm">{added ? "✓ Added" : "+ Add"}</span>
+              </button>
+              {added && onToggleAdmin && (
+                <button
+                  type="button"
+                  onClick={() => onToggleAdmin(o.id, !isRowAdmin)}
+                  title={isRowAdmin ? "Remove admin" : "Make admin"}
+                  className={`flex min-h-[44px] min-w-[44px] items-center justify-center text-lg ${
+                    isRowAdmin ? "text-amber-500" : "text-slate-300"
+                  }`}
+                >
+                  {isRowAdmin ? "★" : "☆"}
+                </button>
+              )}
+            </div>
           );
         })}
         {results.length === 0 && (

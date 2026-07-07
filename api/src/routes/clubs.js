@@ -2,10 +2,11 @@ const { Router } = require("express");
 const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
 const asyncHandler = require("../utils/asyncHandler");
+const { isClubAdmin } = require("../utils/permissions");
 
 const router = Router();
 
-router.use(authorize("admin"));
+router.use(authorize("admin", "coach"));
 
 router.get(
   "/",
@@ -25,6 +26,10 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
     const { name, association_id, location, contact_email, contact_phone } =
       req.body ?? {};
 
@@ -54,6 +59,10 @@ router.post(
 router.patch(
   "/:id",
   asyncHandler(async (req, res) => {
+    if (!(await isClubAdmin(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
     const { name, association_id, location, contact_email, contact_phone } =
       req.body ?? {};
 
@@ -89,6 +98,10 @@ router.patch(
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
     const { rowCount } = await pool.query(`DELETE FROM nk_clubs WHERE id = $1`, [
       req.params.id,
     ]);
@@ -113,6 +126,10 @@ router.get(
 router.put(
   "/:id/athletes",
   asyncHandler(async (req, res) => {
+    if (!(await isClubAdmin(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
     const { athleteIds } = req.body ?? {};
     if (!Array.isArray(athleteIds)) {
       return res
@@ -152,16 +169,22 @@ router.get(
   "/:id/coaches",
   asyncHandler(async (req, res) => {
     const { rows } = await pool.query(
-      `SELECT coach_id FROM nk_coach_clubs WHERE club_id = $1 ORDER BY coach_id`,
+      `SELECT coach_id, is_admin FROM nk_coach_clubs WHERE club_id = $1 ORDER BY coach_id`,
       [req.params.id]
     );
-    res.json({ coachIds: rows.map((r) => r.coach_id) });
+    res.json({
+      coaches: rows.map((r) => ({ id: r.coach_id, is_admin: r.is_admin })),
+    });
   })
 );
 
 router.put(
   "/:id/coaches",
   asyncHandler(async (req, res) => {
+    if (!(await isClubAdmin(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
     const { coachIds } = req.body ?? {};
     if (!Array.isArray(coachIds)) {
       return res
@@ -194,6 +217,35 @@ router.put(
     } finally {
       client.release();
     }
+  })
+);
+
+router.patch(
+  "/:id/coaches/:coachId",
+  asyncHandler(async (req, res) => {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { is_admin } = req.body ?? {};
+    if (typeof is_admin !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: { message: "is_admin must be a boolean" } });
+    }
+
+    const { rowCount } = await pool.query(
+      `UPDATE nk_coach_clubs SET is_admin = $1
+       WHERE club_id = $2 AND coach_id = $3`,
+      [is_admin, req.params.id, req.params.coachId]
+    );
+
+    if (rowCount === 0) {
+      return res
+        .status(404)
+        .json({ error: { message: "That coach is not a member of this club" } });
+    }
+    res.json({ id: Number(req.params.coachId), is_admin });
   })
 );
 

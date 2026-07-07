@@ -24,16 +24,21 @@ export default function More() {
             Manage users
           </Link>
           <Link
-            to="/admin/clubs"
-            className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
-          >
-            Manage clubs
-          </Link>
-          <Link
             to="/admin/coaches"
             className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
           >
             Manage coaches
+          </Link>
+        </>
+      )}
+
+      {(user?.role === "admin" || user?.role === "coach") && (
+        <>
+          <Link
+            to="/admin/clubs"
+            className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
+          >
+            Manage clubs
           </Link>
           <Link
             to="/admin/associations"
