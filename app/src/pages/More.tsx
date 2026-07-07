@@ -8,6 +8,13 @@ export default function More() {
     <div className="flex flex-col gap-4 p-4">
       <h1 className="text-xl font-semibold">More</h1>
 
+      <Link
+        to="/profile"
+        className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
+      >
+        My profile
+      </Link>
+
       {user?.role === "admin" && (
         <Link
           to="/admin/users"

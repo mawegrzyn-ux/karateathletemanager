@@ -10,6 +10,9 @@ interface ManagedUser {
   status: Status;
   athlete_id: number | null;
   coach_id: number | null;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
 }
 
 const ROLES: Role[] = ["admin", "coach", "athlete", "parent"];
@@ -58,6 +61,38 @@ export default function AdminUsers() {
             <span className="font-medium">{u.email}</span>
             <Badge>{u.status}</Badge>
           </div>
+          <div className="flex gap-2">
+            <input
+              defaultValue={u.first_name ?? ""}
+              placeholder="First name"
+              onBlur={(e) => {
+                if (e.target.value !== (u.first_name ?? "")) {
+                  updateUser(u.id, { first_name: e.target.value });
+                }
+              }}
+              className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-2"
+            />
+            <input
+              defaultValue={u.last_name ?? ""}
+              placeholder="Last name"
+              onBlur={(e) => {
+                if (e.target.value !== (u.last_name ?? "")) {
+                  updateUser(u.id, { last_name: e.target.value });
+                }
+              }}
+              className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-2"
+            />
+          </div>
+          <input
+            defaultValue={u.phone ?? ""}
+            placeholder="Phone number"
+            onBlur={(e) => {
+              if (e.target.value !== (u.phone ?? "")) {
+                updateUser(u.id, { phone: e.target.value });
+              }
+            }}
+            className="min-h-[44px] rounded-lg border border-slate-300 px-2"
+          />
           <div className="flex gap-2">
             <select
               className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-2"

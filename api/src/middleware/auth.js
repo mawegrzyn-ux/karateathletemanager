@@ -14,7 +14,8 @@ async function auth(req, res, next) {
 
   try {
     const { rows } = await pool.query(
-      `SELECT id, email, role, status, athlete_id, coach_id
+      `SELECT id, email, role, status, athlete_id, coach_id,
+              first_name, last_name, phone
        FROM nk_users WHERE id = $1`,
       [payload.id]
     );

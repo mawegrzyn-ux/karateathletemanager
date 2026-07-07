@@ -16,6 +16,15 @@ export interface User {
   email: string;
   role: Role | null;
   status: Status;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+}
+
+export interface ProfileUpdate {
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
 }
 
 interface AuthContextValue {
@@ -24,6 +33,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateProfile: (update: ProfileUpdate) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -73,8 +83,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const updateProfile = useCallback(async (update: ProfileUpdate) => {
+    const { user } = await api.patch<{ user: User }>("/auth/me", update);
+    setUser(user);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, register, logout, updateProfile }}
+    >
       {children}
     </AuthContext.Provider>
   );
