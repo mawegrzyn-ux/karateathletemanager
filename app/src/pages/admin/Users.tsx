@@ -32,6 +32,7 @@ export default function AdminUsers() {
   const [coaches, setCoaches] = useState<Person[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -67,13 +68,26 @@ export default function AdminUsers() {
     );
 
   const editing = users.find((u) => u.id === selectedId) ?? null;
+  const q = query.trim().toLowerCase();
+  const filteredUsers = users.filter((u) =>
+    `${u.first_name ?? ""} ${u.last_name ?? ""} ${u.email}`
+      .toLowerCase()
+      .includes(q)
+  );
 
   return (
     <div className="flex flex-col gap-3 p-4">
       <h1 className="text-xl font-semibold">Users</h1>
 
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search users..."
+        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+      />
+
       <div className="flex flex-col gap-2">
-        {users.map((u) => (
+        {filteredUsers.map((u) => (
           <button
             key={u.id}
             onClick={() => setSelectedId(u.id)}

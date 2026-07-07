@@ -9,11 +9,15 @@ const FIELDS = `id, first_name, last_name, date_of_birth, email, phone,
                 emergency_name, emergency_phone, belt, join_date,
                 medical_notes, is_active, created_at`;
 
-router.use(authorize("coach"));
+router.use(authorize());
 
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    if (!req.user.is_admin && req.user.role !== "coach") {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
     const { q } = req.query;
     const { rows } = q
       ? await pool.query(
@@ -32,6 +36,10 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
+    if (!req.user.is_admin && req.user.role !== "coach") {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
     const {
       first_name,
       last_name,
@@ -80,6 +88,13 @@ router.post(
 router.get(
   "/:id",
   asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!req.user.is_admin && req.user.role !== "coach" && !isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
     const { rows } = await pool.query(
       `SELECT ${FIELDS} FROM nk_athletes WHERE id = $1`,
       [req.params.id]
@@ -94,6 +109,10 @@ router.get(
 router.patch(
   "/:id",
   asyncHandler(async (req, res) => {
+    if (!req.user.is_admin && req.user.role !== "coach") {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
     const {
       first_name,
       last_name,
