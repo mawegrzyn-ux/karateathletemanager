@@ -17,6 +17,7 @@ export interface User {
   role: Role | null;
   status: Status;
   is_admin: boolean;
+  is_parent: boolean;
   athlete_id: number | null;
   coach_id: number | null;
   first_name: string | null;
@@ -36,6 +37,12 @@ export interface RegisterOptions {
   requested_club_id?: number | null;
 }
 
+export interface Child {
+  id: number;
+  first_name: string;
+  last_name: string;
+}
+
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
@@ -47,7 +54,8 @@ interface AuthContextValue {
   ) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (update: ProfileUpdate) => Promise<void>;
-  switchRole: (role: "athlete" | "coach") => Promise<void>;
+  switchRole: (role: "athlete" | "coach" | "parent") => Promise<void>;
+  linkChild: (pin: string) => Promise<Child>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -107,11 +115,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const switchRole = useCallback(async (role: "athlete" | "coach") => {
+  const switchRole = useCallback(async (role: "athlete" | "coach" | "parent") => {
     const { user } = await api.post<{ user: User }>("/auth/switch-role", {
       role,
     });
     setUser(user);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const linkChild = useCallback(async (pin: string) => {
+    const { user, child } = await api.post<{ user: User; child: Child }>(
+      "/auth/link-child",
+      { pin }
+    );
+    setUser(user);
+    return child;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -125,6 +143,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         logout,
         updateProfile,
         switchRole,
+        linkChild,
       }}
     >
       {children}

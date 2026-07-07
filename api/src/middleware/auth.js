@@ -15,7 +15,10 @@ async function auth(req, res, next) {
   try {
     const { rows } = await pool.query(
       `SELECT id, email, role, status, is_admin, athlete_id, coach_id,
-              first_name, last_name, phone
+              first_name, last_name, phone,
+              EXISTS(
+                SELECT 1 FROM nk_parent_athletes WHERE user_id = nk_users.id
+              ) AS is_parent
        FROM nk_users WHERE id = $1`,
       [payload.id]
     );

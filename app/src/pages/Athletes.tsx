@@ -108,6 +108,64 @@ function MyAthleteProfile({ athleteId }: { athleteId: number }) {
         label="Medical notes"
         value={athlete.medical_notes ?? "—"}
       />
+
+      <LinkParentPin athleteId={athlete.id} />
+    </div>
+  );
+}
+
+function LinkParentPin({ athleteId }: { athleteId: number }) {
+  const api = useApi();
+  const [pin, setPin] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function generate() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const res = await api.post<{ pin: string; expires_at: string }>(
+        `/athletes/${athleteId}/generate-pin`,
+        {}
+      );
+      setPin(res.pin);
+      setExpiresAt(res.expires_at);
+    } catch {
+      setError("Failed to generate a PIN");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-3">
+      <span className="text-sm font-medium text-slate-700">
+        Link a parent
+      </span>
+      <p className="text-sm text-slate-600">
+        Generate a one-time code and share it with your parent. They enter
+        it on their own profile to link to yours.
+      </p>
+      {pin && (
+        <div className="flex flex-col items-center gap-1 rounded-lg border border-slate-200 bg-white py-3">
+          <span className="text-3xl font-semibold tracking-widest">
+            {pin}
+          </span>
+          <span className="text-xs text-slate-500">
+            Expires {new Date(expiresAt!).toLocaleTimeString()} or once used
+          </span>
+        </div>
+      )}
+      {error && <p className="text-sm text-red-700">{error}</p>}
+      <button
+        type="button"
+        onClick={generate}
+        disabled={submitting}
+        className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white disabled:opacity-50"
+      >
+        {pin ? "Generate new PIN" : "Generate PIN"}
+      </button>
     </div>
   );
 }

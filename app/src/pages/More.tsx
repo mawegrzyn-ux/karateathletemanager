@@ -4,6 +4,14 @@ import { useAuth } from "../context/AuthContext";
 export default function More() {
   const { user, logout, switchRole } = useAuth();
 
+  const availableRoles = (
+    [
+      { role: "athlete" as const, label: "Athlete", has: !!user?.athlete_id },
+      { role: "coach" as const, label: "Coach", has: !!user?.coach_id },
+      { role: "parent" as const, label: "Parent", has: !!user?.is_parent },
+    ]
+  ).filter((r) => r.has);
+
   return (
     <div className="flex flex-col gap-4 p-4">
       <h1 className="text-xl font-semibold">More</h1>
@@ -15,32 +23,25 @@ export default function More() {
         My profile
       </Link>
 
-      {user?.athlete_id && user?.coach_id && (
+      {availableRoles.length >= 2 && (
         <div className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3">
           <span className="text-sm font-medium text-slate-700">
             Acting as
           </span>
           <div className="flex gap-2">
-            <button
-              onClick={() => switchRole("athlete")}
-              className={`min-h-[44px] flex-1 rounded-lg border px-3 font-medium ${
-                user.role === "athlete"
-                  ? "border-red-700 bg-red-700 text-white"
-                  : "border-slate-300 text-slate-700"
-              }`}
-            >
-              Athlete
-            </button>
-            <button
-              onClick={() => switchRole("coach")}
-              className={`min-h-[44px] flex-1 rounded-lg border px-3 font-medium ${
-                user.role === "coach"
-                  ? "border-red-700 bg-red-700 text-white"
-                  : "border-slate-300 text-slate-700"
-              }`}
-            >
-              Coach
-            </button>
+            {availableRoles.map(({ role, label }) => (
+              <button
+                key={role}
+                onClick={() => switchRole(role)}
+                className={`min-h-[44px] flex-1 rounded-lg border px-3 font-medium ${
+                  user?.role === role
+                    ? "border-red-700 bg-red-700 text-white"
+                    : "border-slate-300 text-slate-700"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
       )}
