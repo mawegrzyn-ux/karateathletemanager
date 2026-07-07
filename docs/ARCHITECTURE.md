@@ -78,6 +78,8 @@ Domain: nadakarate.com
 
 ### Core entities
 
+- **Associations** — national/regional governing bodies. Name, description, contact info. A club affiliates with at most one association
+- **Clubs** — individual dojos. Name, location, contact info, optional link to one association. Athletes and coaches can belong to multiple clubs (many-to-many); a person's associations are derived from their club(s)' association, not tracked directly
 - **Athletes** — name, date of birth, contact, emergency contact, belt/grade, join date, photo, medical notes, active/inactive status
 - **Coaches** — name, contact, qualifications, role (head coach / assistant), can also be athletes
 - **Classes** — recurring schedule slots (e.g. "Juniors Mon/Wed 5-6pm", "Adults Tue/Thu 7-8:30pm"). Class type (kata, kumite, general, fitness), age group, location, max capacity
@@ -92,6 +94,10 @@ Suggested table prefix: `nk_`
 ### Suggested initial tables
 
 ```
+nk_associations
+nk_clubs                (association_id, nullable)
+nk_athlete_clubs        (athlete_id + club_id, many-to-many)
+nk_coach_clubs          (coach_id + club_id, many-to-many)
 nk_athletes
 nk_coaches
 nk_classes              (recurring schedule definitions)
@@ -105,6 +111,18 @@ nk_settings             (app config, club name, etc.)
 nk_users                (auth accounts: email/password, role, status)
 nk_parent_athletes      (parent user_id <-> athlete_id, many-to-many)
 ```
+
+### Clubs & Associations API
+
+Admin-only CRUD, mirroring the `/api/admin/users` pattern:
+
+- `GET/POST /api/admin/associations`, `PATCH/DELETE /api/admin/associations/:id`
+- `GET/POST /api/admin/clubs`, `PATCH/DELETE /api/admin/clubs/:id`
+- `GET/PUT /api/admin/clubs/:id/athletes` and `.../coaches` — replace-the-whole-set membership endpoints (same pattern as `nk_parent_athletes`)
+
+No athlete/coach management UI exists yet, so club membership assignment
+in the admin UI is a simple "add by ID" widget rather than a searchable
+picker — revisit once athlete/coach CRUD exists.
 
 ## Auth & RBAC
 

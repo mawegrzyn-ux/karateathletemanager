@@ -139,6 +139,39 @@ const migrations = [
      ADD COLUMN IF NOT EXISTS first_name VARCHAR(100),
      ADD COLUMN IF NOT EXISTS last_name  VARCHAR(100),
      ADD COLUMN IF NOT EXISTS phone      VARCHAR(50)`,
+
+  `CREATE TABLE IF NOT EXISTS nk_associations (
+     id             SERIAL PRIMARY KEY,
+     name           VARCHAR(200) NOT NULL,
+     description    TEXT,
+     contact_email  VARCHAR(200),
+     contact_phone  VARCHAR(50),
+     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS nk_clubs (
+     id             SERIAL PRIMARY KEY,
+     name           VARCHAR(200) NOT NULL,
+     association_id INTEGER REFERENCES nk_associations(id) ON DELETE SET NULL,
+     location       VARCHAR(200),
+     contact_email  VARCHAR(200),
+     contact_phone  VARCHAR(50),
+     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS nk_athlete_clubs (
+     athlete_id INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     club_id    INTEGER NOT NULL REFERENCES nk_clubs(id) ON DELETE CASCADE,
+     PRIMARY KEY (athlete_id, club_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS nk_coach_clubs (
+     coach_id INTEGER NOT NULL REFERENCES nk_coaches(id) ON DELETE CASCADE,
+     club_id  INTEGER NOT NULL REFERENCES nk_clubs(id) ON DELETE CASCADE,
+     PRIMARY KEY (coach_id, club_id)
+  )`,
 ];
 
 async function migrate() {
