@@ -102,7 +102,35 @@ nk_competitions
 nk_competition_entries  (athlete + competition + category + result)
 nk_announcements        (news/notices for athletes)
 nk_settings             (app config, club name, etc.)
+nk_users                (auth accounts: email/password, role, status)
+nk_parent_athletes      (parent user_id <-> athlete_id, many-to-many)
 ```
+
+## Auth & RBAC
+
+Self-service email/password registration, gated by admin approval — not
+third-party OAuth. Roles: `admin`, `coach`, `athlete`, `parent`.
+
+- `POST /api/auth/register` `{email,password}` — creates an `nk_users` row.
+  The **first ever** registration is auto-promoted to `role: 'admin'`,
+  `status: 'active'` (bootstrap, so there's always someone who can approve
+  others). Every subsequent registration starts as `role: null`,
+  `status: 'pending'`.
+- `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`.
+- Session is a JWT (holding only the user id) in an `httpOnly`, `sameSite:
+  lax` cookie. `api/src/middleware/auth.js` verifies it and re-reads the
+  user's current role/status from `nk_users` on every request, so an
+  admin's approval takes effect immediately — no re-login needed.
+- `api/src/middleware/authorize(...roles)` gates routes: no session → 401;
+  `status !== 'active'` → 403; role not in the given list → 403.
+- `nk_users.athlete_id` / `.coach_id` identify "this user IS this
+  athlete/coach" (set by an admin). `nk_parent_athletes` links a `parent`
+  user to the athlete(s) — their kids — they should see.
+- Admin-only management: `GET/PATCH /api/admin/users`,
+  `PUT /api/admin/users/:id/parent-athletes`. Frontend: `/admin/users`
+  (linked from the "More" tab for admins), gated by `RequireAuth`.
+- Pending/disabled users can log in but are shown a "waiting for
+  approval" screen (`PendingApproval.tsx`) instead of the app.
 
 ## Database
 
@@ -174,6 +202,10 @@ Key flows:
 
 ## Nginx
 
+SSL is live via Certbot (auto-renews through `certbot.timer`). Full config
+lives at [`nginx/nadakarate.com.conf`](../nginx/nadakarate.com.conf) and on
+the server at `/etc/nginx/sites-available/nadakarate.com` — shape:
+
 ```nginx
 server {
     server_name nadakarate.com www.nadakarate.com;
@@ -183,10 +215,13 @@ server {
     location /api/ {
         proxy_pass http://127.0.0.1:3001;
         proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
         client_max_body_size 20M;
     }
 
@@ -194,7 +229,20 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # SSL managed by Certbot
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2|woff|ttf)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/nadakarate.com/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/nadakarate.com/privkey.pem; # managed by Certbot
+}
+
+server {
+    listen 80;
+    server_name nadakarate.com www.nadakarate.com;
+    return 301 https://$host$request_uri; # managed by Certbot
 }
 ```
 

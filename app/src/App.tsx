@@ -1,8 +1,12 @@
-import { NavLink, Route, Routes } from "react-router-dom";
+import { NavLink, Outlet, Route, Routes } from "react-router-dom";
 import Schedule from "./pages/Schedule";
 import Athletes from "./pages/Athletes";
 import Grades from "./pages/Grades";
 import More from "./pages/More";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import AdminUsers from "./pages/admin/Users";
+import RequireAuth from "./components/RequireAuth";
 
 const tabs = [
   { to: "/", label: "Schedule", icon: "📅", end: true },
@@ -11,16 +15,11 @@ const tabs = [
   { to: "/more", label: "More", icon: "⚙️" },
 ];
 
-export default function App() {
+function Shell() {
   return (
     <div className="flex h-full flex-col">
       <main className="flex-1 overflow-y-auto pb-20">
-        <Routes>
-          <Route path="/" element={<Schedule />} />
-          <Route path="/athletes" element={<Athletes />} />
-          <Route path="/grades" element={<Grades />} />
-          <Route path="/more" element={<More />} />
-        </Routes>
+        <Outlet />
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 flex border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)]">
@@ -41,5 +40,35 @@ export default function App() {
         ))}
       </nav>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+
+      <Route
+        element={
+          <RequireAuth>
+            <Shell />
+          </RequireAuth>
+        }
+      >
+        <Route path="/" element={<Schedule />} />
+        <Route path="/athletes" element={<Athletes />} />
+        <Route path="/grades" element={<Grades />} />
+        <Route path="/more" element={<More />} />
+        <Route
+          path="/admin/users"
+          element={
+            <RequireAuth roles={["admin"]}>
+              <AdminUsers />
+            </RequireAuth>
+          }
+        />
+      </Route>
+    </Routes>
   );
 }

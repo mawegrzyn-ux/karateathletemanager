@@ -1,0 +1,87 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type PropsWithChildren,
+} from "react";
+import { useApi } from "../hooks/useApi";
+
+export type Role = "admin" | "coach" | "athlete" | "parent";
+export type Status = "pending" | "active" | "disabled";
+
+export interface User {
+  id: number;
+  email: string;
+  role: Role | null;
+  status: Status;
+}
+
+interface AuthContextValue {
+  user: User | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+export function AuthProvider({ children }: PropsWithChildren) {
+  const api = useApi();
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    try {
+      const { user } = await api.get<{ user: User | null }>("/auth/me");
+      setUser(user);
+    } catch {
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const login = useCallback(async (email: string, password: string) => {
+    const { user } = await api.post<{ user: User }>("/auth/login", {
+      email,
+      password,
+    });
+    setUser(user);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const register = useCallback(async (email: string, password: string) => {
+    const { user } = await api.post<{ user: User }>("/auth/register", {
+      email,
+      password,
+    });
+    setUser(user);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const logout = useCallback(async () => {
+    await api.post("/auth/logout", {});
+    setUser(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  return ctx;
+}

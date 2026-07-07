@@ -116,6 +116,24 @@ const migrations = [
      value           TEXT,
      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+
+  `CREATE TABLE IF NOT EXISTS nk_users (
+     id              SERIAL PRIMARY KEY,
+     email           VARCHAR(200) NOT NULL UNIQUE,
+     password_hash   TEXT NOT NULL,
+     role            VARCHAR(20) CHECK (role IN ('admin', 'coach', 'athlete', 'parent')),
+     status          VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'disabled')),
+     athlete_id      INTEGER REFERENCES nk_athletes(id) ON DELETE SET NULL,
+     coach_id        INTEGER REFERENCES nk_coaches(id) ON DELETE SET NULL,
+     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS nk_parent_athletes (
+     user_id         INTEGER NOT NULL REFERENCES nk_users(id) ON DELETE CASCADE,
+     athlete_id      INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     PRIMARY KEY (user_id, athlete_id)
+  )`,
 ];
 
 async function migrate() {
