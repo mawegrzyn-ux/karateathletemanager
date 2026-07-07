@@ -9,6 +9,7 @@ import Profile from "./pages/Profile";
 import AdminUsers from "./pages/admin/Users";
 import AdminAssociations from "./pages/admin/Associations";
 import AdminClubs from "./pages/admin/Clubs";
+import AdminCoaches from "./pages/admin/Coaches";
 import RequireAuth from "./components/RequireAuth";
 import RequireLogin from "./components/RequireLogin";
 
@@ -93,6 +94,14 @@ export default function App() {
           element={
             <RequireAuth roles={["admin"]}>
               <AdminClubs />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/coaches"
+          element={
+            <RequireAuth roles={["admin"]}>
+              <AdminCoaches />
             </RequireAuth>
           }
         />

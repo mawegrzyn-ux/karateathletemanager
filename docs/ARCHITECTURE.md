@@ -120,9 +120,20 @@ Admin-only CRUD, mirroring the `/api/admin/users` pattern:
 - `GET/POST /api/admin/clubs`, `PATCH/DELETE /api/admin/clubs/:id`
 - `GET/PUT /api/admin/clubs/:id/athletes` and `.../coaches` — replace-the-whole-set membership endpoints (same pattern as `nk_parent_athletes`)
 
-No athlete/coach management UI exists yet, so club membership assignment
-in the admin UI is a simple "add by ID" widget rather than a searchable
-picker — revisit once athlete/coach CRUD exists.
+The Clubs admin UI's membership pickers are name-based `<select>`s backed
+by `GET /api/athletes` and `GET /api/admin/coaches`.
+
+### Athletes & Coaches API
+
+- `GET /api/athletes?q=` (name search), `POST`, `GET/PATCH /:id` — `admin`
+  and `coach` roles. `DELETE /:id` is admin-only (extra inline check,
+  since it's more destructive than the other operations here).
+- `GET/POST /api/admin/coaches`, `GET/PATCH/DELETE /api/admin/coaches/:id`
+  — admin-only for all methods, consistent with Users/Clubs/Associations.
+  `athlete_id` optionally links a coach who is also an athlete.
+- The "Athletes" bottom-nav tab shows the full manager UI to `admin`/`coach`
+  roles; other roles see a placeholder ("ask your coach") since athlete/
+  parent self-service viewing is a separate future feature.
 
 ## Auth & RBAC
 
