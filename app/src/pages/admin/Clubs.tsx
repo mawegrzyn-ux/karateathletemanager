@@ -1,6 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useApi } from "../../hooks/useApi";
-import { Spinner } from "../../components/ui";
+import {
+  Spinner,
+  Drawer,
+  AddButton,
+  DeleteButton,
+  Field,
+} from "../../components/ui";
 
 interface Association {
   id: number;
@@ -28,6 +34,14 @@ interface Membership {
   coachIds: number[];
 }
 
+const EMPTY_FORM = {
+  name: "",
+  location: "",
+  contact_email: "",
+  contact_phone: "",
+  association_id: "",
+};
+
 export default function Clubs() {
   const api = useApi();
   const [clubs, setClubs] = useState<Club[] | null>(null);
@@ -38,7 +52,8 @@ export default function Clubs() {
     {}
   );
   const [error, setError] = useState<string | null>(null);
-  const [newName, setNewName] = useState("");
+  const [drawer, setDrawer] = useState<"closed" | "create" | Club>("closed");
+  const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => {
     load();
@@ -77,18 +92,24 @@ export default function Clubs() {
     }
   }
 
+  function openCreate() {
+    setForm(EMPTY_FORM);
+    setDrawer("create");
+  }
+
   async function createClub(e: FormEvent) {
     e.preventDefault();
-    if (!newName.trim()) return;
+    if (!form.name.trim()) return;
     const { club } = await api.post<{ club: Club }>("/admin/clubs", {
-      name: newName,
+      ...form,
+      association_id: form.association_id ? Number(form.association_id) : null,
     });
     setClubs((prev) => (prev ? [...prev, club] : [club]));
     setMemberships((prev) => ({
       ...prev,
       [club.id]: { athleteIds: [], coachIds: [] },
     }));
-    setNewName("");
+    setDrawer("closed");
   }
 
   async function updateClub(id: number, patch: Record<string, unknown>) {
@@ -97,11 +118,15 @@ export default function Clubs() {
       patch
     );
     setClubs((prev) => (prev ? prev.map((c) => (c.id === id ? club : c)) : prev));
+    setDrawer((prev) =>
+      prev !== "closed" && prev !== "create" && prev.id === id ? club : prev
+    );
   }
 
   async function deleteClub(id: number) {
     await api.del(`/admin/clubs/${id}`);
     setClubs((prev) => (prev ? prev.filter((c) => c.id !== id) : prev));
+    setDrawer("closed");
   }
 
   async function addMember(
@@ -149,69 +174,58 @@ export default function Clubs() {
       </div>
     );
 
+  const editing = drawer !== "closed" && drawer !== "create" ? drawer : null;
+  const editingMembership = editing
+    ? memberships[editing.id] ?? { athleteIds: [], coachIds: [] }
+    : null;
+
   return (
     <div className="flex flex-col gap-3 p-4">
-      <h1 className="text-xl font-semibold">Clubs</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Clubs</h1>
+        <AddButton onClick={openCreate} />
+      </div>
 
-      <form onSubmit={createClub} className="flex gap-2">
-        <input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="New club name"
-          className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-3"
-        />
-        <button
-          type="submit"
-          className="min-h-[44px] rounded-lg bg-red-700 px-4 font-medium text-white"
-        >
-          Add
-        </button>
-      </form>
-
-      {clubs.map((c) => {
-        const membership = memberships[c.id] ?? { athleteIds: [], coachIds: [] };
-        return (
-          <div
+      <div className="flex flex-col gap-2">
+        {clubs.map((c) => (
+          <button
             key={c.id}
-            className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3"
+            onClick={() => setDrawer(c)}
+            className="min-h-[44px] rounded-lg border border-slate-200 px-3 py-2 text-left font-medium"
           >
-            <div className="flex items-center justify-between gap-2">
-              <input
-                defaultValue={c.name}
-                onBlur={(e) => {
-                  if (e.target.value !== c.name) {
-                    updateClub(c.id, { name: e.target.value });
-                  }
-                }}
-                className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-2 font-medium"
-              />
-              <button
-                onClick={() => deleteClub(c.id)}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3 text-sm text-red-700"
-              >
-                Delete
-              </button>
-            </div>
+            {c.name}
+          </button>
+        ))}
+      </div>
 
+      <Drawer
+        open={drawer === "create"}
+        onClose={() => setDrawer("closed")}
+        title="New club"
+      >
+        <form onSubmit={createClub} className="flex flex-col gap-4">
+          <Field label="Name">
             <input
-              defaultValue={c.location ?? ""}
-              placeholder="Location"
-              onBlur={(e) => {
-                if (e.target.value !== (c.location ?? "")) {
-                  updateClub(c.id, { location: e.target.value });
-                }
-              }}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-2"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
             />
-
+          </Field>
+          <Field label="Location">
+            <input
+              value={form.location}
+              onChange={(e) => setForm({ ...form, location: e.target.value })}
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            />
+          </Field>
+          <Field label="Association">
             <select
-              value={c.association_id ?? ""}
+              value={form.association_id}
               onChange={(e) =>
-                updateClub(c.id, {
-                  association_id: e.target.value ? Number(e.target.value) : null,
-                })
+                setForm({ ...form, association_id: e.target.value })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-2"
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
             >
               <option value="">No association</option>
               {associations.map((a) => (
@@ -220,24 +234,126 @@ export default function Clubs() {
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Contact email">
+            <input
+              type="email"
+              value={form.contact_email}
+              onChange={(e) =>
+                setForm({ ...form, contact_email: e.target.value })
+              }
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            />
+          </Field>
+          <Field label="Contact phone">
+            <input
+              value={form.contact_phone}
+              onChange={(e) =>
+                setForm({ ...form, contact_phone: e.target.value })
+              }
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            />
+          </Field>
+          <button
+            type="submit"
+            className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white"
+          >
+            Create
+          </button>
+        </form>
+      </Drawer>
+
+      <Drawer
+        open={editing !== null}
+        onClose={() => setDrawer("closed")}
+        title={editing?.name ?? ""}
+      >
+        {editing && editingMembership && (
+          <div className="flex flex-col gap-4">
+            <Field label="Name">
+              <input
+                defaultValue={editing.name}
+                onBlur={(e) => {
+                  if (e.target.value !== editing.name) {
+                    updateClub(editing.id, { name: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
+            <Field label="Location">
+              <input
+                defaultValue={editing.location ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (editing.location ?? "")) {
+                    updateClub(editing.id, { location: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
+            <Field label="Association">
+              <select
+                value={editing.association_id ?? ""}
+                onChange={(e) =>
+                  updateClub(editing.id, {
+                    association_id: e.target.value
+                      ? Number(e.target.value)
+                      : null,
+                  })
+                }
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              >
+                <option value="">No association</option>
+                {associations.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Contact email">
+              <input
+                defaultValue={editing.contact_email ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (editing.contact_email ?? "")) {
+                    updateClub(editing.id, { contact_email: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
+            <Field label="Contact phone">
+              <input
+                defaultValue={editing.contact_phone ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (editing.contact_phone ?? "")) {
+                    updateClub(editing.id, { contact_phone: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
 
             <MemberEditor
               label="Athletes"
-              ids={membership.athleteIds}
+              ids={editingMembership.athleteIds}
               options={allAthletes}
-              onAdd={(value) => addMember(c.id, "athlete", value)}
-              onRemove={(id) => removeMember(c.id, "athlete", id)}
+              onAdd={(value) => addMember(editing.id, "athlete", value)}
+              onRemove={(id) => removeMember(editing.id, "athlete", id)}
             />
             <MemberEditor
               label="Coaches"
-              ids={membership.coachIds}
+              ids={editingMembership.coachIds}
               options={allCoaches}
-              onAdd={(value) => addMember(c.id, "coach", value)}
-              onRemove={(id) => removeMember(c.id, "coach", id)}
+              onAdd={(value) => addMember(editing.id, "coach", value)}
+              onRemove={(id) => removeMember(editing.id, "coach", id)}
             />
+
+            <DeleteButton onClick={() => deleteClub(editing.id)} />
           </div>
-        );
-      })}
+        )}
+      </Drawer>
     </div>
   );
 }

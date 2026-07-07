@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useApi } from "../hooks/useApi";
 import { useAuth } from "../context/AuthContext";
-import { Spinner } from "../components/ui";
+import { Spinner, Drawer, AddButton, DeleteButton, Field } from "../components/ui";
 
 interface Athlete {
   id: number;
@@ -29,6 +29,18 @@ const BELTS = [
   "black",
 ];
 
+const EMPTY_FORM = {
+  first_name: "",
+  last_name: "",
+  date_of_birth: "",
+  email: "",
+  phone: "",
+  emergency_name: "",
+  emergency_phone: "",
+  belt: "white",
+  medical_notes: "",
+};
+
 export default function Athletes() {
   const { user } = useAuth();
 
@@ -51,8 +63,10 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
   const [athletes, setAthletes] = useState<Athlete[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [newFirstName, setNewFirstName] = useState("");
-  const [newLastName, setNewLastName] = useState("");
+  const [drawer, setDrawer] = useState<"closed" | "create" | Athlete>(
+    "closed"
+  );
+  const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => {
     load("");
@@ -72,16 +86,20 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
     load(query);
   }
 
+  function openCreate() {
+    setForm(EMPTY_FORM);
+    setDrawer("create");
+  }
+
   async function createAthlete(e: FormEvent) {
     e.preventDefault();
-    if (!newFirstName.trim() || !newLastName.trim()) return;
+    if (!form.first_name.trim() || !form.last_name.trim()) return;
     const { athlete } = await api.post<{ athlete: Athlete }>("/athletes", {
-      first_name: newFirstName,
-      last_name: newLastName,
+      ...form,
+      date_of_birth: form.date_of_birth || null,
     });
     setAthletes((prev) => (prev ? [...prev, athlete] : [athlete]));
-    setNewFirstName("");
-    setNewLastName("");
+    setDrawer("closed");
   }
 
   async function updateAthlete(id: number, patch: Record<string, unknown>) {
@@ -92,11 +110,13 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
     setAthletes((prev) =>
       prev ? prev.map((a) => (a.id === id ? athlete : a)) : prev
     );
+    setDrawer((prev) => (prev !== "closed" && prev !== "create" && prev.id === id ? athlete : prev));
   }
 
   async function deleteAthlete(id: number) {
     await api.del(`/athletes/${id}`);
     setAthletes((prev) => (prev ? prev.filter((a) => a.id !== id) : prev));
+    setDrawer("closed");
   }
 
   if (error) return <div className="p-4 text-red-700">{error}</div>;
@@ -107,9 +127,14 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
       </div>
     );
 
+  const editing = drawer !== "closed" && drawer !== "create" ? drawer : null;
+
   return (
     <div className="flex flex-col gap-3 p-4">
-      <h1 className="text-xl font-semibold">Athletes</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Athletes</h1>
+        <AddButton onClick={openCreate} />
+      </div>
 
       <form onSubmit={handleSearch} className="flex gap-2">
         <input
@@ -126,68 +151,45 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
         </button>
       </form>
 
-      <form onSubmit={createAthlete} className="flex gap-2">
-        <input
-          value={newFirstName}
-          onChange={(e) => setNewFirstName(e.target.value)}
-          placeholder="First name"
-          className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-3"
-        />
-        <input
-          value={newLastName}
-          onChange={(e) => setNewLastName(e.target.value)}
-          placeholder="Last name"
-          className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-3"
-        />
-        <button
-          type="submit"
-          className="min-h-[44px] rounded-lg bg-red-700 px-4 font-medium text-white"
-        >
-          Add
-        </button>
-      </form>
+      <div className="flex flex-col gap-2">
+        {athletes.map((a) => (
+          <button
+            key={a.id}
+            onClick={() => setDrawer(a)}
+            className="min-h-[44px] rounded-lg border border-slate-200 px-3 py-2 text-left font-medium"
+          >
+            {a.first_name} {a.last_name}
+          </button>
+        ))}
+      </div>
 
-      {athletes.map((a) => (
-        <div
-          key={a.id}
-          className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex flex-1 gap-2">
-              <input
-                defaultValue={a.first_name}
-                onBlur={(e) => {
-                  if (e.target.value !== a.first_name) {
-                    updateAthlete(a.id, { first_name: e.target.value });
-                  }
-                }}
-                className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-2 font-medium"
-              />
-              <input
-                defaultValue={a.last_name}
-                onBlur={(e) => {
-                  if (e.target.value !== a.last_name) {
-                    updateAthlete(a.id, { last_name: e.target.value });
-                  }
-                }}
-                className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-2 font-medium"
-              />
-            </div>
-            {isAdmin && (
-              <button
-                onClick={() => deleteAthlete(a.id)}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3 text-sm text-red-700"
-              >
-                Delete
-              </button>
-            )}
-          </div>
-
-          <div className="flex gap-2">
+      <Drawer
+        open={drawer === "create"}
+        onClose={() => setDrawer("closed")}
+        title="New athlete"
+      >
+        <form onSubmit={createAthlete} className="flex flex-col gap-4">
+          <Field label="First name">
+            <input
+              required
+              value={form.first_name}
+              onChange={(e) => setForm({ ...form, first_name: e.target.value })}
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            />
+          </Field>
+          <Field label="Last name">
+            <input
+              required
+              value={form.last_name}
+              onChange={(e) => setForm({ ...form, last_name: e.target.value })}
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            />
+          </Field>
+          <Field label="Belt">
             <select
-              value={a.belt}
-              onChange={(e) => updateAthlete(a.id, { belt: e.target.value })}
-              className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-2"
+              value={form.belt}
+              onChange={(e) => setForm({ ...form, belt: e.target.value })}
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
             >
               {BELTS.map((b) => (
                 <option key={b} value={b}>
@@ -195,80 +197,201 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Date of birth">
             <input
               type="date"
-              defaultValue={a.date_of_birth ?? ""}
+              value={form.date_of_birth}
               onChange={(e) =>
-                updateAthlete(a.id, { date_of_birth: e.target.value || null })
+                setForm({ ...form, date_of_birth: e.target.value })
               }
-              className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-2"
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
             />
-          </div>
+          </Field>
+          <Field label="Email">
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            />
+          </Field>
+          <Field label="Phone">
+            <input
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            />
+          </Field>
+          <Field label="Emergency contact name">
+            <input
+              value={form.emergency_name}
+              onChange={(e) =>
+                setForm({ ...form, emergency_name: e.target.value })
+              }
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            />
+          </Field>
+          <Field label="Emergency phone">
+            <input
+              value={form.emergency_phone}
+              onChange={(e) =>
+                setForm({ ...form, emergency_phone: e.target.value })
+              }
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            />
+          </Field>
+          <Field label="Medical notes">
+            <textarea
+              value={form.medical_notes}
+              onChange={(e) =>
+                setForm({ ...form, medical_notes: e.target.value })
+              }
+              className="rounded-lg border border-slate-300 px-3 py-2"
+            />
+          </Field>
+          <button
+            type="submit"
+            className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white"
+          >
+            Create
+          </button>
+        </form>
+      </Drawer>
 
-          <input
-            defaultValue={a.email ?? ""}
-            placeholder="Email"
-            onBlur={(e) => {
-              if (e.target.value !== (a.email ?? "")) {
-                updateAthlete(a.id, { email: e.target.value });
-              }
-            }}
-            className="min-h-[44px] rounded-lg border border-slate-300 px-2"
-          />
-          <input
-            defaultValue={a.phone ?? ""}
-            placeholder="Phone"
-            onBlur={(e) => {
-              if (e.target.value !== (a.phone ?? "")) {
-                updateAthlete(a.id, { phone: e.target.value });
-              }
-            }}
-            className="min-h-[44px] rounded-lg border border-slate-300 px-2"
-          />
-          <div className="flex gap-2">
-            <input
-              defaultValue={a.emergency_name ?? ""}
-              placeholder="Emergency contact name"
-              onBlur={(e) => {
-                if (e.target.value !== (a.emergency_name ?? "")) {
-                  updateAthlete(a.id, { emergency_name: e.target.value });
+      <Drawer
+        open={editing !== null}
+        onClose={() => setDrawer("closed")}
+        title={editing ? `${editing.first_name} ${editing.last_name}` : ""}
+      >
+        {editing && (
+          <div className="flex flex-col gap-4">
+            <Field label="First name">
+              <input
+                defaultValue={editing.first_name}
+                onBlur={(e) => {
+                  if (e.target.value !== editing.first_name) {
+                    updateAthlete(editing.id, { first_name: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
+            <Field label="Last name">
+              <input
+                defaultValue={editing.last_name}
+                onBlur={(e) => {
+                  if (e.target.value !== editing.last_name) {
+                    updateAthlete(editing.id, { last_name: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
+            <Field label="Belt">
+              <select
+                value={editing.belt}
+                onChange={(e) =>
+                  updateAthlete(editing.id, { belt: e.target.value })
                 }
-              }}
-              className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-2"
-            />
-            <input
-              defaultValue={a.emergency_phone ?? ""}
-              placeholder="Emergency phone"
-              onBlur={(e) => {
-                if (e.target.value !== (a.emergency_phone ?? "")) {
-                  updateAthlete(a.id, { emergency_phone: e.target.value });
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              >
+                {BELTS.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Date of birth">
+              <input
+                type="date"
+                defaultValue={editing.date_of_birth ?? ""}
+                onChange={(e) =>
+                  updateAthlete(editing.id, {
+                    date_of_birth: e.target.value || null,
+                  })
                 }
-              }}
-              className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-2"
-            />
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
+            <Field label="Email">
+              <input
+                defaultValue={editing.email ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (editing.email ?? "")) {
+                    updateAthlete(editing.id, { email: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
+            <Field label="Phone">
+              <input
+                defaultValue={editing.phone ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (editing.phone ?? "")) {
+                    updateAthlete(editing.id, { phone: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
+            <Field label="Emergency contact name">
+              <input
+                defaultValue={editing.emergency_name ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (editing.emergency_name ?? "")) {
+                    updateAthlete(editing.id, {
+                      emergency_name: e.target.value,
+                    });
+                  }
+                }}
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
+            <Field label="Emergency phone">
+              <input
+                defaultValue={editing.emergency_phone ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (editing.emergency_phone ?? "")) {
+                    updateAthlete(editing.id, {
+                      emergency_phone: e.target.value,
+                    });
+                  }
+                }}
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
+            <Field label="Medical notes">
+              <textarea
+                defaultValue={editing.medical_notes ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (editing.medical_notes ?? "")) {
+                    updateAthlete(editing.id, {
+                      medical_notes: e.target.value,
+                    });
+                  }
+                }}
+                className="rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </Field>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={editing.is_active}
+                onChange={(e) =>
+                  updateAthlete(editing.id, { is_active: e.target.checked })
+                }
+              />
+              Active
+            </label>
+            {isAdmin && (
+              <DeleteButton onClick={() => deleteAthlete(editing.id)} />
+            )}
           </div>
-          <textarea
-            defaultValue={a.medical_notes ?? ""}
-            placeholder="Medical notes"
-            onBlur={(e) => {
-              if (e.target.value !== (a.medical_notes ?? "")) {
-                updateAthlete(a.id, { medical_notes: e.target.value });
-              }
-            }}
-            className="rounded-lg border border-slate-300 px-2 py-2"
-          />
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <input
-              type="checkbox"
-              checked={a.is_active}
-              onChange={(e) =>
-                updateAthlete(a.id, { is_active: e.target.checked })
-              }
-            />
-            Active
-          </label>
-        </div>
-      ))}
+        )}
+      </Drawer>
     </div>
   );
 }

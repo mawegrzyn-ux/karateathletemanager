@@ -52,6 +52,54 @@ export function Modal({
   );
 }
 
+export function Drawer({
+  open,
+  onClose,
+  title,
+  children,
+}: PropsWithChildren<{ open: boolean; onClose: () => void; title: string }>) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-white sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[420px] sm:border-l sm:border-slate-200 sm:shadow-xl">
+      <div className="flex items-center justify-between border-b border-slate-200 p-4">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center text-slate-500"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4">{children}</div>
+    </div>
+  );
+}
+
+export function AddButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Add"
+      className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-red-700 text-xl leading-none text-white"
+    >
+      +
+    </button>
+  );
+}
+
+export function DeleteButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Delete"
+      className="flex min-h-[44px] items-center gap-2 rounded-lg border border-red-200 px-4 text-red-700"
+    >
+      🗑 Delete
+    </button>
+  );
+}
+
 export function Toast({ message }: { message: string }) {
   return (
     <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full bg-slate-900 px-4 py-2 text-sm text-white shadow-lg">
