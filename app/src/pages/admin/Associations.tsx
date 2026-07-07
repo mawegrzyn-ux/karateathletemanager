@@ -215,7 +215,10 @@ export default function Associations() {
                 className="rounded-lg border border-slate-300 px-3 py-2"
               />
             </Field>
-            <DeleteButton onClick={() => deleteAssociation(editing.id)} />
+            <DeleteButton
+              onClick={() => deleteAssociation(editing.id)}
+              itemLabel={editing.name}
+            />
           </div>
         )}
       </Drawer>

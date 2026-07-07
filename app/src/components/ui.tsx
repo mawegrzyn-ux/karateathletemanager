@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from "react";
+import { useState, type PropsWithChildren } from "react";
 
 export function Spinner() {
   return (
@@ -88,15 +88,49 @@ export function AddButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function DeleteButton({ onClick }: { onClick: () => void }) {
+export function DeleteButton({
+  onClick,
+  itemLabel,
+}: {
+  onClick: () => void;
+  itemLabel?: string;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
   return (
-    <button
-      onClick={onClick}
-      aria-label="Delete"
-      className="flex min-h-[44px] items-center gap-2 rounded-lg border border-red-200 px-4 text-red-700"
-    >
-      🗑 Delete
-    </button>
+    <>
+      <button
+        onClick={() => setConfirming(true)}
+        aria-label="Delete"
+        className="flex min-h-[44px] items-center gap-2 rounded-lg border border-red-200 px-4 text-red-700"
+      >
+        🗑 Delete
+      </button>
+      <Modal open={confirming} onClose={() => setConfirming(false)}>
+        <div className="flex flex-col gap-4 p-2">
+          <p className="text-slate-700">
+            Delete {itemLabel ?? "this"}? This can't be undone.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirming(false)}
+              className="min-h-[44px] flex-1 rounded-lg border border-slate-300 font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                setConfirming(false);
+                onClick();
+              }}
+              className="min-h-[44px] flex-1 rounded-lg bg-red-700 font-medium text-white"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </>
   );
 }
 

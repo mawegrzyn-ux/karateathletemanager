@@ -297,7 +297,10 @@ export default function Coaches() {
               />
               Active
             </label>
-            <DeleteButton onClick={() => deleteCoach(editing.id)} />
+            <DeleteButton
+              onClick={() => deleteCoach(editing.id)}
+              itemLabel={`${editing.first_name} ${editing.last_name}`}
+            />
           </div>
         )}
       </Drawer>
