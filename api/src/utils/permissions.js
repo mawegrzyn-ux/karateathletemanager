@@ -1,7 +1,7 @@
 const pool = require("../db/pool");
 
 async function isClubAdmin(user, clubId) {
-  if (user.role === "admin") return true;
+  if (user.is_admin) return true;
   if (!user.coach_id) return false;
   const { rows } = await pool.query(
     `SELECT 1 FROM nk_coach_clubs
@@ -12,7 +12,7 @@ async function isClubAdmin(user, clubId) {
 }
 
 async function isAssociationAdmin(user, associationId) {
-  if (user.role === "admin") return true;
+  if (user.is_admin) return true;
   if (!user.coach_id) return false;
   const { rows } = await pool.query(
     `SELECT 1 FROM nk_coach_associations

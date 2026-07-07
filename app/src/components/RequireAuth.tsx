@@ -6,8 +6,9 @@ import PendingApproval from "../pages/PendingApproval";
 
 export default function RequireAuth({
   roles,
+  adminOnly,
   children,
-}: PropsWithChildren<{ roles?: Role[] }>) {
+}: PropsWithChildren<{ roles?: Role[]; adminOnly?: boolean }>) {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -22,11 +23,15 @@ export default function RequireAuth({
     return <Navigate to="/login" replace />;
   }
 
-  if (user.status !== "active" || !user.role) {
+  if (user.status !== "active" || (!user.role && !user.is_admin)) {
     return <PendingApproval />;
   }
 
-  if (roles && !roles.includes(user.role)) {
+  if (adminOnly && !user.is_admin) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (roles && !user.is_admin && !(user.role && roles.includes(user.role))) {
     return <Navigate to="/" replace />;
   }
 

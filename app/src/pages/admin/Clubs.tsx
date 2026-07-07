@@ -56,7 +56,7 @@ const EMPTY_FORM = {
 export default function Clubs() {
   const api = useApi();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = !!user?.is_admin;
   const [clubs, setClubs] = useState<Club[] | null>(null);
   const [associations, setAssociations] = useState<Association[]>([]);
   const [allAthletes, setAllAthletes] = useState<Person[]>([]);

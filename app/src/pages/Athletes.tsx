@@ -44,7 +44,7 @@ const EMPTY_FORM = {
 export default function Athletes() {
   const { user } = useAuth();
 
-  if (user?.role !== "admin" && user?.role !== "coach") {
+  if (!user?.is_admin && user?.role !== "coach") {
     return (
       <div className="flex min-h-full flex-col items-center justify-center gap-2 p-6 text-center">
         <h1 className="text-xl font-semibold">Athletes</h1>
@@ -55,7 +55,7 @@ export default function Athletes() {
     );
   }
 
-  return <AthletesManager isAdmin={user.role === "admin"} />;
+  return <AthletesManager isAdmin={!!user.is_admin} />;
 }
 
 function AthletesManager({ isAdmin }: { isAdmin: boolean }) {

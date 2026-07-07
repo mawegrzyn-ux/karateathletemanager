@@ -9,7 +9,7 @@ const FIELDS = `id, first_name, last_name, date_of_birth, email, phone,
                 emergency_name, emergency_phone, belt, join_date,
                 medical_notes, is_active, created_at`;
 
-router.use(authorize("admin", "coach"));
+router.use(authorize("coach"));
 
 router.get(
   "/",
@@ -150,7 +150,7 @@ router.patch(
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    if (req.user.role !== "admin") {
+    if (!req.user.is_admin) {
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 

@@ -76,7 +76,7 @@ export default function App() {
         <Route
           path="/admin/users"
           element={
-            <RequireAuth roles={["admin"]}>
+            <RequireAuth adminOnly>
               <AdminUsers />
             </RequireAuth>
           }
@@ -84,7 +84,7 @@ export default function App() {
         <Route
           path="/admin/associations"
           element={
-            <RequireAuth roles={["admin", "coach"]}>
+            <RequireAuth roles={["coach"]}>
               <AdminAssociations />
             </RequireAuth>
           }
@@ -92,7 +92,7 @@ export default function App() {
         <Route
           path="/admin/clubs"
           element={
-            <RequireAuth roles={["admin", "coach"]}>
+            <RequireAuth roles={["coach"]}>
               <AdminClubs />
             </RequireAuth>
           }
@@ -100,7 +100,7 @@ export default function App() {
         <Route
           path="/admin/coaches"
           element={
-            <RequireAuth roles={["admin"]}>
+            <RequireAuth adminOnly>
               <AdminCoaches />
             </RequireAuth>
           }

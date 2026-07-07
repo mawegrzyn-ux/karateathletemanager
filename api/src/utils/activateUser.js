@@ -43,7 +43,7 @@ async function activateUser(client, user) {
        role       = COALESCE(role, $3),
        updated_at = NOW()
      WHERE id = $4
-     RETURNING id, email, role, status, athlete_id, coach_id,
+     RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
                first_name, last_name, phone`,
     [athleteId, coachId, autoRole, user.id]
   );

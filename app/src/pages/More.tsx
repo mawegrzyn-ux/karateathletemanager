@@ -45,7 +45,7 @@ export default function More() {
         </div>
       )}
 
-      {user?.role === "admin" && (
+      {user?.is_admin && (
         <>
           <Link
             to="/admin/users"
@@ -62,7 +62,7 @@ export default function More() {
         </>
       )}
 
-      {(user?.role === "admin" || user?.role === "coach") && (
+      {(user?.is_admin || user?.role === "coach") && (
         <>
           <Link
             to="/admin/clubs"

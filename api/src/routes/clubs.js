@@ -7,7 +7,7 @@ const { activateUser } = require("../utils/activateUser");
 
 const router = Router();
 
-router.use(authorize("admin", "coach"));
+router.use(authorize("coach"));
 
 router.get(
   "/",
@@ -27,7 +27,7 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
-    if (req.user.role !== "admin") {
+    if (!req.user.is_admin) {
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
@@ -99,7 +99,7 @@ router.patch(
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    if (req.user.role !== "admin") {
+    if (!req.user.is_admin) {
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
@@ -224,7 +224,7 @@ router.put(
 router.patch(
   "/:id/coaches/:coachId",
   asyncHandler(async (req, res) => {
-    if (req.user.role !== "admin") {
+    if (!req.user.is_admin) {
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
@@ -281,7 +281,7 @@ router.post(
       const { rows } = await client.query(
         `UPDATE nk_users SET status = 'active', updated_at = NOW()
          WHERE id = $1 AND requested_club_id = $2 AND status = 'pending'
-         RETURNING id, email, role, status, athlete_id, coach_id,
+         RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
                    first_name, last_name, phone,
                    wants_athlete, wants_coach, requested_club_id`,
         [req.params.userId, req.params.id]
@@ -302,6 +302,7 @@ router.post(
           email: user.email,
           role: user.role,
           status: user.status,
+          is_admin: user.is_admin,
           athlete_id: user.athlete_id,
           coach_id: user.coach_id,
           first_name: user.first_name,
