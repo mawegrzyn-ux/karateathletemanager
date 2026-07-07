@@ -16,6 +16,7 @@ export interface User {
   email: string;
   role: Role | null;
   status: Status;
+  is_admin: boolean;
   athlete_id: number | null;
   coach_id: number | null;
   first_name: string | null;

@@ -47,14 +47,14 @@ router.post(
     try {
       const { rows } = await pool.query(
         `INSERT INTO nk_users
-           (email, password_hash, role, status, wants_athlete, wants_coach, requested_club_id)
+           (email, password_hash, status, is_admin, wants_athlete, wants_coach, requested_club_id)
          VALUES (
            $1, $2,
-           CASE WHEN (SELECT COUNT(*) FROM nk_users) = 0 THEN 'admin' ELSE NULL END,
            CASE WHEN (SELECT COUNT(*) FROM nk_users) = 0 THEN 'active' ELSE 'pending' END,
+           CASE WHEN (SELECT COUNT(*) FROM nk_users) = 0 THEN TRUE ELSE FALSE END,
            COALESCE($3, FALSE), COALESCE($4, FALSE), $5
          )
-         RETURNING id, email, role, status, athlete_id, coach_id,
+         RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
                    first_name, last_name, phone`,
         [
           email.toLowerCase(),
@@ -96,7 +96,7 @@ router.post(
     }
 
     const { rows } = await pool.query(
-      `SELECT id, email, password_hash, role, status, athlete_id, coach_id,
+      `SELECT id, email, password_hash, role, status, is_admin, athlete_id, coach_id,
               first_name, last_name, phone
        FROM nk_users WHERE email = $1`,
       [email.toLowerCase()]
@@ -117,6 +117,7 @@ router.post(
         email: user.email,
         role: user.role,
         status: user.status,
+        is_admin: user.is_admin,
         athlete_id: user.athlete_id,
         coach_id: user.coach_id,
         first_name: user.first_name,
@@ -168,7 +169,7 @@ router.patch(
          phone      = COALESCE($3, phone),
          updated_at = NOW()
        WHERE id = $4
-       RETURNING id, email, role, status, athlete_id, coach_id,
+       RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
                  first_name, last_name, phone`,
       [first_name, last_name, phone, req.user.id]
     );
@@ -204,7 +205,7 @@ router.post(
     const { rows } = await pool.query(
       `UPDATE nk_users SET role = $1, updated_at = NOW()
        WHERE id = $2
-       RETURNING id, email, role, status, athlete_id, coach_id,
+       RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
                  first_name, last_name, phone`,
       [role, req.user.id]
     );

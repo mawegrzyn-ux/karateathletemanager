@@ -8,6 +8,7 @@ interface ManagedUser {
   email: string;
   role: Role | null;
   status: Status;
+  is_admin: boolean;
   athlete_id: number | null;
   coach_id: number | null;
   first_name: string | null;
@@ -21,7 +22,7 @@ interface Person {
   last_name: string;
 }
 
-const ROLES: Role[] = ["admin", "coach", "athlete", "parent"];
+const ROLES: Role[] = ["coach", "athlete", "parent"];
 const STATUSES: Status[] = ["pending", "active", "disabled"];
 
 export default function AdminUsers() {
@@ -161,6 +162,17 @@ export default function AdminUsers() {
                 ))}
               </select>
             </Field>
+
+            <label className="flex min-h-[44px] items-center gap-2 rounded-lg border border-slate-300 px-3">
+              <input
+                type="checkbox"
+                checked={editing.is_admin}
+                onChange={(e) =>
+                  updateUser(editing.id, { is_admin: e.target.checked })
+                }
+              />
+              Admin access
+            </label>
 
             <PersonPicker
               label="Linked athlete"

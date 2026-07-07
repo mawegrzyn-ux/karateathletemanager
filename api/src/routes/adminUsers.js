@@ -5,17 +5,17 @@ const asyncHandler = require("../utils/asyncHandler");
 const { activateUser } = require("../utils/activateUser");
 
 const router = Router();
-const ROLES = ["admin", "coach", "athlete", "parent"];
+const ROLES = ["coach", "athlete", "parent"];
 const STATUSES = ["pending", "active", "disabled"];
 
-router.use(authorize("admin"));
+router.use(authorize.requireAdmin);
 
 router.get(
   "/",
   asyncHandler(async (req, res) => {
     const { rows } = await pool.query(
-      `SELECT id, email, role, status, athlete_id, coach_id, created_at,
-              first_name, last_name, phone
+      `SELECT id, email, role, status, is_admin, athlete_id, coach_id,
+              created_at, first_name, last_name, phone
        FROM nk_users ORDER BY created_at ASC`
     );
     res.json({ users: rows });
@@ -28,6 +28,7 @@ router.patch(
     const {
       role,
       status,
+      is_admin,
       athlete_id,
       coach_id,
       first_name,
@@ -41,6 +42,11 @@ router.patch(
     if (status !== undefined && !STATUSES.includes(status)) {
       return res.status(400).json({ error: { message: "Invalid status" } });
     }
+    if (is_admin !== undefined && typeof is_admin !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: { message: "is_admin must be a boolean" } });
+    }
 
     const client = await pool.connect();
     try {
@@ -49,19 +55,21 @@ router.patch(
         `UPDATE nk_users SET
            role       = COALESCE($1, role),
            status     = COALESCE($2, status),
-           athlete_id = COALESCE($3, athlete_id),
-           coach_id   = COALESCE($4, coach_id),
-           first_name = COALESCE($5, first_name),
-           last_name  = COALESCE($6, last_name),
-           phone      = COALESCE($7, phone),
+           is_admin   = COALESCE($3, is_admin),
+           athlete_id = COALESCE($4, athlete_id),
+           coach_id   = COALESCE($5, coach_id),
+           first_name = COALESCE($6, first_name),
+           last_name  = COALESCE($7, last_name),
+           phone      = COALESCE($8, phone),
            updated_at = NOW()
-         WHERE id = $8
-         RETURNING id, email, role, status, athlete_id, coach_id,
+         WHERE id = $9
+         RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
                    first_name, last_name, phone,
                    wants_athlete, wants_coach, requested_club_id`,
         [
           role,
           status,
+          is_admin,
           athlete_id,
           coach_id,
           first_name,
@@ -77,7 +85,7 @@ router.patch(
       }
 
       let user = rows[0];
-      if (user.status === "active") {
+      if (status === "active") {
         user = await activateUser(client, user);
       }
 
@@ -88,6 +96,7 @@ router.patch(
           email: user.email,
           role: user.role,
           status: user.status,
+          is_admin: user.is_admin,
           athlete_id: user.athlete_id,
           coach_id: user.coach_id,
           first_name: user.first_name,

@@ -6,7 +6,7 @@ const { isAssociationAdmin } = require("../utils/permissions");
 
 const router = Router();
 
-router.use(authorize("admin", "coach"));
+router.use(authorize("coach"));
 
 router.get(
   "/",
@@ -22,7 +22,7 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
-    if (req.user.role !== "admin") {
+    if (!req.user.is_admin) {
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
@@ -78,7 +78,7 @@ router.patch(
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    if (req.user.role !== "admin") {
+    if (!req.user.is_admin) {
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
@@ -98,7 +98,7 @@ router.delete(
 router.get(
   "/:id/admins",
   asyncHandler(async (req, res) => {
-    if (req.user.role !== "admin") {
+    if (!req.user.is_admin) {
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
@@ -113,7 +113,7 @@ router.get(
 router.put(
   "/:id/admins",
   asyncHandler(async (req, res) => {
-    if (req.user.role !== "admin") {
+    if (!req.user.is_admin) {
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 

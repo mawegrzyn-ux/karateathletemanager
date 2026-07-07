@@ -28,7 +28,7 @@ const EMPTY_FORM = { name: "", description: "", contact_email: "", contact_phone
 export default function Associations() {
   const api = useApi();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = !!user?.is_admin;
   const [associations, setAssociations] = useState<Association[] | null>(
     null
   );

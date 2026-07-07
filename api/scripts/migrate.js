@@ -186,6 +186,11 @@ const migrations = [
      ADD COLUMN IF NOT EXISTS wants_athlete BOOLEAN NOT NULL DEFAULT FALSE,
      ADD COLUMN IF NOT EXISTS wants_coach   BOOLEAN NOT NULL DEFAULT FALSE,
      ADD COLUMN IF NOT EXISTS requested_club_id INTEGER REFERENCES nk_clubs(id) ON DELETE SET NULL`,
+
+  `ALTER TABLE nk_users
+     ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  `UPDATE nk_users SET is_admin = TRUE WHERE role = 'admin'`,
 ];
 
 async function migrate() {

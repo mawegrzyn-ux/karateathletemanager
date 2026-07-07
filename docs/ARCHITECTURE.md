@@ -139,13 +139,14 @@ selector) always see the full list. Write access is scoped:
 - Resolution logic lives in `api/src/utils/permissions.js`
   (`isClubAdmin`, `isAssociationAdmin`).
 
-Frontend: `/admin/clubs` and `/admin/associations` are reachable by both
-`admin` and `coach` roles (`RequireAuth roles={["admin","coach"]}` in
-`App.tsx`), but the "+" create button, delete button, the coach
-club-admin ★ toggle, and the association's "Coach admins" picker only
-render when `useAuth().user.role === 'admin'` — a coach viewing a club
-they administer sees an editable club with membership management, no
-create/delete, no admin-granting controls.
+Frontend: `/admin/clubs` and `/admin/associations` are reachable by
+`role === 'coach'` or any `is_admin` account (`RequireAuth roles={["coach"]}`
+in `App.tsx` — the `is_admin` bypass lives in `RequireAuth` itself), but
+the "+" create button, delete button, the coach club-admin ★ toggle, and
+the association's "Coach admins" picker only render when
+`useAuth().user.is_admin` — a coach viewing a club they administer sees
+an editable club with membership management, no create/delete, no
+admin-granting controls.
 
 A user account is linked to "this is that athlete/coach" via
 `nk_users.athlete_id`/`.coach_id`, set from the admin Users page's detail
@@ -170,35 +171,62 @@ this way.
 ## Auth & RBAC
 
 Self-service email/password registration, gated by admin approval — not
-third-party OAuth. Roles: `admin`, `coach`, `athlete`, `parent`.
+third-party OAuth.
+
+`role` and admin privilege are two **independent** columns on
+`nk_users`, on purpose:
+
+- **`role`** (`'coach' | 'athlete' | 'parent' | null`) means "which
+  identity am I currently acting as" — it drives which nav links/pages
+  are relevant and can be freely switched by the user (see
+  `POST /api/auth/switch-role` below) between any profile they actually
+  have linked.
+- **`is_admin`** (boolean) is a durable privilege grant, set only by an
+  existing admin via the Users page (`PATCH /api/admin/users/:id
+  {is_admin}`) — never self-service, never touched by the role switcher.
+  An admin keeps full admin access regardless of which `role` they're
+  currently acting as; there is deliberately no "switch to admin" option,
+  because admin-ness is never lost by switching in the first place. (This
+  split exists because the two were originally conflated into a single
+  `role` value including `'admin'` — switching a dual-profile admin's
+  role away from `'admin'` had no way back through the UI. `role`'s CHECK
+  constraint still legally allows the string `'admin'` for old rows, but
+  no code path reads or writes it anymore — `is_admin` is authoritative.)
 
 - `POST /api/auth/register` `{email,password,wants_athlete?,wants_coach?,
   requested_club_id?}` — creates an `nk_users` row. The **first ever**
-  registration is auto-promoted to `role: 'admin'`, `status: 'active'`
-  (bootstrap, so there's always someone who can approve others). Every
-  subsequent registration starts as `role: null`, `status: 'pending'`.
-  `wants_athlete`/`wants_coach`/`requested_club_id` are pure signup intent
-  — stored on the user row and never touched again after activation.
-  `GET /api/public/clubs` (unauthenticated) feeds the registration club
-  picker, since it runs before any session exists.
+  registration is auto-promoted to `is_admin: true`, `status: 'active'`
+  (bootstrap, so there's always someone who can approve others); `role`
+  stays `null` same as everyone else, since they have no athlete/coach
+  profile yet. Every subsequent registration starts as `is_admin: false`,
+  `status: 'pending'`. `wants_athlete`/`wants_coach`/`requested_club_id`
+  are pure signup intent — stored on the user row and never touched
+  again after activation. `GET /api/public/clubs` (unauthenticated) feeds
+  the registration club picker, since it runs before any session exists.
 - `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`.
 - `POST /api/auth/switch-role` `{role: 'athlete'|'coach'}` — self-service;
   400 unless the caller already has the matching `athlete_id`/`coach_id`.
   Lets someone with both a linked athlete and coach profile flip which
   role they're currently acting as (surfaced as pills on the More page).
+  Never touches `is_admin`.
 - Session is a JWT (holding only the user id) in an `httpOnly`, `sameSite:
   lax` cookie. `api/src/middleware/auth.js` verifies it and re-reads the
-  user's current role/status from `nk_users` on every request, so an
-  admin's approval takes effect immediately — no re-login needed.
-- `api/src/middleware/authorize(...roles)` gates routes: no session → 401;
-  `status !== 'active'` → 403; role not in the given list → 403.
+  user's current role/status/is_admin from `nk_users` on every request,
+  so an admin's approval takes effect immediately — no re-login needed.
+- `api/src/middleware/authorize(...roles)` gates routes: no session →
+  401; `status !== 'active'` → 403; `is_admin` always bypasses the roles
+  check; otherwise role not in the given list → 403. A separate
+  `authorize.requireAdmin` middleware gates admin-only routers
+  (`api/src/routes/adminUsers.js`) — it accepts `is_admin` only, no role
+  ever satisfies it.
 - `nk_users.athlete_id` / `.coach_id` identify "this user IS this
   athlete/coach" (set by an admin, or auto-created — see below).
   `nk_parent_athletes` links a `parent` user to the athlete(s) — their
   kids — they should see.
 - Admin-only management: `GET/PATCH /api/admin/users`,
   `PUT /api/admin/users/:id/parent-athletes`. Frontend: `/admin/users`
-  (linked from the "More" tab for admins), gated by `RequireAuth`.
+  (linked from the "More" tab, gated by `is_admin`), gated by
+  `RequireAuth adminOnly`.
 - Pending/disabled users can log in but are shown a "waiting for
   approval" screen (`PendingApproval.tsx`) instead of the app.
 
