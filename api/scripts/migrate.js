@@ -134,6 +134,11 @@ const migrations = [
      athlete_id      INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
      PRIMARY KEY (user_id, athlete_id)
   )`,
+
+  `ALTER TABLE nk_users
+     ADD COLUMN IF NOT EXISTS first_name VARCHAR(100),
+     ADD COLUMN IF NOT EXISTS last_name  VARCHAR(100),
+     ADD COLUMN IF NOT EXISTS phone      VARCHAR(50)`,
 ];
 
 async function migrate() {

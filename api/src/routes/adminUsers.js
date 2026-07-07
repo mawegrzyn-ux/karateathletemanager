@@ -13,7 +13,8 @@ router.get(
   "/",
   asyncHandler(async (req, res) => {
     const { rows } = await pool.query(
-      `SELECT id, email, role, status, athlete_id, coach_id, created_at
+      `SELECT id, email, role, status, athlete_id, coach_id, created_at,
+              first_name, last_name, phone
        FROM nk_users ORDER BY created_at ASC`
     );
     res.json({ users: rows });
@@ -23,7 +24,15 @@ router.get(
 router.patch(
   "/:id",
   asyncHandler(async (req, res) => {
-    const { role, status, athlete_id, coach_id } = req.body ?? {};
+    const {
+      role,
+      status,
+      athlete_id,
+      coach_id,
+      first_name,
+      last_name,
+      phone,
+    } = req.body ?? {};
 
     if (role !== undefined && role !== null && !ROLES.includes(role)) {
       return res.status(400).json({ error: { message: "Invalid role" } });
@@ -39,10 +48,23 @@ router.patch(
            status     = COALESCE($2, status),
            athlete_id = COALESCE($3, athlete_id),
            coach_id   = COALESCE($4, coach_id),
+           first_name = COALESCE($5, first_name),
+           last_name  = COALESCE($6, last_name),
+           phone      = COALESCE($7, phone),
            updated_at = NOW()
-         WHERE id = $5
-         RETURNING id, email, role, status, athlete_id, coach_id`,
-        [role, status, athlete_id, coach_id, req.params.id]
+         WHERE id = $8
+         RETURNING id, email, role, status, athlete_id, coach_id,
+                   first_name, last_name, phone`,
+        [
+          role,
+          status,
+          athlete_id,
+          coach_id,
+          first_name,
+          last_name,
+          phone,
+          req.params.id,
+        ]
       );
 
       if (rows.length === 0) {

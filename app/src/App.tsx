@@ -5,8 +5,10 @@ import Grades from "./pages/Grades";
 import More from "./pages/More";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Profile from "./pages/Profile";
 import AdminUsers from "./pages/admin/Users";
 import RequireAuth from "./components/RequireAuth";
+import RequireLogin from "./components/RequireLogin";
 
 const tabs = [
   { to: "/", label: "Schedule", icon: "📅", end: true },
@@ -48,6 +50,14 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route
+        path="/profile"
+        element={
+          <RequireLogin>
+            <Profile />
+          </RequireLogin>
+        }
+      />
 
       <Route
         element={
