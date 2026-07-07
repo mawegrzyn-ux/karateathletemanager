@@ -43,6 +43,31 @@ Look at `app/src/pages/admin/Clubs.tsx` for the fullest example (it also
 has the sub-pattern for many-to-many membership pickers — see
 `MemberEditor` in that file).
 
+## UI convention: delete confirmation
+
+`DeleteButton` always confirms before deleting — it's self-contained, so
+this is automatic wherever you use the component: tapping it opens a
+`Modal` ("Delete {itemLabel}? This can't be undone.") with Cancel and
+Delete actions, and only the Delete tap calls your `onClick` handler.
+Always pass `itemLabel` (the record's name) so the confirmation is
+specific. Never wire a delete straight to an icon tap, and never build a
+second confirmation mechanism — extend `DeleteButton` itself if the
+pattern needs to change.
+
+## UI convention: search-based membership pickers
+
+Any many-to-many assignment UI (e.g. the athlete/coach picker on a club's
+detail drawer — see `MemberEditor` in `app/src/pages/admin/Clubs.tsx`) is
+a single search box over the full option list, not a `<select>` dropdown
+and not a separate "current members" list:
+
+- A text input filters the option list by name as you type (substring,
+  case-insensitive); an empty query shows everyone.
+- Every matching person appears in one scrollable result list. Already-
+  assigned people are flagged in place ("✓ Added", tap to remove) rather
+  than hidden or edited through a different control; not-yet-assigned
+  people show "+ Add" (tap to add).
+
 ## Other conventions
 
 - Backend routes: one Express Router per resource in `api/src/routes/`,

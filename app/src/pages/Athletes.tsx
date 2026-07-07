@@ -387,7 +387,10 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               Active
             </label>
             {isAdmin && (
-              <DeleteButton onClick={() => deleteAthlete(editing.id)} />
+              <DeleteButton
+                onClick={() => deleteAthlete(editing.id)}
+                itemLabel={`${editing.first_name} ${editing.last_name}`}
+              />
             )}
           </div>
         )}

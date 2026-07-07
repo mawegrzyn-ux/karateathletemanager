@@ -350,7 +350,10 @@ export default function Clubs() {
               onRemove={(id) => removeMember(editing.id, "coach", id)}
             />
 
-            <DeleteButton onClick={() => deleteClub(editing.id)} />
+            <DeleteButton
+              onClick={() => deleteClub(editing.id)}
+              itemLabel={editing.name}
+            />
           </div>
         )}
       </Drawer>
@@ -371,53 +374,48 @@ function MemberEditor({
   onAdd: (value: string) => void;
   onRemove: (id: number) => void;
 }) {
-  const [selected, setSelected] = useState("");
-  const nameFor = (id: number) => {
-    const person = options.find((o) => o.id === id);
-    return person ? `${person.first_name} ${person.last_name}` : `#${id}`;
-  };
-  const available = options.filter((o) => !ids.includes(o.id));
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const results = options.filter((o) =>
+    `${o.first_name} ${o.last_name}`.toLowerCase().includes(q)
+  );
 
   return (
-    <div className="flex flex-col gap-1 rounded-lg bg-slate-50 p-2">
+    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
       <span className="text-xs font-medium text-slate-600">
         {label} ({ids.length})
       </span>
-      <div className="flex flex-wrap gap-1">
-        {ids.map((id) => (
-          <button
-            key={id}
-            onClick={() => onRemove(id)}
-            className="rounded-full bg-slate-200 px-2 py-1 text-xs"
-            title="Remove"
-          >
-            {nameFor(id)} ✕
-          </button>
-        ))}
-      </div>
-      <div className="flex gap-2">
-        <select
-          value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-          className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-2"
-        >
-          <option value="">Select...</option>
-          {available.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.first_name} {o.last_name}
-            </option>
-          ))}
-        </select>
-        <button
-          onClick={() => {
-            if (!selected) return;
-            onAdd(selected);
-            setSelected("");
-          }}
-          className="min-h-[44px] rounded-lg border border-slate-300 px-3 text-sm"
-        >
-          Add
-        </button>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={`Search ${label.toLowerCase()}...`}
+        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+      />
+      <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+        {results.map((o) => {
+          const added = ids.includes(o.id);
+          return (
+            <button
+              key={o.id}
+              onClick={() =>
+                added ? onRemove(o.id) : onAdd(String(o.id))
+              }
+              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+                added
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : "border-slate-200"
+              }`}
+            >
+              <span>
+                {o.first_name} {o.last_name}
+              </span>
+              <span className="text-sm">{added ? "✓ Added" : "+ Add"}</span>
+            </button>
+          );
+        })}
+        {results.length === 0 && (
+          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+        )}
       </div>
     </div>
   );
