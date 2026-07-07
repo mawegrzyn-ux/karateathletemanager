@@ -44,18 +44,83 @@ const EMPTY_FORM = {
 export default function Athletes() {
   const { user } = useAuth();
 
-  if (!user?.is_admin && user?.role !== "coach") {
-    return (
-      <div className="flex min-h-full flex-col items-center justify-center gap-2 p-6 text-center">
-        <h1 className="text-xl font-semibold">Athletes</h1>
-        <p className="text-slate-600">
-          Ask your coach for your athlete profile and grade info.
-        </p>
-      </div>
-    );
+  if (user?.is_admin || user?.role === "coach") {
+    return <AthletesManager isAdmin={!!user.is_admin} />;
   }
 
-  return <AthletesManager isAdmin={!!user.is_admin} />;
+  if (user?.role === "athlete" && user.athlete_id) {
+    return <MyAthleteProfile athleteId={user.athlete_id} />;
+  }
+
+  return (
+    <div className="flex min-h-full flex-col items-center justify-center gap-2 p-6 text-center">
+      <h1 className="text-xl font-semibold">Athletes</h1>
+      <p className="text-slate-600">
+        Ask your coach for your athlete profile and grade info.
+      </p>
+    </div>
+  );
+}
+
+function MyAthleteProfile({ athleteId }: { athleteId: number }) {
+  const api = useApi();
+  const [athlete, setAthlete] = useState<Athlete | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .get<{ athlete: Athlete }>(`/athletes/${athleteId}`)
+      .then((res) => setAthlete(res.athlete))
+      .catch(() => setError("Failed to load your athlete profile"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [athleteId]);
+
+  if (error) return <div className="p-4 text-red-700">{error}</div>;
+  if (!athlete)
+    return (
+      <div className="flex justify-center p-8">
+        <Spinner />
+      </div>
+    );
+
+  return (
+    <div className="flex flex-col gap-4 p-4">
+      <h1 className="text-xl font-semibold">
+        {athlete.first_name} {athlete.last_name}
+      </h1>
+      <ReadOnlyField label="Belt" value={athlete.belt} />
+      <ReadOnlyField
+        label="Date of birth"
+        value={athlete.date_of_birth ?? "—"}
+      />
+      <ReadOnlyField label="Email" value={athlete.email ?? "—"} />
+      <ReadOnlyField label="Phone" value={athlete.phone ?? "—"} />
+      <ReadOnlyField
+        label="Emergency contact name"
+        value={athlete.emergency_name ?? "—"}
+      />
+      <ReadOnlyField
+        label="Emergency phone"
+        value={athlete.emergency_phone ?? "—"}
+      />
+      <ReadOnlyField label="Join date" value={athlete.join_date.slice(0, 10)} />
+      <ReadOnlyField
+        label="Medical notes"
+        value={athlete.medical_notes ?? "—"}
+      />
+    </div>
+  );
+}
+
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <span className="flex min-h-[44px] items-center rounded-lg border border-slate-200 bg-slate-50 px-3">
+        {value}
+      </span>
+    </div>
+  );
 }
 
 function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
