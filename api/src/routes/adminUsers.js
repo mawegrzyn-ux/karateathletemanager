@@ -25,6 +25,7 @@ router.get(
 router.patch(
   "/:id",
   asyncHandler(async (req, res) => {
+    const body = req.body ?? {};
     const {
       role,
       status,
@@ -34,7 +35,7 @@ router.patch(
       first_name,
       last_name,
       phone,
-    } = req.body ?? {};
+    } = body;
 
     if (role !== undefined && role !== null && !ROLES.includes(role)) {
       return res.status(400).json({ error: { message: "Invalid role" } });
@@ -48,35 +49,45 @@ router.patch(
         .json({ error: { message: "is_admin must be a boolean" } });
     }
 
+    // Build the SET clause only from keys actually present in the request
+    // body, so an explicit `null` (e.g. "unlink this athlete/coach") is
+    // applied as NULL rather than being swallowed by COALESCE, while a
+    // key that's simply absent leaves that column untouched.
+    const fields = {
+      role,
+      status,
+      is_admin,
+      athlete_id,
+      coach_id,
+      first_name,
+      last_name,
+      phone,
+    };
+    const setClauses = [];
+    const values = [];
+    for (const [key, value] of Object.entries(fields)) {
+      if (key in body) {
+        values.push(value);
+        setClauses.push(`${key} = $${values.length}`);
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: { message: "No fields to update" } });
+    }
+
+    values.push(req.params.id);
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
       const { rows } = await client.query(
-        `UPDATE nk_users SET
-           role       = COALESCE($1, role),
-           status     = COALESCE($2, status),
-           is_admin   = COALESCE($3, is_admin),
-           athlete_id = COALESCE($4, athlete_id),
-           coach_id   = COALESCE($5, coach_id),
-           first_name = COALESCE($6, first_name),
-           last_name  = COALESCE($7, last_name),
-           phone      = COALESCE($8, phone),
-           updated_at = NOW()
-         WHERE id = $9
+        `UPDATE nk_users SET ${setClauses.join(", ")}, updated_at = NOW()
+         WHERE id = $${values.length}
          RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
                    first_name, last_name, phone,
                    wants_athlete, wants_coach, requested_club_id`,
-        [
-          role,
-          status,
-          is_admin,
-          athlete_id,
-          coach_id,
-          first_name,
-          last_name,
-          phone,
-          req.params.id,
-        ]
+        values
       );
 
       if (rows.length === 0) {
@@ -115,6 +126,25 @@ router.patch(
     } finally {
       client.release();
     }
+  })
+);
+
+router.delete(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    if (Number(req.params.id) === req.user.id) {
+      return res
+        .status(400)
+        .json({ error: { message: "You can't delete your own account" } });
+    }
+
+    const { rowCount } = await pool.query(`DELETE FROM nk_users WHERE id = $1`, [
+      req.params.id,
+    ]);
+    if (rowCount === 0) {
+      return res.status(404).json({ error: { message: "User not found" } });
+    }
+    res.status(204).end();
   })
 );
 
