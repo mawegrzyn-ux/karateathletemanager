@@ -16,12 +16,26 @@ export default function More() {
       </Link>
 
       {user?.role === "admin" && (
-        <Link
-          to="/admin/users"
-          className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
-        >
-          Manage users
-        </Link>
+        <>
+          <Link
+            to="/admin/users"
+            className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
+          >
+            Manage users
+          </Link>
+          <Link
+            to="/admin/clubs"
+            className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
+          >
+            Manage clubs
+          </Link>
+          <Link
+            to="/admin/associations"
+            className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
+          >
+            Manage associations
+          </Link>
+        </>
       )}
 
       <button

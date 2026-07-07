@@ -7,6 +7,8 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Profile from "./pages/Profile";
 import AdminUsers from "./pages/admin/Users";
+import AdminAssociations from "./pages/admin/Associations";
+import AdminClubs from "./pages/admin/Clubs";
 import RequireAuth from "./components/RequireAuth";
 import RequireLogin from "./components/RequireLogin";
 
@@ -75,6 +77,22 @@ export default function App() {
           element={
             <RequireAuth roles={["admin"]}>
               <AdminUsers />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/associations"
+          element={
+            <RequireAuth roles={["admin"]}>
+              <AdminAssociations />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/clubs"
+          element={
+            <RequireAuth roles={["admin"]}>
+              <AdminClubs />
             </RequireAuth>
           }
         />
