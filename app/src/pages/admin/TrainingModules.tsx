@@ -2,72 +2,269 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useApi } from "../../hooks/useApi";
 import { Spinner, Drawer, AddButton, DeleteButton, Field } from "../../components/ui";
 
-interface TrainingSet {
+type ItemType = "exercise" | "rest";
+
+interface TrainingModuleItem {
   id: number;
   position: number;
-  reps: number;
+  item_type: ItemType;
+  name: string | null;
+  explanation: string | null;
+  video_url: string | null;
+  sets: number | null;
+  reps: number | null;
+  duration_seconds: number | null;
 }
 
 interface TrainingModule {
   id: number;
   title: string;
   explanation: string | null;
-  video_url: string | null;
-  duration_seconds: number | null;
-  sets: TrainingSet[];
+  items: TrainingModuleItem[];
 }
 
-const EMPTY_FORM = {
-  title: "",
+interface DraftItem {
+  item_type: ItemType;
+  name: string;
+  explanation: string;
+  video_url: string;
+  mode: "reps" | "time";
+  sets: string;
+  reps: string;
+  duration_seconds: string;
+}
+
+const EMPTY_FORM = { title: "", explanation: "" };
+
+const EMPTY_EXERCISE: DraftItem = {
+  item_type: "exercise",
+  name: "",
   explanation: "",
   video_url: "",
-  duration_minutes: "",
+  mode: "reps",
+  sets: "",
+  reps: "",
+  duration_seconds: "",
 };
 
-function SetsEditor({
-  sets,
+const EMPTY_REST: DraftItem = {
+  item_type: "rest",
+  name: "",
+  explanation: "",
+  video_url: "",
+  mode: "time",
+  sets: "",
+  reps: "",
+  duration_seconds: "",
+};
+
+function toDraftItem(item: TrainingModuleItem): DraftItem {
+  return {
+    item_type: item.item_type,
+    name: item.name ?? "",
+    explanation: item.explanation ?? "",
+    video_url: item.video_url ?? "",
+    mode: item.duration_seconds != null && item.sets == null ? "time" : "reps",
+    sets: item.sets != null ? String(item.sets) : "",
+    reps: item.reps != null ? String(item.reps) : "",
+    duration_seconds:
+      item.duration_seconds != null ? String(item.duration_seconds) : "",
+  };
+}
+
+function toApiItem(it: DraftItem) {
+  if (it.item_type === "rest") {
+    return {
+      item_type: "rest",
+      duration_seconds: it.duration_seconds ? Number(it.duration_seconds) : null,
+    };
+  }
+  if (it.mode === "time") {
+    return {
+      item_type: "exercise",
+      name: it.name,
+      explanation: it.explanation || null,
+      video_url: it.video_url || null,
+      duration_seconds: it.duration_seconds ? Number(it.duration_seconds) : null,
+    };
+  }
+  return {
+    item_type: "exercise",
+    name: it.name,
+    explanation: it.explanation || null,
+    video_url: it.video_url || null,
+    sets: it.sets ? Number(it.sets) : null,
+    reps: it.reps ? Number(it.reps) : null,
+  };
+}
+
+function itemSummary(it: TrainingModuleItem) {
+  if (it.item_type === "rest") {
+    return it.duration_seconds ? `Rest ${it.duration_seconds}s` : "Rest";
+  }
+  if (it.duration_seconds != null && it.sets == null) {
+    return `${it.name} — ${it.duration_seconds}s`;
+  }
+  if (it.sets != null && it.reps != null) {
+    return `${it.name} — ${it.sets} × ${it.reps}`;
+  }
+  return it.name ?? "";
+}
+
+function ModuleItemsEditor({
+  items,
   onChange,
 }: {
-  sets: number[];
-  onChange: (sets: number[]) => void;
+  items: DraftItem[];
+  onChange: (items: DraftItem[]) => void;
 }) {
+  function updateItem(index: number, patch: Partial<DraftItem>) {
+    onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+  }
+
+  function removeItem(index: number) {
+    onChange(items.filter((_, i) => i !== index));
+  }
+
   return (
     <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">Sets (reps)</span>
+      <span className="text-xs font-medium text-slate-600">
+        Exercises &amp; rest ({items.length})
+      </span>
+
       <div className="flex flex-col gap-2">
-        {sets.map((reps, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="w-14 text-sm text-slate-500">Set {i + 1}</span>
-            <input
-              type="number"
-              min={1}
-              value={reps}
-              onChange={(e) => {
-                const next = [...sets];
-                next[i] = Number(e.target.value) || 1;
-                onChange(next);
-              }}
-              className="min-h-[44px] w-24 rounded-lg border border-slate-300 px-3"
-            />
-            <span className="text-sm text-slate-500">reps</span>
-            <button
-              type="button"
-              onClick={() => onChange(sets.filter((_, idx) => idx !== i))}
-              className="ml-auto min-h-[44px] px-2 text-red-700"
-              aria-label={`Remove set ${i + 1}`}
-            >
-              ✕
-            </button>
+        {items.map((item, i) => (
+          <div
+            key={i}
+            className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3"
+          >
+            <div className="flex items-center gap-2">
+              <select
+                value={item.item_type}
+                onChange={(e) =>
+                  updateItem(i, { item_type: e.target.value as ItemType })
+                }
+                className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-3"
+              >
+                <option value="exercise">Exercise</option>
+                <option value="rest">Rest</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => removeItem(i)}
+                aria-label="Remove item"
+                className="flex min-h-[44px] min-w-[44px] items-center justify-center text-red-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            {item.item_type === "exercise" ? (
+              <>
+                <Field label="Name">
+                  <input
+                    required
+                    defaultValue={item.name}
+                    onBlur={(e) => updateItem(i, { name: e.target.value })}
+                    className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                  />
+                </Field>
+                <Field label="Explanation">
+                  <textarea
+                    defaultValue={item.explanation}
+                    onBlur={(e) =>
+                      updateItem(i, { explanation: e.target.value })
+                    }
+                    className="rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </Field>
+                <Field label="Video link">
+                  <input
+                    defaultValue={item.video_url}
+                    onBlur={(e) => updateItem(i, { video_url: e.target.value })}
+                    className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                  />
+                </Field>
+                <Field label="Measured by">
+                  <select
+                    value={item.mode}
+                    onChange={(e) =>
+                      updateItem(i, { mode: e.target.value as "reps" | "time" })
+                    }
+                    className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                  >
+                    <option value="reps">Sets &amp; reps</option>
+                    <option value="time">Time</option>
+                  </select>
+                </Field>
+                {item.mode === "reps" ? (
+                  <div className="flex gap-2">
+                    <Field label="Sets">
+                      <input
+                        type="number"
+                        min={1}
+                        defaultValue={item.sets}
+                        onBlur={(e) => updateItem(i, { sets: e.target.value })}
+                        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                      />
+                    </Field>
+                    <Field label="Reps">
+                      <input
+                        type="number"
+                        min={1}
+                        defaultValue={item.reps}
+                        onBlur={(e) => updateItem(i, { reps: e.target.value })}
+                        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                      />
+                    </Field>
+                  </div>
+                ) : (
+                  <Field label="Duration (seconds)">
+                    <input
+                      type="number"
+                      min={1}
+                      defaultValue={item.duration_seconds}
+                      onBlur={(e) =>
+                        updateItem(i, { duration_seconds: e.target.value })
+                      }
+                      className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                    />
+                  </Field>
+                )}
+              </>
+            ) : (
+              <Field label="Duration (seconds)">
+                <input
+                  type="number"
+                  min={1}
+                  defaultValue={item.duration_seconds}
+                  onBlur={(e) =>
+                    updateItem(i, { duration_seconds: e.target.value })
+                  }
+                  className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                />
+              </Field>
+            )}
           </div>
         ))}
       </div>
-      <button
-        type="button"
-        onClick={() => onChange([...sets, 10])}
-        className="min-h-[44px] rounded-lg border border-slate-300 font-medium text-slate-700"
-      >
-        + Add set
-      </button>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => onChange([...items, { ...EMPTY_EXERCISE }])}
+          className="min-h-[44px] flex-1 rounded-lg border border-slate-300 font-medium text-slate-700"
+        >
+          + Add exercise
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange([...items, { ...EMPTY_REST }])}
+          className="min-h-[44px] flex-1 rounded-lg border border-slate-300 font-medium text-slate-700"
+        >
+          + Add rest
+        </button>
+      </div>
     </div>
   );
 }
@@ -81,7 +278,7 @@ export default function TrainingModules() {
     "closed"
   );
   const [form, setForm] = useState(EMPTY_FORM);
-  const [formSets, setFormSets] = useState<number[]>([]);
+  const [formItems, setFormItems] = useState<DraftItem[]>([]);
 
   useEffect(() => {
     load();
@@ -96,7 +293,7 @@ export default function TrainingModules() {
 
   function openCreate() {
     setForm(EMPTY_FORM);
-    setFormSets([]);
+    setFormItems([]);
     setDrawer("create");
   }
 
@@ -108,11 +305,7 @@ export default function TrainingModules() {
       {
         title: form.title,
         explanation: form.explanation,
-        video_url: form.video_url,
-        duration_seconds: form.duration_minutes
-          ? Number(form.duration_minutes) * 60
-          : null,
-        sets: formSets.map((reps) => ({ reps })),
+        items: formItems.map(toApiItem),
       }
     );
     setModules((prev) => (prev ? [...prev, created] : [created]));
@@ -170,9 +363,14 @@ export default function TrainingModules() {
           <button
             key={m.id}
             onClick={() => setDrawer(m)}
-            className="min-h-[44px] rounded-lg border border-slate-200 px-3 py-2 text-left font-medium"
+            className="flex min-h-[44px] flex-col items-start gap-1 rounded-lg border border-slate-200 px-3 py-2 text-left"
           >
-            {m.title}
+            <span className="font-medium">{m.title}</span>
+            {m.items.length > 0 && (
+              <span className="text-xs text-slate-500">
+                {m.items.map(itemSummary).join(", ")}
+              </span>
+            )}
           </button>
         ))}
         {filtered.length === 0 && (
@@ -203,25 +401,7 @@ export default function TrainingModules() {
               className="rounded-lg border border-slate-300 px-3 py-2"
             />
           </Field>
-          <Field label="Video link">
-            <input
-              value={form.video_url}
-              onChange={(e) => setForm({ ...form, video_url: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
-            />
-          </Field>
-          <Field label="Duration (minutes)">
-            <input
-              type="number"
-              min={0}
-              value={form.duration_minutes}
-              onChange={(e) =>
-                setForm({ ...form, duration_minutes: e.target.value })
-              }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
-            />
-          </Field>
-          <SetsEditor sets={formSets} onChange={setFormSets} />
+          <ModuleItemsEditor items={formItems} onChange={setFormItems} />
           <button
             type="submit"
             className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white"
@@ -260,40 +440,10 @@ export default function TrainingModules() {
                 className="rounded-lg border border-slate-300 px-3 py-2"
               />
             </Field>
-            <Field label="Video link">
-              <input
-                defaultValue={editing.video_url ?? ""}
-                onBlur={(e) => {
-                  if (e.target.value !== (editing.video_url ?? "")) {
-                    updateModule(editing.id, { video_url: e.target.value });
-                  }
-                }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
-              />
-            </Field>
-            <Field label="Duration (minutes)">
-              <input
-                type="number"
-                min={0}
-                defaultValue={
-                  editing.duration_seconds
-                    ? Math.round(editing.duration_seconds / 60)
-                    : ""
-                }
-                onBlur={(e) =>
-                  updateModule(editing.id, {
-                    duration_seconds: e.target.value
-                      ? Number(e.target.value) * 60
-                      : null,
-                  })
-                }
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
-              />
-            </Field>
-            <SetsEditor
-              sets={editing.sets.map((s) => s.reps)}
-              onChange={(reps) =>
-                updateModule(editing.id, { sets: reps.map((r) => ({ reps: r })) })
+            <ModuleItemsEditor
+              items={editing.items.map(toDraftItem)}
+              onChange={(next) =>
+                updateModule(editing.id, { items: next.map(toApiItem) })
               }
             />
             <DeleteButton

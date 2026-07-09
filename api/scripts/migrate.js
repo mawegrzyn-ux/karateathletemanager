@@ -394,6 +394,28 @@ const migrations = [
      style_id INTEGER NOT NULL REFERENCES nk_karate_styles(id) ON DELETE CASCADE,
      PRIMARY KEY (club_id, style_id)
   )`,
+
+  // Training modules are now a session plan made of ordered exercise/rest
+  // items rather than a single exercise with a flat rep list — those
+  // per-exercise fields (video, duration) move onto each item instead.
+  `ALTER TABLE nk_training_modules
+     DROP COLUMN IF EXISTS video_url,
+     DROP COLUMN IF EXISTS duration_seconds`,
+
+  `DROP TABLE IF EXISTS nk_training_module_sets`,
+
+  `CREATE TABLE IF NOT EXISTS nk_training_module_items (
+     id               SERIAL PRIMARY KEY,
+     module_id        INTEGER NOT NULL REFERENCES nk_training_modules(id) ON DELETE CASCADE,
+     position         INTEGER NOT NULL,
+     item_type        VARCHAR(20) NOT NULL CHECK (item_type IN ('exercise', 'rest')),
+     name             VARCHAR(200),
+     explanation      TEXT,
+     video_url        VARCHAR(500),
+     sets             INTEGER,
+     reps             INTEGER,
+     duration_seconds INTEGER
+  )`,
 ];
 
 async function migrate() {
