@@ -8,6 +8,8 @@ const athletes = require("./athletes");
 const coaches = require("./coaches");
 const publicClubs = require("./publicClubs");
 const events = require("./events");
+const trainingModules = require("./trainingModules");
+const katas = require("./katas");
 
 const router = Router();
 
@@ -20,5 +22,7 @@ router.use("/athletes", athletes);
 router.use("/admin/coaches", coaches);
 router.use("/public/clubs", publicClubs);
 router.use("/events", events);
+router.use("/training-modules", trainingModules);
+router.use("/katas", katas);
 
 module.exports = router;

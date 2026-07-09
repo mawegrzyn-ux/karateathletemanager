@@ -187,10 +187,36 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `training_camp`. `nk_event_athletes` (many-to-many) attaches one or
   more athletes — personal events have one, squad-level events have
   several. `nk_event_items` are the nested itinerary rows under an
-  event (`item_type`, `title`, `item_date`, `start_time`, `end_time`,
-  `notes`) — `item_type` reuses the same vocabulary plus `rest` and
-  `other` for things that don't fit the top-level list (e.g. an "active
-  rest day").
+  event (`item_type`, `title`, `item_date`, `start_time`, `end_time`
+  — both required — `notes`, `training_module_id`, `kata_id`) —
+  `item_type` reuses the same vocabulary plus `rest`, `other`, and
+  `kata_performance` for things that don't fit the top-level list (e.g.
+  an "active rest day" or a single kata run-through).
+- **Recurring items**: `POST /api/events/:id/items` accepts an optional
+  `repeat: {freq: 'daily'|'weekly', until, weekdays?}`. The server
+  expands this into one independent `nk_event_items` row per occurrence
+  date (capped at 60) at creation time — there's no ongoing
+  series/recurrence-rule link, so each generated item is thereafter
+  edited/deleted on its own, same as a manually-created one.
+- **Training modules**: `nk_training_modules` (`title`, `explanation`,
+  `video_url`, `duration_seconds`) is a reusable library of training
+  session plans a coach or admin authors; `nk_training_module_sets`
+  (`module_id`, `position`, `reps`) is its optional ordered reps/sets
+  list, replaced as a whole unit on write (same pattern as club
+  membership `PUT`s). `api/src/routes/trainingModules.js` — `GET` is
+  open to any authenticated user (used by the Schedule item picker),
+  `POST`/`PATCH`/`DELETE` require `authorize("coach")` (coach or admin).
+  A `training` item can optionally link to one module via
+  `training_module_id`.
+- **Katas**: `nk_katas` (`name` unique, `style`) is an admin-managed
+  reference list, seeded via migration with a starting set of
+  well-known traditional/WKF-style kata names across Shotokan, Goju-ryu,
+  Shito-ryu, and Wado-ryu — a best-effort starting point, fully
+  correctable afterward via the admin Katas page. `api/src/routes/katas.js`
+  — `GET` open to any authenticated user, `POST`/`PATCH`/`DELETE`
+  `authorize.requireAdmin`. A `kata_performance` item links to one kata
+  via `kata_id`; picking a kata in `Schedule.tsx` also auto-fills the
+  item's (still-editable) title with the kata's name.
 - `api/src/utils/permissions.js`'s `isEventEditor(user, eventId)` gates
   every route in `api/src/routes/events.js`: true for `is_admin`; for
   `role === 'athlete'`, true if they're one of the attached athletes;
@@ -208,7 +234,13 @@ coach-run attendance) — this is personal athlete itinerary planning.
   drawer, same conventions as `Clubs.tsx`. The event detail drawer
   contains a nested "Itinerary" section for items, managed inline
   (tap-to-expand-in-place) rather than a second stacked `Drawer` — see
-  the note in `CLAUDE.md`.
+  the note in `CLAUDE.md`. The add-item form additionally exposes a
+  "Repeats" control (none/daily/weekly + until date + weekday chips for
+  weekly) and, depending on `item_type`, a single-select training-module
+  or kata picker (same search-box pattern as the athlete picker).
+  `admin/TrainingModules.tsx` and `admin/Katas.tsx` are separate
+  list+drawer admin pages (reachable from `More.tsx`, `coach`+admin and
+  admin-only respectively) for managing the underlying libraries.
 
 ## Auth & RBAC
 

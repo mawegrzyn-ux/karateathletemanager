@@ -13,9 +13,9 @@ local dev commands.
 ## UI convention: list + drawer
 
 Every entity-management page (Users, Associations, Clubs, Athletes,
-Coaches, Schedule, and any future one — Grades, Competitions, etc.)
-follows the same pattern. Don't invent a new layout per page; extend
-this one.
+Coaches, Schedule, Training modules, Katas, and any future one —
+Grades, Competitions, etc.) follows the same pattern. Don't invent a
+new layout per page; extend this one.
 
 - **List rows show only the name** (or, where there's no guaranteed name,
   email + a status `Badge`) — nothing else. Rows are full-width tappable
