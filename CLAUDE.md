@@ -13,8 +13,9 @@ local dev commands.
 ## UI convention: list + drawer
 
 Every entity-management page (Users, Associations, Clubs, Athletes,
-Coaches, and any future one — Classes, Grades, Competitions, etc.) follows
-the same pattern. Don't invent a new layout per page; extend this one.
+Coaches, Schedule, and any future one — Grades, Competitions, etc.)
+follows the same pattern. Don't invent a new layout per page; extend
+this one.
 
 - **List rows show only the name** (or, where there's no guaranteed name,
   email + a status `Badge`) — nothing else. Rows are full-width tappable
@@ -88,12 +89,25 @@ client-side, since athlete rosters can be large; new list pages should
 default to the simple client-side filter unless there's a similar reason
 not to.
 
+## UI convention: nested line items in a drawer
+
+When a record has its own dated sub-entries (e.g. an event's day-by-day
+itinerary — see `ItemsSection` in `app/src/pages/Schedule.tsx`), manage
+them **inline within the same detail drawer**, not a second stacked
+`Drawer` — two full-screen drawers stacked on mobile is disorienting.
+Each sub-entry is a row that expands in place when tapped (accordion
+style) to reveal its fields (same auto-save + `DeleteButton` pattern as
+any other record); adding a new one reveals an inline form below the
+list rather than opening anything else.
+
 ## Other conventions
 
 - Backend routes: one Express Router per resource in `api/src/routes/`,
-  `asyncHandler`-wrapped, `authorize(...roles)`-gated, `COALESCE`-based
-  partial updates for `PATCH`. See `api/src/routes/adminUsers.js` as the
-  reference implementation.
+  `asyncHandler`-wrapped, `authorize(...roles)`-gated. `PATCH` handlers
+  build their `SET` clause from whichever keys are actually present in
+  the request body (see `api/src/routes/adminUsers.js`) rather than
+  `COALESCE`, so an explicit `null` (e.g. "unlink this") is applied
+  instead of being indistinguishable from an omitted field.
 - Migrations are a flat, append-only array of idempotent SQL statements
   in `api/scripts/migrate.js` (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN
   IF NOT EXISTS`) — never edit a past entry, only append new ones.
