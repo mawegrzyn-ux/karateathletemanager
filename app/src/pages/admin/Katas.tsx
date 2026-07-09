@@ -1,14 +1,15 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useApi } from "../../hooks/useApi";
-import { Spinner, Drawer, AddButton, DeleteButton, Field } from "../../components/ui";
+import { Spinner, Drawer, AddButton, DeleteButton, Field, Badge } from "../../components/ui";
 
 interface Kata {
   id: number;
   name: string;
   style: string | null;
+  wkf_number: number | null;
 }
 
-const EMPTY_FORM = { name: "", style: "" };
+const EMPTY_FORM = { name: "", style: "", wkf_number: "" };
 
 export default function Katas() {
   const api = useApi();
@@ -37,7 +38,11 @@ export default function Katas() {
   async function createKata(e: FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return;
-    const { kata } = await api.post<{ kata: Kata }>("/katas", form);
+    const { kata } = await api.post<{ kata: Kata }>("/katas", {
+      name: form.name,
+      style: form.style,
+      wkf_number: form.wkf_number ? Number(form.wkf_number) : null,
+    });
     setKatas((prev) => (prev ? [...prev, kata] : [kata]));
     setDrawer("closed");
   }
@@ -83,14 +88,27 @@ export default function Katas() {
         className="min-h-[44px] rounded-lg border border-slate-300 px-3"
       />
 
+      <p className="text-xs text-slate-500">
+        WKF # values are a best-effort starting point — verify and correct
+        against the current official WKF Kata List.
+      </p>
+
       <div className="flex flex-col gap-2">
         {filtered.map((k) => (
           <button
             key={k.id}
             onClick={() => setDrawer(k)}
-            className="min-h-[44px] rounded-lg border border-slate-200 px-3 py-2 text-left font-medium"
+            className="flex min-h-[44px] items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-left font-medium"
           >
-            {k.name}
+            <span>
+              {k.name}
+              {k.style && (
+                <span className="ml-2 text-xs font-normal text-slate-500">
+                  {k.style}
+                </span>
+              )}
+            </span>
+            {k.wkf_number != null && <Badge>WKF #{k.wkf_number}</Badge>}
           </button>
         ))}
         {filtered.length === 0 && (
@@ -116,6 +134,15 @@ export default function Katas() {
             <input
               value={form.style}
               onChange={(e) => setForm({ ...form, style: e.target.value })}
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            />
+          </Field>
+          <Field label="WKF #">
+            <input
+              type="number"
+              min={1}
+              value={form.wkf_number}
+              onChange={(e) => setForm({ ...form, wkf_number: e.target.value })}
               className="min-h-[44px] rounded-lg border border-slate-300 px-3"
             />
           </Field>
@@ -154,6 +181,19 @@ export default function Katas() {
                     updateKata(editing.id, { style: e.target.value });
                   }
                 }}
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
+            <Field label="WKF #">
+              <input
+                type="number"
+                min={1}
+                defaultValue={editing.wkf_number ?? ""}
+                onBlur={(e) =>
+                  updateKata(editing.id, {
+                    wkf_number: e.target.value ? Number(e.target.value) : null,
+                  })
+                }
                 className="min-h-[44px] rounded-lg border border-slate-300 px-3"
               />
             </Field>

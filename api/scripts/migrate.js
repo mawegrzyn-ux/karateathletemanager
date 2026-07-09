@@ -327,6 +327,41 @@ const migrations = [
      ('Kushanku', 'Wado-ryu')
    ON CONFLICT (name) DO NOTHING`,
 
+  `ALTER TABLE nk_katas ADD COLUMN IF NOT EXISTS wkf_number INTEGER`,
+
+  // Best-effort WKF Kata List numbers (numbered within each style, as
+  // published on the official WKF kata scoresheet). Not guaranteed to
+  // exactly match the current official WKF document from memory alone,
+  // especially for the Shito-ryu subset (whose full official list runs
+  // to 40+ katas and is only partially seeded here) — fully editable
+  // afterward via the admin Katas page.
+  `UPDATE nk_katas SET wkf_number = v.num FROM (VALUES
+     ('Bassai Dai', 1), ('Bassai Sho', 2), ('Kanku Dai', 3), ('Kanku Sho', 4),
+     ('Empi', 5), ('Jion', 6), ('Jitte', 7), ('Hangetsu', 8), ('Gankaku', 9),
+     ('Chinte', 10), ('Meikyo', 11), ('Nijushiho', 12), ('Sochin', 13),
+     ('Unsu', 14), ('Wankan', 15), ('Gojushiho Sho', 16), ('Gojushiho Dai', 17),
+     ('Heian Shodan', 18), ('Heian Nidan', 19), ('Heian Sandan', 20),
+     ('Heian Yondan', 21), ('Heian Godan', 22), ('Tekki Shodan', 23),
+     ('Tekki Nidan', 24), ('Tekki Sandan', 25)
+   ) AS v(name, num) WHERE nk_katas.name = v.name AND nk_katas.style = 'Shotokan'`,
+
+  `UPDATE nk_katas SET wkf_number = v.num FROM (VALUES
+     ('Saifa', 1), ('Seiyunchin', 2), ('Shisochin', 3), ('Sanseiru', 4),
+     ('Seipai', 5), ('Seisan', 6), ('Suparinpei', 7), ('Kururunfa', 8),
+     ('Sanchin', 9), ('Tensho', 10), ('Gekisai Dai Ichi', 11), ('Gekisai Dai Ni', 12)
+   ) AS v(name, num) WHERE nk_katas.name = v.name AND nk_katas.style = 'Goju-ryu'`,
+
+  `UPDATE nk_katas SET wkf_number = v.num FROM (VALUES
+     ('Pinan Shodan', 1), ('Pinan Nidan', 2), ('Pinan Sandan', 3),
+     ('Pinan Yondan', 4), ('Pinan Godan', 5), ('Kushanku', 6),
+     ('Naihanchi', 7), ('Seishan', 8), ('Chinto', 9), ('Niseishi', 10)
+   ) AS v(name, num) WHERE nk_katas.name = v.name AND nk_katas.style = 'Wado-ryu'`,
+
+  `UPDATE nk_katas SET wkf_number = v.num FROM (VALUES
+     ('Matsukaze', 1), ('Seienchin', 2), ('Nipaipo', 3),
+     ('Chatanyara Kushanku', 4), ('Rohai', 5)
+   ) AS v(name, num) WHERE nk_katas.name = v.name AND nk_katas.style = 'Shito-ryu'`,
+
   `ALTER TABLE nk_event_items
      ADD COLUMN IF NOT EXISTS kata_id INTEGER
        REFERENCES nk_katas(id) ON DELETE SET NULL`,
