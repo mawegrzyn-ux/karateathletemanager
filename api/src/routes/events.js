@@ -19,7 +19,7 @@ const ITEM_TYPES = [...EVENT_TYPES, "rest", "other", "kata_performance"];
 const REPEAT_FREQS = ["daily", "weekly"];
 const MAX_REPEAT_OCCURRENCES = 60;
 
-const EVENT_FIELDS = `id, title, event_type, start_date, end_date, location, notes, created_at`;
+const EVENT_FIELDS = `id, title, event_type, start_date, end_date, start_time, end_time, location, notes, created_at`;
 const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id`;
 
 router.use(authorize());
@@ -150,8 +150,16 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
-    const { title, event_type, start_date, end_date, location, notes } =
-      req.body ?? {};
+    const {
+      title,
+      event_type,
+      start_date,
+      end_date,
+      start_time,
+      end_time,
+      location,
+      notes,
+    } = req.body ?? {};
 
     if (typeof title !== "string" || title.trim().length === 0) {
       return res.status(400).json({ error: { message: "Title is required" } });
@@ -179,10 +187,20 @@ router.post(
     try {
       await client.query("BEGIN");
       const { rows } = await client.query(
-        `INSERT INTO nk_events (title, event_type, start_date, end_date, location, notes)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO nk_events
+           (title, event_type, start_date, end_date, start_time, end_time, location, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING ${EVENT_FIELDS}`,
-        [title, event_type, start_date, end_date, location, notes]
+        [
+          title,
+          event_type,
+          start_date,
+          end_date,
+          start_time ?? null,
+          end_time ?? null,
+          location,
+          notes,
+        ]
       );
       const event = rows[0];
 
@@ -252,13 +270,31 @@ router.patch(
     }
 
     const body = req.body ?? {};
-    const { title, event_type, start_date, end_date, location, notes } = body;
+    const {
+      title,
+      event_type,
+      start_date,
+      end_date,
+      start_time,
+      end_time,
+      location,
+      notes,
+    } = body;
 
     if (event_type !== undefined && !EVENT_TYPES.includes(event_type)) {
       return res.status(400).json({ error: { message: "Invalid event_type" } });
     }
 
-    const fields = { title, event_type, start_date, end_date, location, notes };
+    const fields = {
+      title,
+      event_type,
+      start_date,
+      end_date,
+      start_time,
+      end_time,
+      location,
+      notes,
+    };
     const setClauses = [];
     const values = [];
     for (const [key, value] of Object.entries(fields)) {
