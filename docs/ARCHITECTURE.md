@@ -165,8 +165,50 @@ this way.
   `POST`/`PATCH`/`DELETE` are admin-only (inline check). `athlete_id`
   optionally links a coach who is also an athlete.
 - The "Athletes" bottom-nav tab shows the full manager UI to `admin`/`coach`
-  roles; other roles see a placeholder ("ask your coach") since athlete/
-  parent self-service viewing is a separate future feature.
+  roles. A user acting as `athlete` sees their own linked athlete record
+  read-only (`MyAthleteProfile` in `Athletes.tsx`) instead — editing your
+  own profile isn't supported yet. Everyone else (`parent`, no role) sees
+  a placeholder ("ask your coach").
+
+### Scheduling API
+
+Athlete-planned itinerary events — competitions, squad sessions,
+training, travel, time off, seminars, training camps — each optionally
+spanning multiple days and containing a day-by-day sequence of smaller
+items (e.g. a competition event might contain: travel day, training
+day, rest day, morning warm-up, the competition itself, retrospective,
+return travel). This is unrelated to the `nk_classes`/`nk_sessions`
+tables further up (a still-unbuilt *recurring weekly class* concept for
+coach-run attendance) — this is personal athlete itinerary planning.
+
+- `nk_events` (`title`, `event_type`, `start_date`, `end_date`,
+  `location`, `notes`) — `event_type` is one of `competition`,
+  `squad_session`, `training`, `travel`, `time_off`, `seminar`,
+  `training_camp`. `nk_event_athletes` (many-to-many) attaches one or
+  more athletes — personal events have one, squad-level events have
+  several. `nk_event_items` are the nested itinerary rows under an
+  event (`item_type`, `title`, `item_date`, `start_time`, `end_time`,
+  `notes`) — `item_type` reuses the same vocabulary plus `rest` and
+  `other` for things that don't fit the top-level list (e.g. an "active
+  rest day").
+- `api/src/utils/permissions.js`'s `isEventEditor(user, eventId)` gates
+  every route in `api/src/routes/events.js`: true for `is_admin`; for
+  `role === 'athlete'`, true if they're one of the attached athletes;
+  for `role === 'coach'`, true if they share a club (via
+  `nk_coach_clubs`/`nk_athlete_clubs`) with *any* attached athlete.
+- Creating/reassigning athletes on an event (`POST /api/events`,
+  `PUT /api/events/:id/athletes`) resolves who can be attached the same
+  way: an athlete's own event is always forced to just themselves
+  (client-supplied `athlete_ids` is ignored) — a plain athlete has no
+  access to any athlete directory anywhere in this app, so the
+  athlete-picker UI is hidden entirely for them. A coach must share a
+  club with every athlete they attach (403 otherwise); admin is
+  unrestricted.
+- Frontend: `Schedule.tsx` (previously an empty placeholder) — list +
+  drawer, same conventions as `Clubs.tsx`. The event detail drawer
+  contains a nested "Itinerary" section for items, managed inline
+  (tap-to-expand-in-place) rather than a second stacked `Drawer` — see
+  the note in `CLAUDE.md`.
 
 ## Auth & RBAC
 

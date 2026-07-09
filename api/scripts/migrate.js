@@ -197,6 +197,40 @@ const migrations = [
   `ALTER TABLE nk_athletes
      ADD COLUMN IF NOT EXISTS link_pin VARCHAR(6),
      ADD COLUMN IF NOT EXISTS link_pin_expires_at TIMESTAMPTZ`,
+
+  `CREATE TABLE IF NOT EXISTS nk_events (
+     id          SERIAL PRIMARY KEY,
+     title       VARCHAR(200) NOT NULL,
+     event_type  VARCHAR(30) NOT NULL CHECK (event_type IN
+                   ('competition','squad_session','training','travel',
+                    'time_off','seminar','training_camp')),
+     start_date  DATE NOT NULL,
+     end_date    DATE NOT NULL,
+     location    VARCHAR(200),
+     notes       TEXT,
+     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS nk_event_athletes (
+     event_id   INTEGER NOT NULL REFERENCES nk_events(id) ON DELETE CASCADE,
+     athlete_id INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     PRIMARY KEY (event_id, athlete_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS nk_event_items (
+     id          SERIAL PRIMARY KEY,
+     event_id    INTEGER NOT NULL REFERENCES nk_events(id) ON DELETE CASCADE,
+     item_type   VARCHAR(30) NOT NULL CHECK (item_type IN
+                   ('competition','squad_session','training','travel',
+                    'time_off','seminar','training_camp','rest','other')),
+     title       VARCHAR(200) NOT NULL,
+     item_date   DATE NOT NULL,
+     start_time  TIME,
+     end_time    TIME,
+     notes       TEXT,
+     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
 ];
 
 async function migrate() {
