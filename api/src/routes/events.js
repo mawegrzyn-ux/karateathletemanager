@@ -15,12 +15,58 @@ const EVENT_TYPES = [
   "seminar",
   "training_camp",
 ];
-const ITEM_TYPES = [...EVENT_TYPES, "rest", "other"];
+const ITEM_TYPES = [...EVENT_TYPES, "rest", "other", "kata_performance"];
+const REPEAT_FREQS = ["daily", "weekly"];
+const MAX_REPEAT_OCCURRENCES = 60;
 
 const EVENT_FIELDS = `id, title, event_type, start_date, end_date, location, notes, created_at`;
-const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes`;
+const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id`;
 
 router.use(authorize());
+
+// Expands a `repeat` request ({freq, until, weekdays?}) starting from
+// item_date into the list of occurrence dates ('YYYY-MM-DD' strings),
+// or throws a {status, message} error. Caps at MAX_REPEAT_OCCURRENCES.
+function resolveOccurrenceDates(itemDate, repeat) {
+  const { freq, until, weekdays } = repeat ?? {};
+
+  if (!REPEAT_FREQS.includes(freq)) {
+    throw { status: 400, message: "Invalid repeat.freq" };
+  }
+  if (!until) {
+    throw { status: 400, message: "repeat.until is required" };
+  }
+
+  const start = new Date(`${itemDate}T00:00:00Z`);
+  const end = new Date(`${until}T00:00:00Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    throw { status: 400, message: "Invalid repeat.until" };
+  }
+
+  let allowedWeekdays = null;
+  if (freq === "weekly") {
+    allowedWeekdays =
+      Array.isArray(weekdays) && weekdays.length > 0
+        ? new Set(weekdays)
+        : new Set([start.getUTCDay()]);
+  }
+
+  const dates = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    if (!allowedWeekdays || allowedWeekdays.has(cursor.getUTCDay())) {
+      dates.push(cursor.toISOString().slice(0, 10));
+      if (dates.length > MAX_REPEAT_OCCURRENCES) {
+        throw {
+          status: 400,
+          message: `Too many occurrences (max ${MAX_REPEAT_OCCURRENCES})`,
+        };
+      }
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dates;
+}
 
 async function coachSharedAthleteIds(coachId, athleteIds) {
   const { rows } = await pool.query(
@@ -327,8 +373,17 @@ router.post(
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
-    const { item_type, title, item_date, start_time, end_time, notes } =
-      req.body ?? {};
+    const {
+      item_type,
+      title,
+      item_date,
+      start_time,
+      end_time,
+      notes,
+      training_module_id,
+      kata_id,
+      repeat,
+    } = req.body ?? {};
 
     if (!ITEM_TYPES.includes(item_type)) {
       return res.status(400).json({ error: { message: "Invalid item_type" } });
@@ -339,16 +394,61 @@ router.post(
     if (!item_date) {
       return res.status(400).json({ error: { message: "item_date is required" } });
     }
+    if (!start_time || !end_time) {
+      return res
+        .status(400)
+        .json({ error: { message: "start_time and end_time are required" } });
+    }
 
-    const { rows } = await pool.query(
-      `INSERT INTO nk_event_items
-         (event_id, item_type, title, item_date, start_time, end_time, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING ${ITEM_FIELDS}`,
-      [req.params.id, item_type, title, item_date, start_time, end_time, notes]
-    );
+    let dates = [item_date];
+    if (repeat) {
+      try {
+        dates = resolveOccurrenceDates(item_date, repeat);
+      } catch (err) {
+        if (err.status) {
+          return res.status(err.status).json({ error: { message: err.message } });
+        }
+        throw err;
+      }
+    }
 
-    res.status(201).json({ item: rows[0] });
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const items = [];
+      for (const date of dates) {
+        const { rows } = await client.query(
+          `INSERT INTO nk_event_items
+             (event_id, item_type, title, item_date, start_time, end_time, notes,
+              training_module_id, kata_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           RETURNING ${ITEM_FIELDS}`,
+          [
+            req.params.id,
+            item_type,
+            title,
+            date,
+            start_time,
+            end_time,
+            notes,
+            training_module_id ?? null,
+            kata_id ?? null,
+          ]
+        );
+        items.push(rows[0]);
+      }
+      await client.query("COMMIT");
+      if (repeat) {
+        res.status(201).json({ items });
+      } else {
+        res.status(201).json({ item: items[0] });
+      }
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   })
 );
 
@@ -360,13 +460,37 @@ router.patch(
     }
 
     const body = req.body ?? {};
-    const { item_type, title, item_date, start_time, end_time, notes } = body;
+    const {
+      item_type,
+      title,
+      item_date,
+      start_time,
+      end_time,
+      notes,
+      training_module_id,
+      kata_id,
+    } = body;
 
     if (item_type !== undefined && !ITEM_TYPES.includes(item_type)) {
       return res.status(400).json({ error: { message: "Invalid item_type" } });
     }
+    if ("start_time" in body && !start_time) {
+      return res.status(400).json({ error: { message: "start_time is required" } });
+    }
+    if ("end_time" in body && !end_time) {
+      return res.status(400).json({ error: { message: "end_time is required" } });
+    }
 
-    const fields = { item_type, title, item_date, start_time, end_time, notes };
+    const fields = {
+      item_type,
+      title,
+      item_date,
+      start_time,
+      end_time,
+      notes,
+      training_module_id,
+      kata_id,
+    };
     const setClauses = [];
     const values = [];
     for (const [key, value] of Object.entries(fields)) {

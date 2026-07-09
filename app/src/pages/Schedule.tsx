@@ -29,6 +29,8 @@ interface EventItem {
   start_time: string | null;
   end_time: string | null;
   notes: string | null;
+  training_module_id: number | null;
+  kata_id: number | null;
 }
 
 interface Person {
@@ -36,6 +38,23 @@ interface Person {
   first_name: string;
   last_name: string;
 }
+
+interface TrainingModule {
+  id: number;
+  title: string;
+  explanation: string | null;
+  video_url: string | null;
+  duration_seconds: number | null;
+  sets: { id: number; position: number; reps: number }[];
+}
+
+interface Kata {
+  id: number;
+  name: string;
+  style: string | null;
+}
+
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const EVENT_TYPES = [
   "competition",
@@ -46,7 +65,7 @@ const EVENT_TYPES = [
   "seminar",
   "training_camp",
 ];
-const ITEM_TYPES = [...EVENT_TYPES, "rest", "other"];
+const ITEM_TYPES = [...EVENT_TYPES, "rest", "other", "kata_performance"];
 
 const TYPE_LABELS: Record<string, string> = {
   competition: "Competition",
@@ -58,6 +77,7 @@ const TYPE_LABELS: Record<string, string> = {
   training_camp: "Training camp",
   rest: "Rest",
   other: "Other",
+  kata_performance: "Kata performance",
 };
 
 const EMPTY_FORM = {
@@ -76,6 +96,11 @@ const EMPTY_ITEM_FORM = {
   start_time: "",
   end_time: "",
   notes: "",
+  training_module_id: null as number | null,
+  kata_id: null as number | null,
+  repeat_freq: "none",
+  repeat_until: "",
+  repeat_weekdays: [] as number[],
 };
 
 function toDateInput(value: string) {
@@ -109,6 +134,8 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const api = useApi();
   const [events, setEvents] = useState<Event[] | null>(null);
   const [athletes, setAthletes] = useState<Person[]>([]);
+  const [modules, setModules] = useState<TrainingModule[]>([]);
+  const [katas, setKatas] = useState<Kata[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [drawer, setDrawer] = useState<"closed" | "create" | Event>("closed");
@@ -132,6 +159,16 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
         .then((res) => setAthletes(res.athletes))
         .catch(() => setAthletes([]));
     }
+
+    api
+      .get<{ modules: TrainingModule[] }>("/training-modules")
+      .then((res) => setModules(res.modules))
+      .catch(() => setModules([]));
+
+    api
+      .get<{ katas: Kata[] }>("/katas")
+      .then((res) => setKatas(res.katas))
+      .catch(() => setKatas([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }
 
@@ -310,6 +347,8 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             eventId={editing.id}
             canPickAthletes={canPickAthletes}
             allAthletes={athletes}
+            modules={modules}
+            katas={katas}
             onUpdated={updateEventInList}
             onDeleted={() => deleteEvent(editing.id)}
           />
@@ -323,12 +362,16 @@ function EventDetail({
   eventId,
   canPickAthletes,
   allAthletes,
+  modules,
+  katas,
   onUpdated,
   onDeleted,
 }: {
   eventId: number;
   canPickAthletes: boolean;
   allAthletes: Person[];
+  modules: TrainingModule[];
+  katas: Kata[];
   onUpdated: (event: Event) => void;
   onDeleted: () => void;
 }) {
@@ -448,7 +491,13 @@ function EventDetail({
         />
       )}
 
-      <ItemsSection eventId={eventId} items={items} setItems={setItems} />
+      <ItemsSection
+        eventId={eventId}
+        items={items}
+        setItems={setItems}
+        modules={modules}
+        katas={katas}
+      />
 
       <DeleteButton onClick={onDeleted} itemLabel={event.title} />
     </div>
@@ -512,14 +561,77 @@ function AthletePicker({
   );
 }
 
+function SingleSelectPicker({
+  label,
+  placeholder,
+  options,
+  selectedId,
+  onSelect,
+}: {
+  label: string;
+  placeholder: string;
+  options: { id: number; label: string }[];
+  selectedId: number | null;
+  onSelect: (id: number | null) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const results = options.filter((o) => o.label.toLowerCase().includes(q));
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
+      <span className="text-xs font-medium text-slate-600">{label}</span>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={placeholder}
+        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+      />
+      <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+        {results.map((o) => {
+          const selected = selectedId === o.id;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => onSelect(selected ? null : o.id)}
+              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+                selected
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : "border-slate-200"
+              }`}
+            >
+              <span>{o.label}</span>
+              <span className="text-sm">
+                {selected ? "✓ Selected" : "+ Select"}
+              </span>
+            </button>
+          );
+        })}
+        {results.length === 0 && (
+          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function weekdayOf(dateStr: string) {
+  return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+}
+
 function ItemsSection({
   eventId,
   items,
   setItems,
+  modules,
+  katas,
 }: {
   eventId: number;
   items: EventItem[];
   setItems: (items: EventItem[]) => void;
+  modules: TrainingModule[];
+  katas: Kata[];
 }) {
   const api = useApi();
   const [adding, setAdding] = useState(false);
@@ -534,16 +646,44 @@ function ItemsSection({
 
   async function addItem(e: FormEvent) {
     e.preventDefault();
-    if (!addForm.title.trim() || !addForm.item_date) return;
-    const { item } = await api.post<{ item: EventItem }>(
+    if (
+      !addForm.title.trim() ||
+      !addForm.item_date ||
+      !addForm.start_time ||
+      !addForm.end_time
+    )
+      return;
+
+    const payload: Record<string, unknown> = {
+      item_type: addForm.item_type,
+      title: addForm.title,
+      item_date: addForm.item_date,
+      start_time: addForm.start_time,
+      end_time: addForm.end_time,
+      notes: addForm.notes,
+      training_module_id:
+        addForm.item_type === "training" ? addForm.training_module_id : null,
+      kata_id:
+        addForm.item_type === "kata_performance" ? addForm.kata_id : null,
+    };
+    if (addForm.repeat_freq !== "none") {
+      payload.repeat = {
+        freq: addForm.repeat_freq,
+        until: addForm.repeat_until,
+        weekdays:
+          addForm.repeat_freq === "weekly"
+            ? addForm.repeat_weekdays.length > 0
+              ? addForm.repeat_weekdays
+              : [weekdayOf(addForm.item_date)]
+            : undefined,
+      };
+    }
+
+    const res = await api.post<{ item?: EventItem; items?: EventItem[] }>(
       `/events/${eventId}/items`,
-      {
-        ...addForm,
-        start_time: addForm.start_time || null,
-        end_time: addForm.end_time || null,
-      }
+      payload
     );
-    setItems([...items, item]);
+    setItems([...items, ...(res.items ?? (res.item ? [res.item] : []))]);
     setAddForm(EMPTY_ITEM_FORM);
     setAdding(false);
   }
@@ -579,15 +719,26 @@ function ItemsSection({
               <button
                 type="button"
                 onClick={() => setExpandedId(expanded ? null : item.id)}
-                className="flex min-h-[44px] w-full items-center justify-between px-3 text-left"
+                className="flex min-h-[44px] w-full flex-col items-start gap-1 px-3 py-2 text-left"
               >
-                <span>{item.title}</span>
-                <div className="flex items-center gap-2">
-                  <Badge>{TYPE_LABELS[item.item_type] ?? item.item_type}</Badge>
-                  <span className="text-xs text-slate-500">
-                    {toDateInput(item.item_date)}
-                  </span>
+                <div className="flex w-full items-center justify-between">
+                  <span>{item.title}</span>
+                  <div className="flex items-center gap-2">
+                    <Badge>{TYPE_LABELS[item.item_type] ?? item.item_type}</Badge>
+                    <span className="text-xs text-slate-500">
+                      {toDateInput(item.item_date)}
+                    </span>
+                  </div>
                 </div>
+                {(item.training_module_id || item.kata_id) && (
+                  <span className="text-xs text-slate-500">
+                    {item.training_module_id &&
+                      modules.find((m) => m.id === item.training_module_id)
+                        ?.title}
+                    {item.kata_id &&
+                      katas.find((k) => k.id === item.kata_id)?.name}
+                  </span>
+                )}
               </button>
               {expanded && (
                 <div className="flex flex-col gap-3 border-t border-slate-200 p-3">
@@ -629,25 +780,27 @@ function ItemsSection({
                   </Field>
                   <Field label="Start time">
                     <input
+                      required
                       type="time"
                       defaultValue={toTimeInput(item.start_time)}
-                      onChange={(e) =>
-                        updateItem(item.id, {
-                          start_time: e.target.value || null,
-                        })
-                      }
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          updateItem(item.id, { start_time: e.target.value });
+                        }
+                      }}
                       className="min-h-[44px] rounded-lg border border-slate-300 px-3"
                     />
                   </Field>
                   <Field label="End time">
                     <input
+                      required
                       type="time"
                       defaultValue={toTimeInput(item.end_time)}
-                      onChange={(e) =>
-                        updateItem(item.id, {
-                          end_time: e.target.value || null,
-                        })
-                      }
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          updateItem(item.id, { end_time: e.target.value });
+                        }
+                      }}
                       className="min-h-[44px] rounded-lg border border-slate-300 px-3"
                     />
                   </Field>
@@ -662,6 +815,33 @@ function ItemsSection({
                       className="rounded-lg border border-slate-300 px-3 py-2"
                     />
                   </Field>
+                  {item.item_type === "training" && (
+                    <SingleSelectPicker
+                      label="Training module"
+                      placeholder="Search training modules..."
+                      options={modules.map((m) => ({ id: m.id, label: m.title }))}
+                      selectedId={item.training_module_id}
+                      onSelect={(id) =>
+                        updateItem(item.id, { training_module_id: id })
+                      }
+                    />
+                  )}
+                  {item.item_type === "kata_performance" && (
+                    <SingleSelectPicker
+                      label="Kata"
+                      placeholder="Search katas..."
+                      options={katas.map((k) => ({ id: k.id, label: k.name }))}
+                      selectedId={item.kata_id}
+                      onSelect={(id) =>
+                        updateItem(item.id, {
+                          kata_id: id,
+                          ...(id
+                            ? { title: katas.find((k) => k.id === id)?.name }
+                            : {}),
+                        })
+                      }
+                    />
+                  )}
                   <DeleteButton
                     onClick={() => deleteItem(item.id)}
                     itemLabel={item.title}
@@ -719,6 +899,7 @@ function ItemsSection({
           </Field>
           <Field label="Start time">
             <input
+              required
               type="time"
               value={addForm.start_time}
               onChange={(e) =>
@@ -729,6 +910,7 @@ function ItemsSection({
           </Field>
           <Field label="End time">
             <input
+              required
               type="time"
               value={addForm.end_time}
               onChange={(e) =>
@@ -744,6 +926,105 @@ function ItemsSection({
               className="rounded-lg border border-slate-300 px-3 py-2"
             />
           </Field>
+
+          {addForm.item_type === "training" && (
+            <SingleSelectPicker
+              label="Training module"
+              placeholder="Search training modules..."
+              options={modules.map((m) => ({ id: m.id, label: m.title }))}
+              selectedId={addForm.training_module_id}
+              onSelect={(id) =>
+                setAddForm({ ...addForm, training_module_id: id })
+              }
+            />
+          )}
+          {addForm.item_type === "kata_performance" && (
+            <SingleSelectPicker
+              label="Kata"
+              placeholder="Search katas..."
+              options={katas.map((k) => ({ id: k.id, label: k.name }))}
+              selectedId={addForm.kata_id}
+              onSelect={(id) =>
+                setAddForm({
+                  ...addForm,
+                  kata_id: id,
+                  title: id ? katas.find((k) => k.id === id)?.name ?? addForm.title : addForm.title,
+                })
+              }
+            />
+          )}
+
+          <Field label="Repeats">
+            <select
+              value={addForm.repeat_freq}
+              onChange={(e) =>
+                setAddForm({
+                  ...addForm,
+                  repeat_freq: e.target.value,
+                  repeat_weekdays: [],
+                })
+              }
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            >
+              <option value="none">Does not repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </Field>
+          {addForm.repeat_freq !== "none" && (
+            <Field label="Repeat until">
+              <input
+                required
+                type="date"
+                value={addForm.repeat_until}
+                onChange={(e) =>
+                  setAddForm({ ...addForm, repeat_until: e.target.value })
+                }
+                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              />
+            </Field>
+          )}
+          {addForm.repeat_freq === "weekly" && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-600">
+                Repeat on
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {WEEKDAY_LABELS.map((label, day) => {
+                  const active =
+                    addForm.repeat_weekdays.length > 0
+                      ? addForm.repeat_weekdays.includes(day)
+                      : addForm.item_date && weekdayOf(addForm.item_date) === day;
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => {
+                        const base =
+                          addForm.repeat_weekdays.length > 0
+                            ? addForm.repeat_weekdays
+                            : addForm.item_date
+                              ? [weekdayOf(addForm.item_date)]
+                              : [];
+                        const next = base.includes(day)
+                          ? base.filter((d) => d !== day)
+                          : [...base, day];
+                        setAddForm({ ...addForm, repeat_weekdays: next });
+                      }}
+                      className={`min-h-[36px] min-w-[44px] rounded-lg border px-2 text-sm ${
+                        active
+                          ? "border-green-200 bg-green-50 text-green-800"
+                          : "border-slate-300"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button
               type="button"

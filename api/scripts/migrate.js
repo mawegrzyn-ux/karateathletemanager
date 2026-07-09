@@ -231,6 +231,110 @@ const migrations = [
      notes       TEXT,
      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+
+  `UPDATE nk_event_items
+     SET start_time = '09:00', end_time = '10:00'
+     WHERE start_time IS NULL OR end_time IS NULL`,
+
+  `ALTER TABLE nk_event_items
+     ALTER COLUMN start_time SET NOT NULL,
+     ALTER COLUMN end_time SET NOT NULL`,
+
+  `CREATE TABLE IF NOT EXISTS nk_training_modules (
+     id               SERIAL PRIMARY KEY,
+     title            VARCHAR(200) NOT NULL,
+     explanation      TEXT,
+     video_url        VARCHAR(500),
+     duration_seconds INTEGER,
+     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS nk_training_module_sets (
+     id        SERIAL PRIMARY KEY,
+     module_id INTEGER NOT NULL REFERENCES nk_training_modules(id) ON DELETE CASCADE,
+     position  INTEGER NOT NULL,
+     reps      INTEGER NOT NULL
+  )`,
+
+  `ALTER TABLE nk_event_items
+     ADD COLUMN IF NOT EXISTS training_module_id INTEGER
+       REFERENCES nk_training_modules(id) ON DELETE SET NULL`,
+
+  `CREATE TABLE IF NOT EXISTS nk_katas (
+     id         SERIAL PRIMARY KEY,
+     name       VARCHAR(200) NOT NULL UNIQUE,
+     style      VARCHAR(50),
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  // Best-effort starting list of well-known traditional/WKF-style katas
+  // across the four major styles. Not guaranteed to exactly match the
+  // current official WKF kata list from memory alone — fully editable
+  // afterward via the admin Katas page.
+  `INSERT INTO nk_katas (name, style) VALUES
+     ('Heian Shodan', 'Shotokan'),
+     ('Heian Nidan', 'Shotokan'),
+     ('Heian Sandan', 'Shotokan'),
+     ('Heian Yondan', 'Shotokan'),
+     ('Heian Godan', 'Shotokan'),
+     ('Tekki Shodan', 'Shotokan'),
+     ('Tekki Nidan', 'Shotokan'),
+     ('Tekki Sandan', 'Shotokan'),
+     ('Bassai Dai', 'Shotokan'),
+     ('Bassai Sho', 'Shotokan'),
+     ('Kanku Dai', 'Shotokan'),
+     ('Kanku Sho', 'Shotokan'),
+     ('Empi', 'Shotokan'),
+     ('Jion', 'Shotokan'),
+     ('Jitte', 'Shotokan'),
+     ('Hangetsu', 'Shotokan'),
+     ('Gankaku', 'Shotokan'),
+     ('Chinte', 'Shotokan'),
+     ('Meikyo', 'Shotokan'),
+     ('Nijushiho', 'Shotokan'),
+     ('Sochin', 'Shotokan'),
+     ('Unsu', 'Shotokan'),
+     ('Wankan', 'Shotokan'),
+     ('Gojushiho Dai', 'Shotokan'),
+     ('Gojushiho Sho', 'Shotokan'),
+     ('Gekisai Dai Ichi', 'Goju-ryu'),
+     ('Gekisai Dai Ni', 'Goju-ryu'),
+     ('Saifa', 'Goju-ryu'),
+     ('Seiyunchin', 'Goju-ryu'),
+     ('Shisochin', 'Goju-ryu'),
+     ('Sanseiru', 'Goju-ryu'),
+     ('Seipai', 'Goju-ryu'),
+     ('Seisan', 'Goju-ryu'),
+     ('Suparinpei', 'Goju-ryu'),
+     ('Kururunfa', 'Goju-ryu'),
+     ('Tensho', 'Goju-ryu'),
+     ('Sanchin', 'Goju-ryu'),
+     ('Matsukaze', 'Shito-ryu'),
+     ('Seienchin', 'Shito-ryu'),
+     ('Nipaipo', 'Shito-ryu'),
+     ('Chatanyara Kushanku', 'Shito-ryu'),
+     ('Rohai', 'Shito-ryu'),
+     ('Pinan Shodan', 'Wado-ryu'),
+     ('Pinan Nidan', 'Wado-ryu'),
+     ('Pinan Sandan', 'Wado-ryu'),
+     ('Pinan Yondan', 'Wado-ryu'),
+     ('Pinan Godan', 'Wado-ryu'),
+     ('Naihanchi', 'Wado-ryu'),
+     ('Seishan', 'Wado-ryu'),
+     ('Chinto', 'Wado-ryu'),
+     ('Niseishi', 'Wado-ryu'),
+     ('Kushanku', 'Wado-ryu')
+   ON CONFLICT (name) DO NOTHING`,
+
+  `ALTER TABLE nk_event_items
+     ADD COLUMN IF NOT EXISTS kata_id INTEGER
+       REFERENCES nk_katas(id) ON DELETE SET NULL`,
+
+  `ALTER TABLE nk_event_items DROP CONSTRAINT IF EXISTS nk_event_items_item_type_check;
+   ALTER TABLE nk_event_items ADD CONSTRAINT nk_event_items_item_type_check
+     CHECK (item_type IN ('competition','squad_session','training','travel',
+       'time_off','seminar','training_camp','rest','other','kata_performance'))`,
 ];
 
 async function migrate() {

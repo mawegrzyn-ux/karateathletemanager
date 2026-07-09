@@ -60,6 +60,12 @@ export default function More() {
           >
             Manage coaches
           </Link>
+          <Link
+            to="/admin/katas"
+            className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
+          >
+            Manage katas
+          </Link>
         </>
       )}
 
@@ -76,6 +82,12 @@ export default function More() {
             className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
           >
             Manage associations
+          </Link>
+          <Link
+            to="/admin/training-modules"
+            className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
+          >
+            Manage training modules
           </Link>
         </>
       )}
