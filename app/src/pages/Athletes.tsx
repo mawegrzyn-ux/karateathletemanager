@@ -18,6 +18,11 @@ interface Athlete {
   is_active: boolean;
 }
 
+interface KarateStyle {
+  id: number;
+  name: string;
+}
+
 const BELTS = [
   "white",
   "yellow",
@@ -65,12 +70,22 @@ export default function Athletes() {
 function MyAthleteProfile({ athleteId }: { athleteId: number }) {
   const api = useApi();
   const [athlete, setAthlete] = useState<Athlete | null>(null);
+  const [styleNames, setStyleNames] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .get<{ athlete: Athlete }>(`/athletes/${athleteId}`)
-      .then((res) => setAthlete(res.athlete))
+    Promise.all([
+      api.get<{ athlete: Athlete }>(`/athletes/${athleteId}`),
+      api.get<{ styleIds: number[] }>(`/athletes/${athleteId}/styles`),
+      api.get<{ styles: KarateStyle[] }>("/karate-styles"),
+    ])
+      .then(([athleteRes, styleIdsRes, stylesRes]) => {
+        setAthlete(athleteRes.athlete);
+        const ids = new Set(styleIdsRes.styleIds);
+        setStyleNames(
+          stylesRes.styles.filter((s) => ids.has(s.id)).map((s) => s.name)
+        );
+      })
       .catch(() => setError("Failed to load your athlete profile"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [athleteId]);
@@ -89,6 +104,10 @@ function MyAthleteProfile({ athleteId }: { athleteId: number }) {
         {athlete.first_name} {athlete.last_name}
       </h1>
       <ReadOnlyField label="Belt" value={athlete.belt} />
+      <ReadOnlyField
+        label="Styles"
+        value={styleNames.length > 0 ? styleNames.join(", ") : "—"}
+      />
       <ReadOnlyField
         label="Date of birth"
         value={athlete.date_of_birth ?? "—"}
@@ -184,6 +203,8 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
   const api = useApi();
   const [athletes, setAthletes] = useState<Athlete[] | null>(null);
+  const [styles, setStyles] = useState<KarateStyle[]>([]);
+  const [editingStyleIds, setEditingStyleIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [drawer, setDrawer] = useState<"closed" | "create" | Athlete>(
@@ -193,8 +214,23 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
 
   useEffect(() => {
     load("");
+    api
+      .get<{ styles: KarateStyle[] }>("/karate-styles")
+      .then((res) => setStyles(res.styles))
+      .catch(() => setStyles([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const editingId = drawer !== "closed" && drawer !== "create" ? drawer.id : null;
+
+  useEffect(() => {
+    if (editingId == null) return;
+    api
+      .get<{ styleIds: number[] }>(`/athletes/${editingId}/styles`)
+      .then((res) => setEditingStyleIds(res.styleIds))
+      .catch(() => setEditingStyleIds([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId]);
 
   function load(q: string) {
     const path = q ? `/athletes?q=${encodeURIComponent(q)}` : "/athletes";
@@ -202,6 +238,18 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
       .get<{ athletes: Athlete[] }>(path)
       .then((res) => setAthletes(res.athletes))
       .catch(() => setError("Failed to load athletes"));
+  }
+
+  async function addStyle(athleteId: number, styleId: number) {
+    const next = [...editingStyleIds, styleId];
+    await api.put(`/athletes/${athleteId}/styles`, { styleIds: next });
+    setEditingStyleIds(next);
+  }
+
+  async function removeStyle(athleteId: number, styleId: number) {
+    const next = editingStyleIds.filter((id) => id !== styleId);
+    await api.put(`/athletes/${athleteId}/styles`, { styleIds: next });
+    setEditingStyleIds(next);
   }
 
   function handleSearch(e: FormEvent) {
@@ -499,6 +547,12 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
                 className="rounded-lg border border-slate-300 px-3 py-2"
               />
             </Field>
+            <StylePicker
+              ids={editingStyleIds}
+              options={styles}
+              onAdd={(id) => addStyle(editing.id, id)}
+              onRemove={(id) => removeStyle(editing.id, id)}
+            />
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input
                 type="checkbox"
@@ -518,6 +572,59 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
           </div>
         )}
       </Drawer>
+    </div>
+  );
+}
+
+function StylePicker({
+  ids,
+  options,
+  onAdd,
+  onRemove,
+}: {
+  ids: number[];
+  options: KarateStyle[];
+  onAdd: (id: number) => void;
+  onRemove: (id: number) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const results = options.filter((o) => o.name.toLowerCase().includes(q));
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
+      <span className="text-xs font-medium text-slate-600">
+        Styles ({ids.length})
+      </span>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search styles..."
+        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+      />
+      <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+        {results.map((o) => {
+          const added = ids.includes(o.id);
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => (added ? onRemove(o.id) : onAdd(o.id))}
+              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+                added
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : "border-slate-200"
+              }`}
+            >
+              <span>{o.name}</span>
+              <span className="text-sm">{added ? "✓ Added" : "+ Add"}</span>
+            </button>
+          );
+        })}
+        {results.length === 0 && (
+          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+        )}
+      </div>
     </div>
   );
 }

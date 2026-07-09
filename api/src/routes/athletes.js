@@ -234,4 +234,65 @@ router.post(
   })
 );
 
+router.get(
+  "/:id/styles",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!req.user.is_admin && req.user.role !== "coach" && !isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT style_id FROM nk_athlete_styles WHERE athlete_id = $1 ORDER BY style_id`,
+      [req.params.id]
+    );
+    res.json({ styleIds: rows.map((r) => r.style_id) });
+  })
+);
+
+router.put(
+  "/:id/styles",
+  asyncHandler(async (req, res) => {
+    if (!req.user.is_admin && req.user.role !== "coach") {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { styleIds } = req.body ?? {};
+    if (!Array.isArray(styleIds)) {
+      return res
+        .status(400)
+        .json({ error: { message: "styleIds must be an array" } });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `DELETE FROM nk_athlete_styles WHERE athlete_id = $1`,
+        [req.params.id]
+      );
+      for (const styleId of styleIds) {
+        await client.query(
+          `INSERT INTO nk_athlete_styles (athlete_id, style_id) VALUES ($1, $2)`,
+          [req.params.id, styleId]
+        );
+      }
+      await client.query("COMMIT");
+      res.json({ styleIds });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      if (err.code === "23503") {
+        return res
+          .status(400)
+          .json({ error: { message: "One or more style IDs do not exist" } });
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  })
+);
+
 module.exports = router;

@@ -622,7 +622,8 @@ function weekdayOf(dateStr: string) {
 }
 
 function kataLabel(k: Kata) {
-  return k.wkf_number != null ? `${k.wkf_number}. ${k.name}` : k.name;
+  const label = k.wkf_number != null ? `${k.wkf_number}. ${k.name}` : k.name;
+  return k.style ? `${label} (${k.style})` : label;
 }
 
 function ItemsSection({

@@ -12,6 +12,7 @@ import AdminClubs from "./pages/admin/Clubs";
 import AdminCoaches from "./pages/admin/Coaches";
 import AdminTrainingModules from "./pages/admin/TrainingModules";
 import AdminKatas from "./pages/admin/Katas";
+import AdminKarateStyles from "./pages/admin/KarateStyles";
 import RequireAuth from "./components/RequireAuth";
 import RequireLogin from "./components/RequireLogin";
 
@@ -120,6 +121,14 @@ export default function App() {
           element={
             <RequireAuth adminOnly>
               <AdminKatas />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/karate-styles"
+          element={
+            <RequireAuth adminOnly>
+              <AdminKarateStyles />
             </RequireAuth>
           }
         />
