@@ -208,14 +208,19 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `POST`/`PATCH`/`DELETE` require `authorize("coach")` (coach or admin).
   A `training` item can optionally link to one module via
   `training_module_id`.
-- **Katas**: `nk_katas` (`name` unique, `style`) is an admin-managed
-  reference list, seeded via migration with a starting set of
-  well-known traditional/WKF-style kata names across Shotokan, Goju-ryu,
-  Shito-ryu, and Wado-ryu — a best-effort starting point, fully
-  correctable afterward via the admin Katas page. `api/src/routes/katas.js`
-  — `GET` open to any authenticated user, `POST`/`PATCH`/`DELETE`
-  `authorize.requireAdmin`. A `kata_performance` item links to one kata
-  via `kata_id`; picking a kata in `Schedule.tsx` also auto-fills the
+- **Katas**: `nk_katas` (`name` unique, `style`, `wkf_number`) is an
+  admin-managed reference list, seeded via migration with a starting set
+  of well-known traditional/WKF-style kata names across Shotokan,
+  Goju-ryu, Shito-ryu, and Wado-ryu, each tagged with a best-effort
+  official WKF Kata List number (numbered within its style, per the
+  published WKF kata scoresheet) — both the names and numbers are a
+  starting point, not guaranteed to exactly match the current official
+  WKF document from memory alone, and are fully correctable afterward
+  via the admin Katas page. `api/src/routes/katas.js` — `GET` open to
+  any authenticated user (ordered by style then `wkf_number`),
+  `POST`/`PATCH`/`DELETE` `authorize.requireAdmin`. A `kata_performance`
+  item links to one kata via `kata_id`; picking a kata in `Schedule.tsx`
+  shows its WKF number in the picker ("3. Kanku Dai") and auto-fills the
   item's (still-editable) title with the kata's name.
 - `api/src/utils/permissions.js`'s `isEventEditor(user, eventId)` gates
   every route in `api/src/routes/events.js`: true for `is_admin`; for

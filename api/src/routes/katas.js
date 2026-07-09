@@ -5,7 +5,7 @@ const asyncHandler = require("../utils/asyncHandler");
 
 const router = Router();
 
-const FIELDS = `id, name, style, created_at`;
+const FIELDS = `id, name, style, wkf_number, created_at`;
 
 router.use(authorize());
 
@@ -13,7 +13,7 @@ router.get(
   "/",
   asyncHandler(async (req, res) => {
     const { rows } = await pool.query(
-      `SELECT ${FIELDS} FROM nk_katas ORDER BY name`
+      `SELECT ${FIELDS} FROM nk_katas ORDER BY style NULLS LAST, wkf_number NULLS LAST, name`
     );
     res.json({ katas: rows });
   })
@@ -23,16 +23,21 @@ router.post(
   "/",
   authorize.requireAdmin,
   asyncHandler(async (req, res) => {
-    const { name, style } = req.body ?? {};
+    const { name, style, wkf_number } = req.body ?? {};
 
     if (typeof name !== "string" || name.trim().length === 0) {
       return res.status(400).json({ error: { message: "Name is required" } });
     }
+    if (wkf_number !== undefined && wkf_number !== null && !Number.isInteger(wkf_number)) {
+      return res
+        .status(400)
+        .json({ error: { message: "wkf_number must be an integer" } });
+    }
 
     try {
       const { rows } = await pool.query(
-        `INSERT INTO nk_katas (name, style) VALUES ($1, $2) RETURNING ${FIELDS}`,
-        [name, style ?? null]
+        `INSERT INTO nk_katas (name, style, wkf_number) VALUES ($1, $2, $3) RETURNING ${FIELDS}`,
+        [name, style ?? null, wkf_number ?? null]
       );
       res.status(201).json({ kata: rows[0] });
     } catch (err) {
@@ -51,9 +56,19 @@ router.patch(
   authorize.requireAdmin,
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
-    const { name, style } = body;
+    const { name, style, wkf_number } = body;
 
-    const fields = { name, style };
+    if (
+      "wkf_number" in body &&
+      wkf_number !== null &&
+      !Number.isInteger(wkf_number)
+    ) {
+      return res
+        .status(400)
+        .json({ error: { message: "wkf_number must be an integer" } });
+    }
+
+    const fields = { name, style, wkf_number };
     const setClauses = [];
     const values = [];
     for (const [key, value] of Object.entries(fields)) {

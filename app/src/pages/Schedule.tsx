@@ -52,6 +52,7 @@ interface Kata {
   id: number;
   name: string;
   style: string | null;
+  wkf_number: number | null;
 }
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -620,6 +621,10 @@ function weekdayOf(dateStr: string) {
   return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
 }
 
+function kataLabel(k: Kata) {
+  return k.wkf_number != null ? `${k.wkf_number}. ${k.name}` : k.name;
+}
+
 function ItemsSection({
   eventId,
   items,
@@ -830,7 +835,7 @@ function ItemsSection({
                     <SingleSelectPicker
                       label="Kata"
                       placeholder="Search katas..."
-                      options={katas.map((k) => ({ id: k.id, label: k.name }))}
+                      options={katas.map((k) => ({ id: k.id, label: kataLabel(k) }))}
                       selectedId={item.kata_id}
                       onSelect={(id) =>
                         updateItem(item.id, {
@@ -942,7 +947,7 @@ function ItemsSection({
             <SingleSelectPicker
               label="Kata"
               placeholder="Search katas..."
-              options={katas.map((k) => ({ id: k.id, label: k.name }))}
+              options={katas.map((k) => ({ id: k.id, label: kataLabel(k) }))}
               selectedId={addForm.kata_id}
               onSelect={(id) =>
                 setAddForm({
