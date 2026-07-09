@@ -42,10 +42,6 @@ interface Person {
 interface TrainingModule {
   id: number;
   title: string;
-  explanation: string | null;
-  video_url: string | null;
-  duration_seconds: number | null;
-  sets: { id: number; position: number; reps: number }[];
 }
 
 interface Kata {

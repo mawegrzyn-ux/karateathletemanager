@@ -198,15 +198,21 @@ coach-run attendance) — this is personal athlete itinerary planning.
   date (capped at 60) at creation time — there's no ongoing
   series/recurrence-rule link, so each generated item is thereafter
   edited/deleted on its own, same as a manually-created one.
-- **Training modules**: `nk_training_modules` (`title`, `explanation`,
-  `video_url`, `duration_seconds`) is a reusable library of training
-  session plans a coach or admin authors; `nk_training_module_sets`
-  (`module_id`, `position`, `reps`) is its optional ordered reps/sets
-  list, replaced as a whole unit on write (same pattern as club
-  membership `PUT`s). `api/src/routes/trainingModules.js` — `GET` is
-  open to any authenticated user (used by the Schedule item picker),
-  `POST`/`PATCH`/`DELETE` require `authorize("coach")` (coach or admin).
-  A `training` item can optionally link to one module via
+- **Training modules**: `nk_training_modules` (`title`, `explanation`) is
+  a reusable library of session plans a coach or admin authors. Each
+  plan is an ordered sequence of `nk_training_module_items`
+  (`module_id`, `position`, `item_type` — `exercise` or `rest`, `name`,
+  `explanation`, `video_url`, `sets`, `reps`, `duration_seconds`),
+  replaced as a whole unit on write (same pattern as club membership
+  `PUT`s). An `exercise` item carries its own name/explanation/video and
+  is measured either by `sets`+`reps` or by `duration_seconds` (not
+  both); a `rest` item just carries `duration_seconds`. Validation is
+  lenient (only `item_type` and, for exercises, `name` are required) so
+  a plan can be edited field-by-field without every in-progress item
+  needing to be fully filled in yet. `api/src/routes/trainingModules.js`
+  — `GET` is open to any authenticated user (used by the Schedule item
+  picker), `POST`/`PATCH`/`DELETE` require `authorize("coach")` (coach or
+  admin). A `training` item can optionally link to one module via
   `training_module_id`.
 - **Katas**: `nk_katas` (`name` unique, `style`, `wkf_number`) is an
   admin-managed reference list, seeded via migration with a starting set

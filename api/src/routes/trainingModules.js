@@ -5,33 +5,73 @@ const asyncHandler = require("../utils/asyncHandler");
 
 const router = Router();
 
+const ITEM_TYPES = ["exercise", "rest"];
+
 const MODULE_QUERY = `
-  SELECT tm.id, tm.title, tm.explanation, tm.video_url, tm.duration_seconds, tm.created_at,
+  SELECT tm.id, tm.title, tm.explanation, tm.created_at, tm.updated_at,
     COALESCE(
-      json_agg(json_build_object('id', s.id, 'position', s.position, 'reps', s.reps)
-        ORDER BY s.position) FILTER (WHERE s.id IS NOT NULL),
+      json_agg(json_build_object(
+        'id', i.id, 'position', i.position, 'item_type', i.item_type,
+        'name', i.name, 'explanation', i.explanation, 'video_url', i.video_url,
+        'sets', i.sets, 'reps', i.reps, 'duration_seconds', i.duration_seconds
+      ) ORDER BY i.position) FILTER (WHERE i.id IS NOT NULL),
       '[]'
-    ) AS sets
+    ) AS items
   FROM nk_training_modules tm
-  LEFT JOIN nk_training_module_sets s ON s.module_id = tm.id
+  LEFT JOIN nk_training_module_items i ON i.module_id = tm.id
   GROUP BY tm.id
 `;
 
 router.use(authorize());
 
-async function insertSets(client, moduleId, sets) {
-  if (!Array.isArray(sets)) return;
-  await client.query(`DELETE FROM nk_training_module_sets WHERE module_id = $1`, [
-    moduleId,
-  ]);
-  for (let i = 0; i < sets.length; i++) {
-    const reps = Number(sets[i]?.reps);
-    if (!Number.isInteger(reps) || reps <= 0) {
-      throw { status: 400, message: "Each set needs a positive integer reps value" };
+async function insertItems(client, moduleId, items) {
+  if (!Array.isArray(items)) return;
+  await client.query(
+    `DELETE FROM nk_training_module_items WHERE module_id = $1`,
+    [moduleId]
+  );
+
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i] ?? {};
+
+    if (!ITEM_TYPES.includes(it.item_type)) {
+      throw { status: 400, message: "Each item needs a valid item_type" };
     }
+    if (
+      it.item_type === "exercise" &&
+      (typeof it.name !== "string" || it.name.trim().length === 0)
+    ) {
+      throw { status: 400, message: "Each exercise needs a name" };
+    }
+
+    const sets = it.sets != null ? Number(it.sets) : null;
+    const reps = it.reps != null ? Number(it.reps) : null;
+    const duration = it.duration_seconds != null ? Number(it.duration_seconds) : null;
+    if (sets != null && (!Number.isInteger(sets) || sets <= 0)) {
+      throw { status: 400, message: "sets must be a positive integer" };
+    }
+    if (reps != null && (!Number.isInteger(reps) || reps <= 0)) {
+      throw { status: 400, message: "reps must be a positive integer" };
+    }
+    if (duration != null && (!Number.isInteger(duration) || duration <= 0)) {
+      throw { status: 400, message: "duration_seconds must be a positive integer" };
+    }
+
     await client.query(
-      `INSERT INTO nk_training_module_sets (module_id, position, reps) VALUES ($1, $2, $3)`,
-      [moduleId, i, reps]
+      `INSERT INTO nk_training_module_items
+         (module_id, position, item_type, name, explanation, video_url, sets, reps, duration_seconds)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        moduleId,
+        i,
+        it.item_type,
+        it.item_type === "exercise" ? it.name : null,
+        it.explanation ?? null,
+        it.video_url ?? null,
+        sets,
+        reps,
+        duration,
+      ]
     );
   }
 }
@@ -61,8 +101,7 @@ router.post(
   "/",
   authorize("coach"),
   asyncHandler(async (req, res) => {
-    const { title, explanation, video_url, duration_seconds, sets } =
-      req.body ?? {};
+    const { title, explanation, items } = req.body ?? {};
 
     if (typeof title !== "string" || title.trim().length === 0) {
       return res.status(400).json({ error: { message: "Title is required" } });
@@ -72,13 +111,13 @@ router.post(
     try {
       await client.query("BEGIN");
       const { rows } = await client.query(
-        `INSERT INTO nk_training_modules (title, explanation, video_url, duration_seconds)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO nk_training_modules (title, explanation)
+         VALUES ($1, $2)
          RETURNING id`,
-        [title, explanation ?? null, video_url ?? null, duration_seconds ?? null]
+        [title, explanation ?? null]
       );
       const moduleId = rows[0].id;
-      await insertSets(client, moduleId, sets);
+      await insertItems(client, moduleId, items);
       await client.query("COMMIT");
 
       const { rows: full } = await client.query(`${MODULE_QUERY} HAVING tm.id = $1`, [
@@ -102,9 +141,9 @@ router.patch(
   authorize("coach"),
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
-    const { title, explanation, video_url, duration_seconds, sets } = body;
+    const { title, explanation, items } = body;
 
-    const fields = { title, explanation, video_url, duration_seconds };
+    const fields = { title, explanation };
     const setClauses = [];
     const values = [];
     for (const [key, value] of Object.entries(fields)) {
@@ -131,8 +170,8 @@ router.patch(
         }
       }
 
-      if ("sets" in body) {
-        await insertSets(client, req.params.id, sets);
+      if ("items" in body) {
+        await insertItems(client, req.params.id, items);
       }
 
       await client.query("COMMIT");
