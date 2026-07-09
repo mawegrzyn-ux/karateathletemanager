@@ -182,7 +182,9 @@ tables further up (a still-unbuilt *recurring weekly class* concept for
 coach-run attendance) — this is personal athlete itinerary planning.
 
 - `nk_events` (`title`, `event_type`, `start_date`, `end_date`,
-  `location`, `notes`) — `event_type` is one of `competition`,
+  `start_time`, `end_time` — both optional, unlike the required times
+  on `nk_event_items` — `location`, `notes`) — `event_type` is one of
+  `competition`,
   `squad_session`, `training`, `travel`, `time_off`, `seminar`,
   `training_camp`. `nk_event_athletes` (many-to-many) attaches one or
   more athletes — personal events have one, squad-level events have

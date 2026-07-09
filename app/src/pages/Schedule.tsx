@@ -16,6 +16,8 @@ interface Event {
   event_type: string;
   start_date: string;
   end_date: string;
+  start_time: string | null;
+  end_time: string | null;
   location: string | null;
   notes: string | null;
 }
@@ -82,6 +84,8 @@ const EMPTY_FORM = {
   event_type: "training",
   start_date: "",
   end_date: "",
+  start_time: "",
+  end_time: "",
   location: "",
   notes: "",
 };
@@ -180,6 +184,8 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     if (!form.title.trim() || !form.start_date || !form.end_date) return;
     const { event } = await api.post<{ event: Event }>("/events", {
       ...form,
+      start_time: form.start_time || null,
+      end_time: form.end_time || null,
       athlete_ids: canPickAthletes ? formAthleteIds : undefined,
     });
     setEvents((prev) => (prev ? [...prev, event] : [event]));
@@ -242,6 +248,8 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               <span className="text-xs text-slate-500">
                 {toDateInput(e.start_date)}
                 {e.end_date !== e.start_date ? ` – ${toDateInput(e.end_date)}` : ""}
+                {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
+                {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
               </span>
             </div>
           </button>
@@ -295,6 +303,22 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               type="date"
               value={form.end_date}
               onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            />
+          </Field>
+          <Field label="Start time">
+            <input
+              type="time"
+              value={form.start_time}
+              onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            />
+          </Field>
+          <Field label="End time">
+            <input
+              type="time"
+              value={form.end_time}
+              onChange={(e) => setForm({ ...form, end_time: e.target.value })}
               className="min-h-[44px] rounded-lg border border-slate-300 px-3"
             />
           </Field>
@@ -453,6 +477,24 @@ function EventDetail({
           type="date"
           defaultValue={toDateInput(event.end_date)}
           onChange={(e) => updateEvent({ end_date: e.target.value })}
+          className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        />
+      </Field>
+      <Field label="Start time">
+        <input
+          type="time"
+          defaultValue={toTimeInput(event.start_time)}
+          onChange={(e) =>
+            updateEvent({ start_time: e.target.value || null })
+          }
+          className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        />
+      </Field>
+      <Field label="End time">
+        <input
+          type="time"
+          defaultValue={toTimeInput(event.end_time)}
+          onChange={(e) => updateEvent({ end_time: e.target.value || null })}
           className="min-h-[44px] rounded-lg border border-slate-300 px-3"
         />
       </Field>
