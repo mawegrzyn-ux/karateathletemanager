@@ -66,6 +66,12 @@ export default function More() {
           >
             Manage katas
           </Link>
+          <Link
+            to="/admin/karate-styles"
+            className="min-h-[44px] rounded-lg border border-slate-200 px-4 py-2 font-medium"
+          >
+            Manage karate styles
+          </Link>
         </>
       )}
 

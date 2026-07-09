@@ -10,6 +10,7 @@ const publicClubs = require("./publicClubs");
 const events = require("./events");
 const trainingModules = require("./trainingModules");
 const katas = require("./katas");
+const karateStyles = require("./karateStyles");
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use("/public/clubs", publicClubs);
 router.use("/events", events);
 router.use("/training-modules", trainingModules);
 router.use("/katas", katas);
+router.use("/karate-styles", karateStyles);
 
 module.exports = router;

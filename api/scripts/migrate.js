@@ -370,6 +370,30 @@ const migrations = [
    ALTER TABLE nk_event_items ADD CONSTRAINT nk_event_items_item_type_check
      CHECK (item_type IN ('competition','squad_session','training','travel',
        'time_off','seminar','training_camp','rest','other','kata_performance'))`,
+
+  `CREATE TABLE IF NOT EXISTS nk_karate_styles (
+     id         SERIAL PRIMARY KEY,
+     name       VARCHAR(100) NOT NULL UNIQUE,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  // Seeded to match the style strings already used on nk_katas; admin can
+  // add more (Kyokushin, Uechi-ryu, etc.) via the admin Karate Styles page.
+  `INSERT INTO nk_karate_styles (name) VALUES
+     ('Shotokan'), ('Goju-ryu'), ('Shito-ryu'), ('Wado-ryu')
+   ON CONFLICT (name) DO NOTHING`,
+
+  `CREATE TABLE IF NOT EXISTS nk_athlete_styles (
+     athlete_id INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     style_id   INTEGER NOT NULL REFERENCES nk_karate_styles(id) ON DELETE CASCADE,
+     PRIMARY KEY (athlete_id, style_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS nk_club_styles (
+     club_id  INTEGER NOT NULL REFERENCES nk_clubs(id) ON DELETE CASCADE,
+     style_id INTEGER NOT NULL REFERENCES nk_karate_styles(id) ON DELETE CASCADE,
+     PRIMARY KEY (club_id, style_id)
+  )`,
 ];
 
 async function migrate() {

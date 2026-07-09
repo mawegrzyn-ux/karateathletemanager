@@ -45,6 +45,11 @@ interface PendingMember {
   wants_coach: boolean;
 }
 
+interface KarateStyle {
+  id: number;
+  name: string;
+}
+
 const EMPTY_FORM = {
   name: "",
   location: "",
@@ -61,6 +66,10 @@ export default function Clubs() {
   const [associations, setAssociations] = useState<Association[]>([]);
   const [allAthletes, setAllAthletes] = useState<Person[]>([]);
   const [allCoaches, setAllCoaches] = useState<Person[]>([]);
+  const [styles, setStyles] = useState<KarateStyle[]>([]);
+  const [clubStyleIds, setClubStyleIds] = useState<Record<number, number[]>>(
+    {}
+  );
   const [memberships, setMemberships] = useState<Record<number, Membership>>(
     {}
   );
@@ -76,17 +85,19 @@ export default function Clubs() {
 
   async function load() {
     try {
-      const [clubsRes, associationsRes, athletesRes, coachesRes] =
+      const [clubsRes, associationsRes, athletesRes, coachesRes, stylesRes] =
         await Promise.all([
           api.get<{ clubs: Club[] }>("/admin/clubs"),
           api.get<{ associations: Association[] }>("/admin/associations"),
           api.get<{ athletes: Person[] }>("/athletes"),
           api.get<{ coaches: Person[] }>("/admin/coaches"),
+          api.get<{ styles: KarateStyle[] }>("/karate-styles"),
         ]);
       setClubs(clubsRes.clubs);
       setAssociations(associationsRes.associations);
       setAllAthletes(athletesRes.athletes);
       setAllCoaches(coachesRes.coaches);
+      setStyles(stylesRes.styles);
 
       const entries = await Promise.all(
         clubsRes.clubs.map(async (c) => {
@@ -109,6 +120,16 @@ export default function Clubs() {
         })
       );
       setMemberships(Object.fromEntries(entries));
+
+      const styleEntries = await Promise.all(
+        clubsRes.clubs.map(async (c) => {
+          const res = await api.get<{ styleIds: number[] }>(
+            `/admin/clubs/${c.id}/styles`
+          );
+          return [c.id, res.styleIds] as const;
+        })
+      );
+      setClubStyleIds(Object.fromEntries(styleEntries));
     } catch {
       setError("Failed to load clubs");
     }
@@ -131,7 +152,23 @@ export default function Clubs() {
       ...prev,
       [club.id]: { athleteIds: [], coachIds: [], coachAdminIds: [] },
     }));
+    setClubStyleIds((prev) => ({ ...prev, [club.id]: [] }));
     setDrawer("closed");
+  }
+
+  async function addClubStyle(clubId: number, styleId: number) {
+    const current = clubStyleIds[clubId] ?? [];
+    if (current.includes(styleId)) return;
+    const next = [...current, styleId];
+    await api.put(`/admin/clubs/${clubId}/styles`, { styleIds: next });
+    setClubStyleIds((prev) => ({ ...prev, [clubId]: next }));
+  }
+
+  async function removeClubStyle(clubId: number, styleId: number) {
+    const current = clubStyleIds[clubId] ?? [];
+    const next = current.filter((id) => id !== styleId);
+    await api.put(`/admin/clubs/${clubId}/styles`, { styleIds: next });
+    setClubStyleIds((prev) => ({ ...prev, [clubId]: next }));
   }
 
   async function updateClub(id: number, patch: Record<string, unknown>) {
@@ -372,6 +409,13 @@ export default function Clubs() {
               />
             </Field>
 
+            <StylePicker
+              ids={clubStyleIds[editing.id] ?? []}
+              options={styles}
+              onAdd={(id) => addClubStyle(editing.id, id)}
+              onRemove={(id) => removeClubStyle(editing.id, id)}
+            />
+
             <MemberEditor
               label="Athletes"
               ids={editingMembership.athleteIds}
@@ -599,6 +643,59 @@ function MemberEditor({
                 </button>
               )}
             </div>
+          );
+        })}
+        {results.length === 0 && (
+          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StylePicker({
+  ids,
+  options,
+  onAdd,
+  onRemove,
+}: {
+  ids: number[];
+  options: KarateStyle[];
+  onAdd: (id: number) => void;
+  onRemove: (id: number) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const results = options.filter((o) => o.name.toLowerCase().includes(q));
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
+      <span className="text-xs font-medium text-slate-600">
+        Styles ({ids.length})
+      </span>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search styles..."
+        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+      />
+      <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+        {results.map((o) => {
+          const added = ids.includes(o.id);
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => (added ? onRemove(o.id) : onAdd(o.id))}
+              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+                added
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : "border-slate-200"
+              }`}
+            >
+              <span>{o.name}</span>
+              <span className="text-sm">{added ? "✓ Added" : "+ Add"}</span>
+            </button>
           );
         })}
         {results.length === 0 && (

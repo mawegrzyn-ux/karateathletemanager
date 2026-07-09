@@ -220,8 +220,22 @@ coach-run attendance) — this is personal athlete itinerary planning.
   any authenticated user (ordered by style then `wkf_number`),
   `POST`/`PATCH`/`DELETE` `authorize.requireAdmin`. A `kata_performance`
   item links to one kata via `kata_id`; picking a kata in `Schedule.tsx`
-  shows its WKF number in the picker ("3. Kanku Dai") and auto-fills the
-  item's (still-editable) title with the kata's name.
+  shows its WKF number and style in the picker ("3. Kanku Dai
+  (Shotokan)") and auto-fills the item's (still-editable) title with the
+  kata's name.
+- **Karate styles**: `nk_karate_styles` (`name` unique) is an
+  admin-managed reference list, seeded with the same four style names
+  already used on `nk_katas` (Shotokan, Goju-ryu, Shito-ryu, Wado-ryu) —
+  admins can add more via the admin Karate Styles page.
+  `api/src/routes/karateStyles.js` — `GET` open to any authenticated
+  user, `POST`/`PATCH`/`DELETE` `authorize.requireAdmin`. Athletes and
+  clubs can each select one or more styles: `nk_athlete_styles`
+  (`athlete_id` + `style_id`) and `nk_club_styles` (`club_id` +
+  `style_id`) are many-to-many join tables, each replaced as a whole
+  unit via `PUT /api/athletes/:id/styles` (admin/coach only — self-view
+  shows styles read-only, same as the rest of an athlete's profile) and
+  `PUT /api/admin/clubs/:id/styles` (`isClubAdmin`-gated, same as club
+  athlete/coach membership).
 - `api/src/utils/permissions.js`'s `isEventEditor(user, eventId)` gates
   every route in `api/src/routes/events.js`: true for `is_admin`; for
   `role === 'athlete'`, true if they're one of the attached athletes;
