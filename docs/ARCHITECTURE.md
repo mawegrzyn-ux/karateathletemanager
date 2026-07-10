@@ -217,14 +217,13 @@ coach-run attendance) — this is personal athlete itinerary planning.
   admin). A `training` item can optionally link to one module via
   `training_module_id`.
 - **Katas**: `nk_katas` (`name` unique, `style`, `wkf_number`) is an
-  admin-managed reference list, seeded via migration with a starting set
-  of well-known traditional/WKF-style kata names across Shotokan,
-  Goju-ryu, Shito-ryu, and Wado-ryu, each tagged with a best-effort
-  official WKF Kata List number (numbered within its style, per the
-  published WKF kata scoresheet) — both the names and numbers are a
-  starting point, not guaranteed to exactly match the current official
-  WKF document from memory alone, and are fully correctable afterward
-  via the admin Katas page. `api/src/routes/katas.js` — `GET` open to
+  admin-managed reference list, seeded via migration with the full
+  official WKF Kata Name/Order List — 102 kata names numbered 1-102 in
+  a single alphabetical sequence spanning all styles (not per-style
+  numbering). `style` is a free-text tag applied only to the subset of
+  katas the app also uses elsewhere (Shotokan/Goju-ryu/Shito-ryu/
+  Wado-ryu); it's independent of `wkf_number` and fully correctable via
+  the admin Katas page. `api/src/routes/katas.js` — `GET` open to
   any authenticated user (ordered by style then `wkf_number`),
   `POST`/`PATCH`/`DELETE` `authorize.requireAdmin`. A `kata_performance`
   item links to one kata via `kata_id`; picking a kata in `Schedule.tsx`

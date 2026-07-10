@@ -420,6 +420,73 @@ const migrations = [
   `ALTER TABLE nk_events
      ADD COLUMN IF NOT EXISTS start_time TIME,
      ADD COLUMN IF NOT EXISTS end_time TIME`,
+
+  // The earlier wkf_number seed above was wrong: it numbered each style's
+  // katas 1..N independently, but the official WKF Kata List (per the
+  // reference document supplied 2026-07-10) is a single list of 102
+  // katas in alphabetical order, numbered 1-102 across all styles. This
+  // replaces those per-style numbers with the correct global numbers,
+  // matched by name (including the couple of spelling variants already
+  // present in our seed, e.g. "Chatanyara Kushanku" for the official
+  // "Chatanyara Kusanku").
+  `UPDATE nk_katas SET wkf_number = v.num FROM (VALUES
+     ('Anan', 1), ('Anan Dai', 2), ('Ananko', 3), ('Aoyagi', 4), ('Bassai', 5),
+     ('Bassai Dai', 6), ('Bassai Sho', 7),
+     ('Chatanyara Kusanku', 8), ('Chatanyara Kushanku', 8),
+     ('Chibana No Kushanku', 9), ('Chinte', 10), ('Chinto', 11), ('Empi', 12),
+     ('Fukyugata Ichi', 13), ('Fukyugata Ni', 14), ('Gankaku', 15), ('Garyu', 16),
+     ('Gekisai (Geksai) 1', 17), ('Gekisai Dai Ichi', 17),
+     ('Gekisai (Geksai) 2', 18), ('Gekisai Dai Ni', 18),
+     ('Gojushiho', 19), ('Gojushiho Dai', 20), ('Gojushiho Sho', 21),
+     ('Hakucho', 22), ('Hangetsu', 23), ('Haufa (Haffa)', 24),
+     ('Heian Shodan', 25), ('Heian Nidan', 26), ('Heian Sandan', 27),
+     ('Heian Yondan', 28), ('Heian Godan', 29), ('Heiku', 30),
+     ('Ishimine Bassai', 31), ('Itosu Rohai Shodan', 32),
+     ('Itosu Rohai Nidan', 33), ('Itosu Rohai Sandan', 34),
+     ('Jiin', 35), ('Jion', 36), ('Jitte', 37), ('Juroku', 38), ('Kanchin', 39),
+     ('Kanku Dai', 40), ('Kanku Sho', 41), ('Kanshu', 42),
+     ('Kishimoto No Kushanku', 43), ('Kousoukun', 44), ('Kousoukun Dai', 45),
+     ('Kousoukun Sho', 46), ('Kururunfa', 47), ('Kusanku', 48), ('Kushanku', 48),
+     ('Kyan No Chinto', 49), ('Kyan No Wanshu', 50), ('Matsukaze', 51),
+     ('Matsumura Bassai', 52), ('Matsumura Rohai', 53), ('Meikyo', 54),
+     ('Myojo', 55), ('Naifanchin Shodan', 56), ('Naifanchin Nidan', 57),
+     ('Naifanchin Sandan', 58), ('Naihanchi', 59), ('Nijushiho', 60),
+     ('Nipaipo', 61), ('Niseishi', 62), ('Ohan', 63), ('Ohan Dai', 64),
+     ('Oyadomari No Passai', 65), ('Pachu', 66), ('Paiku', 67), ('Papuren', 68),
+     ('Passai', 69), ('Pinan Shodan', 70), ('Pinan Nidan', 71),
+     ('Pinan Sandan', 72), ('Pinan Yondan', 73), ('Pinan Godan', 74),
+     ('Rohai', 75), ('Saifa', 76), ('Sanchin', 77), ('Sansai', 78),
+     ('Sanseiru', 79), ('Sanseru', 80), ('Seichin', 81),
+     ('Seienchin (Seiyunchin)', 82), ('Seienchin', 82), ('Seiyunchin', 82),
+     ('Seipai', 83), ('Seiryu', 84), ('Seishan', 85),
+     ('Seisan (Sesan)', 86), ('Seisan', 86), ('Shiho Kousoukun', 87),
+     ('Shinpa', 88), ('Shinsei', 89), ('Shisochin', 90), ('Sochin', 91),
+     ('Suparinpei', 92), ('Tekki Shodan', 93), ('Tekki Nidan', 94),
+     ('Tekki Sandan', 95), ('Tensho', 96), ('Tomari Bassai', 97),
+     ('Unshu', 98), ('Unsu', 99), ('Useishi', 100), ('Wankan', 101), ('Wanshu', 102)
+   ) AS v(name, num) WHERE nk_katas.name = v.name`,
+
+  // Fill in the katas from the official list that our earlier best-effort
+  // seed was missing entirely, so the library matches the reference
+  // document in full. No style is set for these (the official list
+  // isn't organized by style) — admins can tag one via the Katas page.
+  `INSERT INTO nk_katas (name, wkf_number) VALUES
+     ('Anan', 1), ('Anan Dai', 2), ('Ananko', 3), ('Aoyagi', 4), ('Bassai', 5),
+     ('Chibana No Kushanku', 9), ('Fukyugata Ichi', 13), ('Fukyugata Ni', 14),
+     ('Garyu', 16), ('Gojushiho', 19), ('Hakucho', 22), ('Haufa (Haffa)', 24),
+     ('Heiku', 30), ('Ishimine Bassai', 31), ('Itosu Rohai Shodan', 32),
+     ('Itosu Rohai Nidan', 33), ('Itosu Rohai Sandan', 34), ('Jiin', 35),
+     ('Juroku', 38), ('Kanchin', 39), ('Kanshu', 42),
+     ('Kishimoto No Kushanku', 43), ('Kousoukun', 44), ('Kousoukun Dai', 45),
+     ('Kousoukun Sho', 46), ('Kyan No Chinto', 49), ('Kyan No Wanshu', 50),
+     ('Matsumura Bassai', 52), ('Matsumura Rohai', 53), ('Myojo', 55),
+     ('Naifanchin Shodan', 56), ('Naifanchin Nidan', 57), ('Naifanchin Sandan', 58),
+     ('Ohan', 63), ('Ohan Dai', 64), ('Oyadomari No Passai', 65), ('Pachu', 66),
+     ('Paiku', 67), ('Papuren', 68), ('Passai', 69), ('Sansai', 78),
+     ('Sanseru', 80), ('Seichin', 81), ('Seiryu', 84), ('Shiho Kousoukun', 87),
+     ('Shinpa', 88), ('Shinsei', 89), ('Tomari Bassai', 97), ('Unshu', 98),
+     ('Useishi', 100), ('Wanshu', 102)
+   ON CONFLICT (name) DO NOTHING`,
 ];
 
 async function migrate() {
