@@ -148,7 +148,7 @@ export default function Associations() {
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Associations</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Associations</h1>
         {isAdmin && <AddButton onClick={openCreate} />}
       </div>
 
@@ -156,7 +156,7 @@ export default function Associations() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search associations..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
 
       <div className="flex flex-col gap-2">
@@ -164,7 +164,7 @@ export default function Associations() {
           <button
             key={a.id}
             onClick={() => setDrawer(a)}
-            className="min-h-[44px] rounded-lg border border-slate-200 px-3 py-2 text-left font-medium"
+            className="flex min-h-[44px] items-center rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
           >
             {a.name}
           </button>
@@ -182,7 +182,7 @@ export default function Associations() {
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Contact email">
@@ -192,7 +192,7 @@ export default function Associations() {
               onChange={(e) =>
                 setForm({ ...form, contact_email: e.target.value })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Contact phone">
@@ -201,7 +201,7 @@ export default function Associations() {
               onChange={(e) =>
                 setForm({ ...form, contact_phone: e.target.value })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Description">
@@ -210,12 +210,12 @@ export default function Associations() {
               onChange={(e) =>
                 setForm({ ...form, description: e.target.value })
               }
-              className="rounded-lg border border-slate-300 px-3 py-2"
+              className="rounded-xl border border-stone-300 px-3 py-2"
             />
           </Field>
           <button
             type="submit"
-            className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white"
+            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
           >
             Create
           </button>
@@ -237,7 +237,7 @@ export default function Associations() {
                     updateAssociation(editing.id, { name: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Contact email">
@@ -250,7 +250,7 @@ export default function Associations() {
                     });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Contact phone">
@@ -263,7 +263,7 @@ export default function Associations() {
                     });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Description">
@@ -276,7 +276,7 @@ export default function Associations() {
                     });
                   }
                 }}
-                className="rounded-lg border border-slate-300 px-3 py-2"
+                className="rounded-xl border border-stone-300 px-3 py-2"
               />
             </Field>
 
@@ -320,15 +320,15 @@ function CoachAdminEditor({
   );
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
         Coach admins ({ids.length})
       </span>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search coaches..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
         {results.map((o) => {
@@ -338,10 +338,10 @@ function CoachAdminEditor({
               key={o.id}
               type="button"
               onClick={() => (added ? onRemove(o.id) : onAdd(String(o.id)))}
-              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+              className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
                 added
                   ? "border-green-200 bg-green-50 text-green-800"
-                  : "border-slate-200"
+                  : "border-stone-200"
               }`}
             >
               <span>
@@ -352,7 +352,7 @@ function CoachAdminEditor({
           );
         })}
         {results.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+          <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
       </div>
     </div>

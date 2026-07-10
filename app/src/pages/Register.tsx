@@ -50,7 +50,7 @@ export default function Register() {
 
   return (
     <div className="flex min-h-full flex-col justify-center gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Create account</h1>
+      <h1 className="text-2xl font-bold tracking-tight">Create account</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field label="Email">
           <input
@@ -58,7 +58,7 @@ export default function Register() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
           />
         </Field>
         <Field label="Password">
@@ -68,15 +68,15 @@ export default function Register() {
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
           />
         </Field>
 
         <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-slate-700">
+          <span className="text-sm font-medium text-stone-700">
             I'm joining as (optional)
           </span>
-          <label className="flex min-h-[44px] items-center gap-2 rounded-lg border border-slate-300 px-3">
+          <label className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-300 px-3">
             <input
               type="checkbox"
               checked={wantsAthlete}
@@ -84,7 +84,7 @@ export default function Register() {
             />
             An athlete
           </label>
-          <label className="flex min-h-[44px] items-center gap-2 rounded-lg border border-slate-300 px-3">
+          <label className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-300 px-3">
             <input
               type="checkbox"
               checked={wantsCoach}
@@ -100,12 +100,12 @@ export default function Register() {
         <button
           type="submit"
           disabled={submitting}
-          className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white disabled:opacity-50"
+          className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
         >
           Register
         </button>
       </form>
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-stone-600">
         Already have an account?{" "}
         <Link to="/login" className="font-medium text-red-700">
           Log in
@@ -129,15 +129,15 @@ function ClubPicker({
   const results = options.filter((o) => o.name.toLowerCase().includes(q));
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
         Club (optional)
       </span>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search clubs..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
         {results.map((o) => {
@@ -147,10 +147,10 @@ function ClubPicker({
               key={o.id}
               type="button"
               onClick={() => onSelect(selected ? null : o.id)}
-              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+              className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
                 selected
                   ? "border-green-200 bg-green-50 text-green-800"
-                  : "border-slate-200"
+                  : "border-stone-200"
               }`}
             >
               <span>{o.name}</span>
@@ -161,7 +161,7 @@ function ClubPicker({
           );
         })}
         {results.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+          <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
       </div>
     </div>

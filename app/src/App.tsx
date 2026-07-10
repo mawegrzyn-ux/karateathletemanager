@@ -25,20 +25,20 @@ const tabs = [
 
 function Shell() {
   return (
-    <div className="flex h-full flex-col">
-      <main className="flex-1 overflow-y-auto pb-20">
+    <div className="flex h-full flex-col bg-stone-100">
+      <main className="flex-1 overflow-y-auto pb-24">
         <Outlet />
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 flex border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)]">
+      <nav className="fixed inset-x-0 bottom-0 flex justify-around bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-1px_2px_rgba(28,25,23,0.04),0_-8px_20px_-6px_rgba(28,25,23,0.10)] backdrop-blur">
         {tabs.map((tab) => (
           <NavLink
             key={tab.to}
             to={tab.to}
             end={tab.end}
             className={({ isActive }) =>
-              `flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs ${
-                isActive ? "text-red-700" : "text-slate-500"
+              `my-2 flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl py-2 text-xs font-medium transition-colors ${
+                isActive ? "bg-red-50 text-red-600" : "text-stone-500"
               }`
             }
           >

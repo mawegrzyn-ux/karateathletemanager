@@ -123,8 +123,8 @@ export default function Schedule() {
 
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-2 p-6 text-center">
-      <h1 className="text-xl font-semibold">Schedule</h1>
-      <p className="text-slate-600">
+      <h1 className="text-2xl font-bold tracking-tight">Schedule</h1>
+      <p className="text-stone-600">
         Ask your coach about upcoming training and events.
       </p>
     </div>
@@ -224,7 +224,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Schedule</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Schedule</h1>
         <AddButton onClick={openCreate} />
       </div>
 
@@ -232,7 +232,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search schedule..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
 
       <div className="flex flex-col gap-2">
@@ -240,12 +240,12 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           <button
             key={e.id}
             onClick={() => setDrawer(e)}
-            className="flex min-h-[44px] flex-col items-start gap-1 rounded-lg border border-slate-200 px-3 py-2 text-left"
+            className="flex min-h-[44px] flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 text-left shadow-card"
           >
             <span className="font-medium">{e.title}</span>
             <div className="flex items-center gap-2">
               <Badge>{TYPE_LABELS[e.event_type] ?? e.event_type}</Badge>
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-stone-500">
                 {toDateInput(e.start_date)}
                 {e.end_date !== e.start_date ? ` – ${toDateInput(e.end_date)}` : ""}
                 {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
@@ -255,7 +255,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           </button>
         ))}
         {filteredEvents.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">
+          <p className="px-1 py-2 text-sm text-stone-500">
             Nothing scheduled yet.
           </p>
         )}
@@ -272,14 +272,14 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               required
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Type">
             <select
               value={form.event_type}
               onChange={(e) => setForm({ ...form, event_type: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             >
               {EVENT_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -294,7 +294,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               type="date"
               value={form.start_date}
               onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="End date">
@@ -303,7 +303,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               type="date"
               value={form.end_date}
               onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Start time">
@@ -311,7 +311,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               type="time"
               value={form.start_time}
               onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="End time">
@@ -319,21 +319,21 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               type="time"
               value={form.end_time}
               onChange={(e) => setForm({ ...form, end_time: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Location">
             <input
               value={form.location}
               onChange={(e) => setForm({ ...form, location: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Notes">
             <textarea
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              className="rounded-lg border border-slate-300 px-3 py-2"
+              className="rounded-xl border border-stone-300 px-3 py-2"
             />
           </Field>
 
@@ -350,7 +350,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
 
           <button
             type="submit"
-            className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white"
+            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
           >
             Create
           </button>
@@ -448,14 +448,14 @@ function EventDetail({
               updateEvent({ title: e.target.value });
             }
           }}
-          className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
         />
       </Field>
       <Field label="Type">
         <select
           value={event.event_type}
           onChange={(e) => updateEvent({ event_type: e.target.value })}
-          className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
         >
           {EVENT_TYPES.map((t) => (
             <option key={t} value={t}>
@@ -469,7 +469,7 @@ function EventDetail({
           type="date"
           defaultValue={toDateInput(event.start_date)}
           onChange={(e) => updateEvent({ start_date: e.target.value })}
-          className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
         />
       </Field>
       <Field label="End date">
@@ -477,7 +477,7 @@ function EventDetail({
           type="date"
           defaultValue={toDateInput(event.end_date)}
           onChange={(e) => updateEvent({ end_date: e.target.value })}
-          className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
         />
       </Field>
       <Field label="Start time">
@@ -487,7 +487,7 @@ function EventDetail({
           onChange={(e) =>
             updateEvent({ start_time: e.target.value || null })
           }
-          className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
         />
       </Field>
       <Field label="End time">
@@ -495,7 +495,7 @@ function EventDetail({
           type="time"
           defaultValue={toTimeInput(event.end_time)}
           onChange={(e) => updateEvent({ end_time: e.target.value || null })}
-          className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
         />
       </Field>
       <Field label="Location">
@@ -506,7 +506,7 @@ function EventDetail({
               updateEvent({ location: e.target.value });
             }
           }}
-          className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
         />
       </Field>
       <Field label="Notes">
@@ -517,7 +517,7 @@ function EventDetail({
               updateEvent({ notes: e.target.value });
             }
           }}
-          className="rounded-lg border border-slate-300 px-3 py-2"
+          className="rounded-xl border border-stone-300 px-3 py-2"
         />
       </Field>
 
@@ -561,15 +561,15 @@ function AthletePicker({
   );
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
         Athletes ({ids.length})
       </span>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search athletes..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
         {results.map((o) => {
@@ -579,10 +579,10 @@ function AthletePicker({
               key={o.id}
               type="button"
               onClick={() => (added ? onRemove(o.id) : onAdd(o.id))}
-              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+              className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
                 added
                   ? "border-green-200 bg-green-50 text-green-800"
-                  : "border-slate-200"
+                  : "border-stone-200"
               }`}
             >
               <span>
@@ -593,7 +593,7 @@ function AthletePicker({
           );
         })}
         {results.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+          <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
       </div>
     </div>
@@ -618,13 +618,13 @@ function SingleSelectPicker({
   const results = options.filter((o) => o.label.toLowerCase().includes(q));
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">{label}</span>
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">{label}</span>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={placeholder}
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
         {results.map((o) => {
@@ -634,10 +634,10 @@ function SingleSelectPicker({
               key={o.id}
               type="button"
               onClick={() => onSelect(selected ? null : o.id)}
-              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+              className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
                 selected
                   ? "border-green-200 bg-green-50 text-green-800"
-                  : "border-slate-200"
+                  : "border-stone-200"
               }`}
             >
               <span>{o.label}</span>
@@ -648,7 +648,7 @@ function SingleSelectPicker({
           );
         })}
         {results.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+          <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
       </div>
     </div>
@@ -747,8 +747,8 @@ function ItemsSection({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
         Itinerary ({items.length})
       </span>
 
@@ -758,7 +758,7 @@ function ItemsSection({
           return (
             <div
               key={item.id}
-              className="rounded-lg border border-slate-200 bg-white"
+              className="rounded-xl border border-stone-200 bg-white"
             >
               <button
                 type="button"
@@ -769,13 +769,13 @@ function ItemsSection({
                   <span>{item.title}</span>
                   <div className="flex items-center gap-2">
                     <Badge>{TYPE_LABELS[item.item_type] ?? item.item_type}</Badge>
-                    <span className="text-xs text-slate-500">
+                    <span className="text-xs text-stone-500">
                       {toDateInput(item.item_date)}
                     </span>
                   </div>
                 </div>
                 {(item.training_module_id || item.kata_id) && (
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-stone-500">
                     {item.training_module_id &&
                       modules.find((m) => m.id === item.training_module_id)
                         ?.title}
@@ -785,7 +785,7 @@ function ItemsSection({
                 )}
               </button>
               {expanded && (
-                <div className="flex flex-col gap-3 border-t border-slate-200 p-3">
+                <div className="flex flex-col gap-3 border-t border-stone-200 p-3">
                   <Field label="Title">
                     <input
                       defaultValue={item.title}
@@ -794,7 +794,7 @@ function ItemsSection({
                           updateItem(item.id, { title: e.target.value });
                         }
                       }}
-                      className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                      className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                     />
                   </Field>
                   <Field label="Type">
@@ -803,7 +803,7 @@ function ItemsSection({
                       onChange={(e) =>
                         updateItem(item.id, { item_type: e.target.value })
                       }
-                      className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                      className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                     >
                       {ITEM_TYPES.map((t) => (
                         <option key={t} value={t}>
@@ -819,7 +819,7 @@ function ItemsSection({
                       onChange={(e) =>
                         updateItem(item.id, { item_date: e.target.value })
                       }
-                      className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                      className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                     />
                   </Field>
                   <Field label="Start time">
@@ -832,7 +832,7 @@ function ItemsSection({
                           updateItem(item.id, { start_time: e.target.value });
                         }
                       }}
-                      className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                      className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                     />
                   </Field>
                   <Field label="End time">
@@ -845,7 +845,7 @@ function ItemsSection({
                           updateItem(item.id, { end_time: e.target.value });
                         }
                       }}
-                      className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                      className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                     />
                   </Field>
                   <Field label="Notes">
@@ -856,7 +856,7 @@ function ItemsSection({
                           updateItem(item.id, { notes: e.target.value });
                         }
                       }}
-                      className="rounded-lg border border-slate-300 px-3 py-2"
+                      className="rounded-xl border border-stone-300 px-3 py-2"
                     />
                   </Field>
                   {item.item_type === "training" && (
@@ -896,7 +896,7 @@ function ItemsSection({
           );
         })}
         {sorted.length === 0 && !adding && (
-          <p className="px-1 py-2 text-sm text-slate-500">
+          <p className="px-1 py-2 text-sm text-stone-500">
             No itinerary items yet.
           </p>
         )}
@@ -905,14 +905,14 @@ function ItemsSection({
       {adding ? (
         <form
           onSubmit={addItem}
-          className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3"
+          className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-3"
         >
           <Field label="Title">
             <input
               required
               value={addForm.title}
               onChange={(e) => setAddForm({ ...addForm, title: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Type">
@@ -921,7 +921,7 @@ function ItemsSection({
               onChange={(e) =>
                 setAddForm({ ...addForm, item_type: e.target.value })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             >
               {ITEM_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -938,7 +938,7 @@ function ItemsSection({
               onChange={(e) =>
                 setAddForm({ ...addForm, item_date: e.target.value })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Start time">
@@ -949,7 +949,7 @@ function ItemsSection({
               onChange={(e) =>
                 setAddForm({ ...addForm, start_time: e.target.value })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="End time">
@@ -960,14 +960,14 @@ function ItemsSection({
               onChange={(e) =>
                 setAddForm({ ...addForm, end_time: e.target.value })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Notes">
             <textarea
               value={addForm.notes}
               onChange={(e) => setAddForm({ ...addForm, notes: e.target.value })}
-              className="rounded-lg border border-slate-300 px-3 py-2"
+              className="rounded-xl border border-stone-300 px-3 py-2"
             />
           </Field>
 
@@ -1008,7 +1008,7 @@ function ItemsSection({
                   repeat_weekdays: [],
                 })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             >
               <option value="none">Does not repeat</option>
               <option value="daily">Daily</option>
@@ -1024,13 +1024,13 @@ function ItemsSection({
                 onChange={(e) =>
                   setAddForm({ ...addForm, repeat_until: e.target.value })
                 }
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
           )}
           {addForm.repeat_freq === "weekly" && (
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-slate-600">
+              <span className="text-xs font-medium text-stone-600">
                 Repeat on
               </span>
               <div className="flex flex-wrap gap-1">
@@ -1055,10 +1055,10 @@ function ItemsSection({
                           : [...base, day];
                         setAddForm({ ...addForm, repeat_weekdays: next });
                       }}
-                      className={`min-h-[36px] min-w-[44px] rounded-lg border px-2 text-sm ${
+                      className={`min-h-[36px] min-w-[44px] rounded-xl border px-2 text-sm ${
                         active
                           ? "border-green-200 bg-green-50 text-green-800"
-                          : "border-slate-300"
+                          : "border-stone-300"
                       }`}
                     >
                       {label}
@@ -1073,13 +1073,13 @@ function ItemsSection({
             <button
               type="button"
               onClick={() => setAdding(false)}
-              className="min-h-[44px] flex-1 rounded-lg border border-slate-300 font-medium"
+              className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="min-h-[44px] flex-1 rounded-lg bg-red-700 font-medium text-white"
+              className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white"
             >
               Add
             </button>
@@ -1089,7 +1089,7 @@ function ItemsSection({
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className="min-h-[44px] rounded-lg border border-slate-300 font-medium text-slate-700"
+          className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700"
         >
           + Add itinerary item
         </button>
