@@ -89,8 +89,8 @@ export default function Katas() {
       />
 
       <p className="text-xs text-stone-500">
-        WKF # values are a best-effort starting point — verify and correct
-        against the current official WKF Kata List.
+        WKF # values follow the official WKF Kata Name/Order list. Edit any
+        entry below if a correction is needed.
       </p>
 
       <div className="flex flex-col gap-2">
