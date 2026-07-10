@@ -13,6 +13,7 @@ const MODULE_QUERY = `
       json_agg(json_build_object(
         'id', i.id, 'position', i.position, 'item_type', i.item_type,
         'name', i.name, 'explanation', i.explanation, 'video_url', i.video_url,
+        'image_url', i.image_url,
         'sets', i.sets, 'reps', i.reps, 'duration_seconds', i.duration_seconds
       ) ORDER BY i.position) FILTER (WHERE i.id IS NOT NULL),
       '[]'
@@ -59,8 +60,8 @@ async function insertItems(client, moduleId, items) {
 
     await client.query(
       `INSERT INTO nk_training_module_items
-         (module_id, position, item_type, name, explanation, video_url, sets, reps, duration_seconds)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+         (module_id, position, item_type, name, explanation, video_url, image_url, sets, reps, duration_seconds)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         moduleId,
         i,
@@ -68,6 +69,7 @@ async function insertItems(client, moduleId, items) {
         it.item_type === "exercise" ? it.name : null,
         it.explanation ?? null,
         it.video_url ?? null,
+        it.image_url ?? null,
         sets,
         reps,
         duration,

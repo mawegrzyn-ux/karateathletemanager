@@ -11,6 +11,7 @@ interface TrainingModuleItem {
   name: string | null;
   explanation: string | null;
   video_url: string | null;
+  image_url: string | null;
   sets: number | null;
   reps: number | null;
   duration_seconds: number | null;
@@ -28,6 +29,7 @@ interface DraftItem {
   name: string;
   explanation: string;
   video_url: string;
+  image_url: string;
   mode: "reps" | "time";
   sets: string;
   reps: string;
@@ -41,6 +43,7 @@ const EMPTY_EXERCISE: DraftItem = {
   name: "",
   explanation: "",
   video_url: "",
+  image_url: "",
   mode: "reps",
   sets: "",
   reps: "",
@@ -52,6 +55,7 @@ const EMPTY_REST: DraftItem = {
   name: "",
   explanation: "",
   video_url: "",
+  image_url: "",
   mode: "time",
   sets: "",
   reps: "",
@@ -64,6 +68,7 @@ function toDraftItem(item: TrainingModuleItem): DraftItem {
     name: item.name ?? "",
     explanation: item.explanation ?? "",
     video_url: item.video_url ?? "",
+    image_url: item.image_url ?? "",
     mode: item.duration_seconds != null && item.sets == null ? "time" : "reps",
     sets: item.sets != null ? String(item.sets) : "",
     reps: item.reps != null ? String(item.reps) : "",
@@ -85,6 +90,7 @@ function toApiItem(it: DraftItem) {
       name: it.name,
       explanation: it.explanation || null,
       video_url: it.video_url || null,
+      image_url: it.image_url || null,
       duration_seconds: it.duration_seconds ? Number(it.duration_seconds) : null,
     };
   }
@@ -93,6 +99,7 @@ function toApiItem(it: DraftItem) {
     name: it.name,
     explanation: it.explanation || null,
     video_url: it.video_url || null,
+    image_url: it.image_url || null,
     sets: it.sets ? Number(it.sets) : null,
     reps: it.reps ? Number(it.reps) : null,
   };
@@ -182,6 +189,13 @@ function ModuleItemsEditor({
                   <input
                     defaultValue={item.video_url}
                     onBlur={(e) => updateItem(i, { video_url: e.target.value })}
+                    className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                  />
+                </Field>
+                <Field label="Image link">
+                  <input
+                    defaultValue={item.image_url}
+                    onBlur={(e) => updateItem(i, { image_url: e.target.value })}
                     className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                   />
                 </Field>

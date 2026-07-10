@@ -204,11 +204,12 @@ coach-run attendance) — this is personal athlete itinerary planning.
   a reusable library of session plans a coach or admin authors. Each
   plan is an ordered sequence of `nk_training_module_items`
   (`module_id`, `position`, `item_type` — `exercise` or `rest`, `name`,
-  `explanation`, `video_url`, `sets`, `reps`, `duration_seconds`),
-  replaced as a whole unit on write (same pattern as club membership
-  `PUT`s). An `exercise` item carries its own name/explanation/video and
-  is measured either by `sets`+`reps` or by `duration_seconds` (not
-  both); a `rest` item just carries `duration_seconds`. Validation is
+  `explanation`, `video_url`, `image_url`, `sets`, `reps`,
+  `duration_seconds`), replaced as a whole unit on write (same pattern
+  as club membership `PUT`s). An `exercise` item carries its own
+  name/explanation/optional video and/or image link, and is measured
+  either by `sets`+`reps` or by `duration_seconds` (not both); a `rest`
+  item just carries `duration_seconds`. Validation is
   lenient (only `item_type` and, for exercises, `name` are required) so
   a plan can be edited field-by-field without every in-progress item
   needing to be fully filled in yet. `api/src/routes/trainingModules.js`
