@@ -54,6 +54,9 @@ export default function More() {
           <Link to="/admin/coaches" className={linkClasses}>
             Manage coaches
           </Link>
+          <Link to="/admin/coach-roles" className={linkClasses}>
+            Manage coach roles
+          </Link>
           <Link to="/admin/katas" className={linkClasses}>
             Manage katas
           </Link>

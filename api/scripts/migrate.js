@@ -490,6 +490,24 @@ const migrations = [
 
   `ALTER TABLE nk_training_module_items
      ADD COLUMN IF NOT EXISTS image_url VARCHAR(500)`,
+
+  `CREATE TABLE IF NOT EXISTS nk_coach_roles (
+     id         SERIAL PRIMARY KEY,
+     name       VARCHAR(100) NOT NULL UNIQUE,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  // Seeded to match the role strings already used on nk_coaches; admin
+  // can add more (e.g. "fitness coach") via the admin Coach Roles page.
+  `INSERT INTO nk_coach_roles (name) VALUES
+     ('head coach'), ('assistant')
+   ON CONFLICT (name) DO NOTHING`,
+
+  `CREATE TABLE IF NOT EXISTS nk_coach_styles (
+     coach_id INTEGER NOT NULL REFERENCES nk_coaches(id) ON DELETE CASCADE,
+     style_id INTEGER NOT NULL REFERENCES nk_karate_styles(id) ON DELETE CASCADE,
+     PRIMARY KEY (coach_id, style_id)
+  )`,
 ];
 
 async function migrate() {
