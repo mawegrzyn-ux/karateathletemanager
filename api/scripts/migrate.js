@@ -487,6 +487,9 @@ const migrations = [
      ('Shinpa', 88), ('Shinsei', 89), ('Tomari Bassai', 97), ('Unshu', 98),
      ('Useishi', 100), ('Wanshu', 102)
    ON CONFLICT (name) DO NOTHING`,
+
+  `ALTER TABLE nk_training_module_items
+     ADD COLUMN IF NOT EXISTS image_url VARCHAR(500)`,
 ];
 
 async function migrate() {
