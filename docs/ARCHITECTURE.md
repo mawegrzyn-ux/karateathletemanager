@@ -209,14 +209,32 @@ coach-run attendance) — this is personal athlete itinerary planning.
   as club membership `PUT`s). An `exercise` item carries its own
   name/explanation/optional video and/or image link, and is measured
   either by `sets`+`reps` or by `duration_seconds` (not both); a `rest`
-  item just carries `duration_seconds`. Validation is
-  lenient (only `item_type` and, for exercises, `name` are required) so
-  a plan can be edited field-by-field without every in-progress item
-  needing to be fully filled in yet. `api/src/routes/trainingModules.js`
-  — `GET` is open to any authenticated user (used by the Schedule item
-  picker), `POST`/`PATCH`/`DELETE` require `authorize("coach")` (coach or
-  admin). A `training` item can optionally link to one module via
-  `training_module_id`.
+  item just carries `duration_seconds`. Validation is lenient — only
+  `item_type` is required, so a plan (including an exercise's name) can
+  be built up field-by-field without every in-progress item needing to
+  be fully filled in yet — but `sets` (max 50), `reps` (max 1000), and
+  `duration_seconds` (max 6 hours) are bounded, both client-side (input
+  `max`) and server-side, to catch nonsensical values.
+  `api/src/routes/trainingModules.js` — `GET` is open to any
+  authenticated user (used by the Schedule item picker),
+  `POST`/`PATCH`/`DELETE` require `authorize("coach")` (coach or admin).
+  A `training` item can optionally link to one module via
+  `training_module_id`. `admin/TrainingModules.tsx` surfaces any save
+  failure (bad bounds, network error) via a `Toast`, since every field
+  edit auto-saves immediately and previously failed silently.
+- **Media uploads**: `video_url`/`image_url` on an exercise item accept
+  either a pasted link or an uploaded file, via `MediaField` in
+  `admin/TrainingModules.tsx`. A pasted YouTube link renders an embedded
+  player preview; any other video/image URL (including an uploaded
+  file's own URL) renders a native `<video>`/`<img>` preview. Uploading
+  posts multipart form data to `POST /api/uploads` (`authorize("coach")`,
+  image/video mimetypes only, 50MB cap) via `multer`, which saves to
+  `api/uploads/` (gitignored — persists across `git pull` deploys since
+  it's untracked, unlike the frontend `dist/` build) and returns
+  `/api/uploads/files/<uuid>.<ext>`; that path is served back by the
+  same router's `express.static`, gated by the router's `authorize()` so
+  only logged-in users can view a module's media, matching the module
+  list's own read gating.
 - **Katas**: `nk_katas` (`name` unique, `style`, `wkf_number`) is an
   admin-managed reference list, seeded via migration with the full
   official WKF Kata Name/Order List — 102 kata names numbered 1-102 in
@@ -523,6 +541,8 @@ server {
 ```
 /var/www/nadakarate/             # App root
 ├── api/                         # Backend (Express)
+│   └── uploads/                 # User-uploaded media (gitignored, persists
+│                                 # across deploys — not touched by git pull)
 ├── app/                         # Frontend source (React)
 └── frontend/                    # Built frontend (served by Nginx)
 

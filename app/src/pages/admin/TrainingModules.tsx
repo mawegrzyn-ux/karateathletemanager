@@ -1,8 +1,25 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { useApi } from "../../hooks/useApi";
-import { Spinner, Drawer, AddButton, DeleteButton, Field } from "../../components/ui";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
+import { ApiError, useApi } from "../../hooks/useApi";
+import {
+  Spinner,
+  Drawer,
+  AddButton,
+  DeleteButton,
+  Field,
+  Toast,
+} from "../../components/ui";
 
 type ItemType = "exercise" | "rest";
+
+const MAX_SETS = 50;
+const MAX_REPS = 1000;
+const MAX_DURATION_SECONDS = 6 * 60 * 60; // 6 hours
 
 interface TrainingModuleItem {
   id: number;
@@ -109,21 +126,127 @@ function itemSummary(it: TrainingModuleItem) {
   if (it.item_type === "rest") {
     return it.duration_seconds ? `Rest ${it.duration_seconds}s` : "Rest";
   }
+  const name = it.name?.trim() || "Untitled exercise";
   if (it.duration_seconds != null && it.sets == null) {
-    return `${it.name} — ${it.duration_seconds}s`;
+    return `${name} — ${it.duration_seconds}s`;
   }
   if (it.sets != null && it.reps != null) {
-    return `${it.name} — ${it.sets} × ${it.reps}`;
+    return `${name} — ${it.sets} × ${it.reps}`;
   }
-  return it.name ?? "";
+  return name;
+}
+
+const YOUTUBE_ID_PATTERN =
+  /(?:youtube\.com\/watch\?v=|youtube\.com\/embed\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+
+function extractYouTubeId(url: string): string | null {
+  return url.match(YOUTUBE_ID_PATTERN)?.[1] ?? null;
+}
+
+async function uploadFile(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("/api/uploads", { method: "POST", body: formData });
+  const body = await res.json().catch(() => undefined);
+  if (!res.ok) {
+    throw new Error(body?.error?.message ?? "Upload failed");
+  }
+  return body.url as string;
+}
+
+function MediaField({
+  label,
+  kind,
+  value,
+  onChange,
+  onError,
+}: {
+  label: string;
+  kind: "video" | "image";
+  value: string;
+  onChange: (url: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      onChange(await uploadFile(file));
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const youTubeId = kind === "video" ? extractYouTubeId(value) : null;
+
+  return (
+    <Field label={label}>
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          <input
+            key={value}
+            defaultValue={value}
+            onBlur={(e) => onChange(e.target.value)}
+            placeholder={
+              kind === "video"
+                ? "Paste a YouTube or video link"
+                : "Paste an image link"
+            }
+            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-sm font-medium text-stone-700 disabled:opacity-50"
+          >
+            {uploading ? "Uploading…" : "Upload"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={kind === "video" ? "video/*" : "image/*"}
+            onChange={handleFile}
+            className="hidden"
+          />
+        </div>
+        {youTubeId ? (
+          <iframe
+            className="aspect-video w-full rounded-xl"
+            src={`https://www.youtube.com/embed/${youTubeId}`}
+            title="Video preview"
+            allowFullScreen
+          />
+        ) : kind === "video" && value ? (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video src={value} controls className="w-full rounded-xl" />
+        ) : kind === "image" && value ? (
+          <img
+            src={value}
+            alt="Exercise preview"
+            className="max-h-40 w-full rounded-xl object-cover"
+          />
+        ) : null}
+      </div>
+    </Field>
+  );
 }
 
 function ModuleItemsEditor({
   items,
   onChange,
+  onError,
 }: {
   items: DraftItem[];
   onChange: (items: DraftItem[]) => void;
+  onError: (message: string) => void;
 }) {
   function updateItem(index: number, patch: Partial<DraftItem>) {
     onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
@@ -185,20 +308,20 @@ function ModuleItemsEditor({
                     className="rounded-xl border border-stone-300 px-3 py-2"
                   />
                 </Field>
-                <Field label="Video link">
-                  <input
-                    defaultValue={item.video_url}
-                    onBlur={(e) => updateItem(i, { video_url: e.target.value })}
-                    className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                  />
-                </Field>
-                <Field label="Image link">
-                  <input
-                    defaultValue={item.image_url}
-                    onBlur={(e) => updateItem(i, { image_url: e.target.value })}
-                    className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                  />
-                </Field>
+                <MediaField
+                  label="Video"
+                  kind="video"
+                  value={item.video_url}
+                  onChange={(url) => updateItem(i, { video_url: url })}
+                  onError={onError}
+                />
+                <MediaField
+                  label="Image"
+                  kind="image"
+                  value={item.image_url}
+                  onChange={(url) => updateItem(i, { image_url: url })}
+                  onError={onError}
+                />
                 <Field label="Measured by">
                   <select
                     value={item.mode}
@@ -217,6 +340,7 @@ function ModuleItemsEditor({
                       <input
                         type="number"
                         min={1}
+                        max={MAX_SETS}
                         defaultValue={item.sets}
                         onBlur={(e) => updateItem(i, { sets: e.target.value })}
                         className="min-h-[44px] rounded-xl border border-stone-300 px-3"
@@ -226,6 +350,7 @@ function ModuleItemsEditor({
                       <input
                         type="number"
                         min={1}
+                        max={MAX_REPS}
                         defaultValue={item.reps}
                         onBlur={(e) => updateItem(i, { reps: e.target.value })}
                         className="min-h-[44px] rounded-xl border border-stone-300 px-3"
@@ -237,6 +362,7 @@ function ModuleItemsEditor({
                     <input
                       type="number"
                       min={1}
+                      max={MAX_DURATION_SECONDS}
                       defaultValue={item.duration_seconds}
                       onBlur={(e) =>
                         updateItem(i, { duration_seconds: e.target.value })
@@ -251,6 +377,7 @@ function ModuleItemsEditor({
                 <input
                   type="number"
                   min={1}
+                  max={MAX_DURATION_SECONDS}
                   defaultValue={item.duration_seconds}
                   onBlur={(e) =>
                     updateItem(i, { duration_seconds: e.target.value })
@@ -293,10 +420,20 @@ export default function TrainingModules() {
   );
   const [form, setForm] = useState(EMPTY_FORM);
   const [formItems, setFormItems] = useState<DraftItem[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     load();
   }, []);
+
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 4000);
+  }
+
+  function showError(err: unknown) {
+    showToast(err instanceof ApiError ? err.message : "Something went wrong");
+  }
 
   function load() {
     api
@@ -314,35 +451,49 @@ export default function TrainingModules() {
   async function createModule(e: FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
-    const { module: created } = await api.post<{ module: TrainingModule }>(
-      "/training-modules",
-      {
-        title: form.title,
-        explanation: form.explanation,
-        items: formItems.map(toApiItem),
-      }
-    );
-    setModules((prev) => (prev ? [...prev, created] : [created]));
-    setDrawer("closed");
+    try {
+      const { module: created } = await api.post<{ module: TrainingModule }>(
+        "/training-modules",
+        {
+          title: form.title,
+          explanation: form.explanation,
+          items: formItems.map(toApiItem),
+        }
+      );
+      setModules((prev) => (prev ? [...prev, created] : [created]));
+      setDrawer("closed");
+    } catch (err) {
+      showError(err);
+    }
   }
 
   async function updateModule(id: number, patch: Record<string, unknown>) {
-    const { module: updated } = await api.patch<{ module: TrainingModule }>(
-      `/training-modules/${id}`,
-      patch
-    );
-    setModules((prev) =>
-      prev ? prev.map((m) => (m.id === id ? updated : m)) : prev
-    );
-    setDrawer((prev) =>
-      prev !== "closed" && prev !== "create" && prev.id === id ? updated : prev
-    );
+    try {
+      const { module: updated } = await api.patch<{ module: TrainingModule }>(
+        `/training-modules/${id}`,
+        patch
+      );
+      setModules((prev) =>
+        prev ? prev.map((m) => (m.id === id ? updated : m)) : prev
+      );
+      setDrawer((prev) =>
+        prev !== "closed" && prev !== "create" && prev.id === id
+          ? updated
+          : prev
+      );
+    } catch (err) {
+      showError(err);
+    }
   }
 
   async function deleteModule(id: number) {
-    await api.del(`/training-modules/${id}`);
-    setModules((prev) => (prev ? prev.filter((m) => m.id !== id) : prev));
-    setDrawer("closed");
+    try {
+      await api.del(`/training-modules/${id}`);
+      setModules((prev) => (prev ? prev.filter((m) => m.id !== id) : prev));
+      setDrawer("closed");
+    } catch (err) {
+      showError(err);
+    }
   }
 
   if (error) return <div className="p-4 text-red-700">{error}</div>;
@@ -415,7 +566,11 @@ export default function TrainingModules() {
               className="rounded-xl border border-stone-300 px-3 py-2"
             />
           </Field>
-          <ModuleItemsEditor items={formItems} onChange={setFormItems} />
+          <ModuleItemsEditor
+            items={formItems}
+            onChange={setFormItems}
+            onError={showToast}
+          />
           <button
             type="submit"
             className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
@@ -459,6 +614,7 @@ export default function TrainingModules() {
               onChange={(next) =>
                 updateModule(editing.id, { items: next.map(toApiItem) })
               }
+              onError={showToast}
             />
             <DeleteButton
               onClick={() => deleteModule(editing.id)}
@@ -467,6 +623,8 @@ export default function TrainingModules() {
           </div>
         )}
       </Drawer>
+
+      {toast && <Toast message={toast} />}
     </div>
   );
 }

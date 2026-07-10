@@ -141,3 +141,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# User-uploaded media (persists on the server, not tracked in git)
+api/uploads/*
+!api/uploads/.gitkeep

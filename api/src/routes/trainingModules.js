@@ -6,6 +6,9 @@ const asyncHandler = require("../utils/asyncHandler");
 const router = Router();
 
 const ITEM_TYPES = ["exercise", "rest"];
+const MAX_SETS = 50;
+const MAX_REPS = 1000;
+const MAX_DURATION_SECONDS = 6 * 60 * 60; // 6 hours
 
 const MODULE_QUERY = `
   SELECT tm.id, tm.title, tm.explanation, tm.created_at, tm.updated_at,
@@ -38,24 +41,24 @@ async function insertItems(client, moduleId, items) {
     if (!ITEM_TYPES.includes(it.item_type)) {
       throw { status: 400, message: "Each item needs a valid item_type" };
     }
-    if (
-      it.item_type === "exercise" &&
-      (typeof it.name !== "string" || it.name.trim().length === 0)
-    ) {
-      throw { status: 400, message: "Each exercise needs a name" };
-    }
 
     const sets = it.sets != null ? Number(it.sets) : null;
     const reps = it.reps != null ? Number(it.reps) : null;
     const duration = it.duration_seconds != null ? Number(it.duration_seconds) : null;
-    if (sets != null && (!Number.isInteger(sets) || sets <= 0)) {
-      throw { status: 400, message: "sets must be a positive integer" };
+    if (sets != null && (!Number.isInteger(sets) || sets <= 0 || sets > MAX_SETS)) {
+      throw { status: 400, message: `sets must be a whole number between 1 and ${MAX_SETS}` };
     }
-    if (reps != null && (!Number.isInteger(reps) || reps <= 0)) {
-      throw { status: 400, message: "reps must be a positive integer" };
+    if (reps != null && (!Number.isInteger(reps) || reps <= 0 || reps > MAX_REPS)) {
+      throw { status: 400, message: `reps must be a whole number between 1 and ${MAX_REPS}` };
     }
-    if (duration != null && (!Number.isInteger(duration) || duration <= 0)) {
-      throw { status: 400, message: "duration_seconds must be a positive integer" };
+    if (
+      duration != null &&
+      (!Number.isInteger(duration) || duration <= 0 || duration > MAX_DURATION_SECONDS)
+    ) {
+      throw {
+        status: 400,
+        message: `duration must be a whole number of seconds between 1 and ${MAX_DURATION_SECONDS}`,
+      };
     }
 
     await client.query(
