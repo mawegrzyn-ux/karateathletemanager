@@ -271,7 +271,7 @@ export default function Clubs() {
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Clubs</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Clubs</h1>
         {isAdmin && <AddButton onClick={openCreate} />}
       </div>
 
@@ -279,7 +279,7 @@ export default function Clubs() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search clubs..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
 
       <div className="flex flex-col gap-2">
@@ -287,7 +287,7 @@ export default function Clubs() {
           <button
             key={c.id}
             onClick={() => setDrawer(c)}
-            className="min-h-[44px] rounded-lg border border-slate-200 px-3 py-2 text-left font-medium"
+            className="flex min-h-[44px] items-center rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
           >
             {c.name}
           </button>
@@ -305,14 +305,14 @@ export default function Clubs() {
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Location">
             <input
               value={form.location}
               onChange={(e) => setForm({ ...form, location: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <AssociationPicker
@@ -329,7 +329,7 @@ export default function Clubs() {
               onChange={(e) =>
                 setForm({ ...form, contact_email: e.target.value })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Contact phone">
@@ -338,12 +338,12 @@ export default function Clubs() {
               onChange={(e) =>
                 setForm({ ...form, contact_phone: e.target.value })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <button
             type="submit"
-            className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white"
+            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
           >
             Create
           </button>
@@ -365,7 +365,7 @@ export default function Clubs() {
                     updateClub(editing.id, { name: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Location">
@@ -376,7 +376,7 @@ export default function Clubs() {
                     updateClub(editing.id, { location: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <AssociationPicker
@@ -394,7 +394,7 @@ export default function Clubs() {
                     updateClub(editing.id, { contact_email: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Contact phone">
@@ -405,7 +405,7 @@ export default function Clubs() {
                     updateClub(editing.id, { contact_phone: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
 
@@ -477,8 +477,8 @@ function PendingMembers({ clubId }: { clubId: number }) {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
         Pending members{pending ? ` (${pending.length})` : ""}
       </span>
       {pending === null ? (
@@ -488,7 +488,7 @@ function PendingMembers({ clubId }: { clubId: number }) {
           {pending.map((p) => (
             <div
               key={p.id}
-              className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
+              className="flex items-center justify-between gap-2 rounded-xl border border-stone-200 px-3 py-2"
             >
               <div className="flex flex-col">
                 <span className="font-medium">
@@ -496,7 +496,7 @@ function PendingMembers({ clubId }: { clubId: number }) {
                     ? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim()
                     : p.email}
                 </span>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-stone-500">
                   {[p.wants_athlete && "athlete", p.wants_coach && "coach"]
                     .filter(Boolean)
                     .join(", ")}
@@ -505,14 +505,14 @@ function PendingMembers({ clubId }: { clubId: number }) {
               <button
                 type="button"
                 onClick={() => approve(p.id)}
-                className="min-h-[44px] rounded-lg bg-red-700 px-3 text-sm font-medium text-white"
+                className="min-h-[44px] rounded-full bg-red-600 px-3 text-sm font-medium text-white"
               >
                 Approve
               </button>
             </div>
           ))}
           {pending.length === 0 && (
-            <p className="px-1 py-2 text-sm text-slate-500">
+            <p className="px-1 py-2 text-sm text-stone-500">
               No pending requests.
             </p>
           )}
@@ -536,13 +536,13 @@ function AssociationPicker({
   const results = options.filter((o) => o.name.toLowerCase().includes(q));
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">Association</span>
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">Association</span>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search associations..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
         {results.map((o) => {
@@ -552,10 +552,10 @@ function AssociationPicker({
               key={o.id}
               type="button"
               onClick={() => onSelect(selected ? null : o.id)}
-              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+              className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
                 selected
                   ? "border-green-200 bg-green-50 text-green-800"
-                  : "border-slate-200"
+                  : "border-stone-200"
               }`}
             >
               <span>{o.name}</span>
@@ -566,7 +566,7 @@ function AssociationPicker({
           );
         })}
         {results.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+          <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
       </div>
     </div>
@@ -597,15 +597,15 @@ function MemberEditor({
   );
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
         {label} ({ids.length})
       </span>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={`Search ${label.toLowerCase()}...`}
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
         {results.map((o) => {
@@ -614,10 +614,10 @@ function MemberEditor({
           return (
             <div
               key={o.id}
-              className={`flex items-center gap-1 rounded-lg border px-3 ${
+              className={`flex items-center gap-1 rounded-xl border px-3 ${
                 added
                   ? "border-green-200 bg-green-50 text-green-800"
-                  : "border-slate-200"
+                  : "border-stone-200"
               }`}
             >
               <button
@@ -636,7 +636,7 @@ function MemberEditor({
                   onClick={() => onToggleAdmin(o.id, !isRowAdmin)}
                   title={isRowAdmin ? "Remove admin" : "Make admin"}
                   className={`flex min-h-[44px] min-w-[44px] items-center justify-center text-lg ${
-                    isRowAdmin ? "text-amber-500" : "text-slate-300"
+                    isRowAdmin ? "text-amber-500" : "text-stone-300"
                   }`}
                 >
                   {isRowAdmin ? "★" : "☆"}
@@ -646,7 +646,7 @@ function MemberEditor({
           );
         })}
         {results.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+          <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
       </div>
     </div>
@@ -669,15 +669,15 @@ function StylePicker({
   const results = options.filter((o) => o.name.toLowerCase().includes(q));
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
         Styles ({ids.length})
       </span>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search styles..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
         {results.map((o) => {
@@ -687,10 +687,10 @@ function StylePicker({
               key={o.id}
               type="button"
               onClick={() => (added ? onRemove(o.id) : onAdd(o.id))}
-              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+              className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
                 added
                   ? "border-green-200 bg-green-50 text-green-800"
-                  : "border-slate-200"
+                  : "border-stone-200"
               }`}
             >
               <span>{o.name}</span>
@@ -699,7 +699,7 @@ function StylePicker({
           );
         })}
         {results.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+          <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
       </div>
     </div>

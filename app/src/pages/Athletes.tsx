@@ -59,8 +59,8 @@ export default function Athletes() {
 
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-2 p-6 text-center">
-      <h1 className="text-xl font-semibold">Athletes</h1>
-      <p className="text-slate-600">
+      <h1 className="text-2xl font-bold tracking-tight">Athletes</h1>
+      <p className="text-stone-600">
         Ask your coach for your athlete profile and grade info.
       </p>
     </div>
@@ -100,7 +100,7 @@ function MyAthleteProfile({ athleteId }: { athleteId: number }) {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-xl font-semibold">
+      <h1 className="text-2xl font-bold tracking-tight">
         {athlete.first_name} {athlete.last_name}
       </h1>
       <ReadOnlyField label="Belt" value={athlete.belt} />
@@ -158,20 +158,20 @@ function LinkParentPin({ athleteId }: { athleteId: number }) {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-3">
-      <span className="text-sm font-medium text-slate-700">
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-3">
+      <span className="text-sm font-medium text-stone-700">
         Link a parent
       </span>
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-stone-600">
         Generate a one-time code and share it with your parent. They enter
         it on their own profile to link to yours.
       </p>
       {pin && (
-        <div className="flex flex-col items-center gap-1 rounded-lg border border-slate-200 bg-white py-3">
+        <div className="flex flex-col items-center gap-1 rounded-xl border border-stone-200 bg-white py-3">
           <span className="text-3xl font-semibold tracking-widest">
             {pin}
           </span>
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-stone-500">
             Expires {new Date(expiresAt!).toLocaleTimeString()} or once used
           </span>
         </div>
@@ -181,7 +181,7 @@ function LinkParentPin({ athleteId }: { athleteId: number }) {
         type="button"
         onClick={generate}
         disabled={submitting}
-        className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white disabled:opacity-50"
+        className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
       >
         {pin ? "Generate new PIN" : "Generate PIN"}
       </button>
@@ -192,8 +192,8 @@ function LinkParentPin({ athleteId }: { athleteId: number }) {
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
-      <span className="flex min-h-[44px] items-center rounded-lg border border-slate-200 bg-slate-50 px-3">
+      <span className="text-sm font-medium text-stone-700">{label}</span>
+      <span className="flex min-h-[44px] items-center rounded-xl border border-stone-200 bg-stone-50 px-3">
         {value}
       </span>
     </div>
@@ -303,7 +303,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Athletes</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Athletes</h1>
         <AddButton onClick={openCreate} />
       </div>
 
@@ -312,11 +312,11 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by name"
-          className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-3"
+          className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
         />
         <button
           type="submit"
-          className="min-h-[44px] rounded-lg border border-slate-300 px-4 font-medium"
+          className="min-h-[44px] rounded-xl border border-stone-300 px-4 font-medium"
         >
           Search
         </button>
@@ -327,7 +327,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
           <button
             key={a.id}
             onClick={() => setDrawer(a)}
-            className="min-h-[44px] rounded-lg border border-slate-200 px-3 py-2 text-left font-medium"
+            className="flex min-h-[44px] items-center rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
           >
             {a.first_name} {a.last_name}
           </button>
@@ -345,7 +345,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               required
               value={form.first_name}
               onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Last name">
@@ -353,14 +353,14 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               required
               value={form.last_name}
               onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Belt">
             <select
               value={form.belt}
               onChange={(e) => setForm({ ...form, belt: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             >
               {BELTS.map((b) => (
                 <option key={b} value={b}>
@@ -376,7 +376,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               onChange={(e) =>
                 setForm({ ...form, date_of_birth: e.target.value })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Email">
@@ -384,14 +384,14 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Phone">
             <input
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Emergency contact name">
@@ -400,7 +400,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               onChange={(e) =>
                 setForm({ ...form, emergency_name: e.target.value })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Emergency phone">
@@ -409,7 +409,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               onChange={(e) =>
                 setForm({ ...form, emergency_phone: e.target.value })
               }
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Medical notes">
@@ -418,12 +418,12 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               onChange={(e) =>
                 setForm({ ...form, medical_notes: e.target.value })
               }
-              className="rounded-lg border border-slate-300 px-3 py-2"
+              className="rounded-xl border border-stone-300 px-3 py-2"
             />
           </Field>
           <button
             type="submit"
-            className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white"
+            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
           >
             Create
           </button>
@@ -445,7 +445,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
                     updateAthlete(editing.id, { first_name: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Last name">
@@ -456,7 +456,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
                     updateAthlete(editing.id, { last_name: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Belt">
@@ -465,7 +465,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
                 onChange={(e) =>
                   updateAthlete(editing.id, { belt: e.target.value })
                 }
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               >
                 {BELTS.map((b) => (
                   <option key={b} value={b}>
@@ -483,7 +483,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
                     date_of_birth: e.target.value || null,
                   })
                 }
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Email">
@@ -494,7 +494,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
                     updateAthlete(editing.id, { email: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Phone">
@@ -505,7 +505,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
                     updateAthlete(editing.id, { phone: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Emergency contact name">
@@ -518,7 +518,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
                     });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Emergency phone">
@@ -531,7 +531,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
                     });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Medical notes">
@@ -544,7 +544,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
                     });
                   }
                 }}
-                className="rounded-lg border border-slate-300 px-3 py-2"
+                className="rounded-xl border border-stone-300 px-3 py-2"
               />
             </Field>
             <StylePicker
@@ -553,7 +553,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               onAdd={(id) => addStyle(editing.id, id)}
               onRemove={(id) => removeStyle(editing.id, id)}
             />
-            <label className="flex items-center gap-2 text-sm text-slate-600">
+            <label className="flex items-center gap-2 text-sm text-stone-600">
               <input
                 type="checkbox"
                 checked={editing.is_active}
@@ -592,15 +592,15 @@ function StylePicker({
   const results = options.filter((o) => o.name.toLowerCase().includes(q));
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
         Styles ({ids.length})
       </span>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search styles..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
         {results.map((o) => {
@@ -610,10 +610,10 @@ function StylePicker({
               key={o.id}
               type="button"
               onClick={() => (added ? onRemove(o.id) : onAdd(o.id))}
-              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+              className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
                 added
                   ? "border-green-200 bg-green-50 text-green-800"
-                  : "border-slate-200"
+                  : "border-stone-200"
               }`}
             >
               <span>{o.name}</span>
@@ -622,7 +622,7 @@ function StylePicker({
           );
         })}
         {results.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+          <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
       </div>
     </div>

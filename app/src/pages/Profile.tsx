@@ -37,22 +37,22 @@ export default function Profile() {
   return (
     <div className="flex min-h-full flex-col justify-center gap-6 p-6">
       <div>
-        <h1 className="text-2xl font-semibold">My profile</h1>
-        <p className="text-sm text-slate-600">{user?.email}</p>
+        <h1 className="text-2xl font-bold tracking-tight">My profile</h1>
+        <p className="text-sm text-stone-600">{user?.email}</p>
       </div>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field label="First name">
           <input
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
-            className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
           />
         </Field>
         <Field label="Last name">
           <input
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
-            className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
           />
         </Field>
         <Field label="Phone number">
@@ -60,7 +60,7 @@ export default function Profile() {
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
           />
         </Field>
         {error && <p className="text-sm text-red-700">{error}</p>}
@@ -68,7 +68,7 @@ export default function Profile() {
         <button
           type="submit"
           disabled={submitting}
-          className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white disabled:opacity-50"
+          className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
         >
           Save
         </button>
@@ -120,20 +120,20 @@ function LinkChild() {
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-slate-200 p-4">
+    <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-card">
       <h2 className="font-semibold">Link a child</h2>
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-stone-600">
         Ask your child (or their coach) for the 6-digit code from their
         athlete profile, then enter it here.
       </p>
 
       {children && children.length > 0 && (
         <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-slate-700">
+          <span className="text-sm font-medium text-stone-700">
             Your children
           </span>
           {children.map((c) => (
-            <span key={c.id} className="text-sm text-slate-600">
+            <span key={c.id} className="text-sm text-stone-600">
               {c.first_name} {c.last_name}
             </span>
           ))}
@@ -147,12 +147,12 @@ function LinkChild() {
           inputMode="numeric"
           maxLength={6}
           placeholder="123456"
-          className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-3 tracking-widest"
+          className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3 tracking-widest"
         />
         <button
           type="submit"
           disabled={submitting || pin.length !== 6}
-          className="min-h-[44px] rounded-lg bg-red-700 px-4 font-medium text-white disabled:opacity-50"
+          className="min-h-[44px] rounded-full bg-red-600 px-4 font-medium text-white disabled:opacity-50"
         >
           Link
         </button>

@@ -77,7 +77,7 @@ export default function Katas() {
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Katas</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Katas</h1>
         <AddButton onClick={openCreate} />
       </div>
 
@@ -85,10 +85,10 @@ export default function Katas() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search katas..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-stone-500">
         WKF # values are a best-effort starting point — verify and correct
         against the current official WKF Kata List.
       </p>
@@ -98,12 +98,12 @@ export default function Katas() {
           <button
             key={k.id}
             onClick={() => setDrawer(k)}
-            className="flex min-h-[44px] items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-left font-medium"
+            className="flex min-h-[44px] items-center justify-between rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
           >
             <span>
               {k.name}
               {k.style && (
-                <span className="ml-2 text-xs font-normal text-slate-500">
+                <span className="ml-2 text-xs font-normal text-stone-500">
                   {k.style}
                 </span>
               )}
@@ -112,7 +112,7 @@ export default function Katas() {
           </button>
         ))}
         {filtered.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">No katas yet.</p>
+          <p className="px-1 py-2 text-sm text-stone-500">No katas yet.</p>
         )}
       </div>
 
@@ -127,14 +127,14 @@ export default function Katas() {
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Style">
             <input
               value={form.style}
               onChange={(e) => setForm({ ...form, style: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="WKF #">
@@ -143,12 +143,12 @@ export default function Katas() {
               min={1}
               value={form.wkf_number}
               onChange={(e) => setForm({ ...form, wkf_number: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <button
             type="submit"
-            className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white"
+            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
           >
             Create
           </button>
@@ -170,7 +170,7 @@ export default function Katas() {
                     updateKata(editing.id, { name: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Style">
@@ -181,7 +181,7 @@ export default function Katas() {
                     updateKata(editing.id, { style: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="WKF #">
@@ -194,7 +194,7 @@ export default function Katas() {
                     wkf_number: e.target.value ? Number(e.target.value) : null,
                   })
                 }
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <DeleteButton

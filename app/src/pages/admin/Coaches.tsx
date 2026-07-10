@@ -112,7 +112,7 @@ export default function Coaches() {
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Coaches</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Coaches</h1>
         <AddButton onClick={openCreate} />
       </div>
 
@@ -120,7 +120,7 @@ export default function Coaches() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search coaches..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
 
       <div className="flex flex-col gap-2">
@@ -128,7 +128,7 @@ export default function Coaches() {
           <button
             key={c.id}
             onClick={() => setDrawer(c)}
-            className="min-h-[44px] rounded-lg border border-slate-200 px-3 py-2 text-left font-medium"
+            className="flex min-h-[44px] items-center rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
           >
             {c.first_name} {c.last_name}
           </button>
@@ -146,7 +146,7 @@ export default function Coaches() {
               required
               value={form.first_name}
               onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Last name">
@@ -154,14 +154,14 @@ export default function Coaches() {
               required
               value={form.last_name}
               onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Role">
             <select
               value={form.role}
               onChange={(e) => setForm({ ...form, role: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             >
               {ROLES.map((r) => (
                 <option key={r} value={r}>
@@ -175,14 +175,14 @@ export default function Coaches() {
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Phone">
             <input
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Qualifications">
@@ -191,12 +191,12 @@ export default function Coaches() {
               onChange={(e) =>
                 setForm({ ...form, qualifications: e.target.value })
               }
-              className="rounded-lg border border-slate-300 px-3 py-2"
+              className="rounded-xl border border-stone-300 px-3 py-2"
             />
           </Field>
           <button
             type="submit"
-            className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white"
+            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
           >
             Create
           </button>
@@ -218,7 +218,7 @@ export default function Coaches() {
                     updateCoach(editing.id, { first_name: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Last name">
@@ -229,7 +229,7 @@ export default function Coaches() {
                     updateCoach(editing.id, { last_name: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Role">
@@ -238,7 +238,7 @@ export default function Coaches() {
                 onChange={(e) =>
                   updateCoach(editing.id, { role: e.target.value })
                 }
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               >
                 {ROLES.map((r) => (
                   <option key={r} value={r}>
@@ -255,7 +255,7 @@ export default function Coaches() {
                     updateCoach(editing.id, { email: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Phone">
@@ -266,7 +266,7 @@ export default function Coaches() {
                     updateCoach(editing.id, { phone: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Qualifications">
@@ -279,7 +279,7 @@ export default function Coaches() {
                     });
                   }
                 }}
-                className="rounded-lg border border-slate-300 px-3 py-2"
+                className="rounded-xl border border-stone-300 px-3 py-2"
               />
             </Field>
             <Field label="Also an athlete?">
@@ -290,7 +290,7 @@ export default function Coaches() {
                     athlete_id: e.target.value ? Number(e.target.value) : null,
                   })
                 }
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               >
                 <option value="">Not also an athlete</option>
                 {athletes.map((a) => (
@@ -300,7 +300,7 @@ export default function Coaches() {
                 ))}
               </select>
             </Field>
-            <label className="flex items-center gap-2 text-sm text-slate-600">
+            <label className="flex items-center gap-2 text-sm text-stone-600">
               <input
                 type="checkbox"
                 checked={editing.is_active}

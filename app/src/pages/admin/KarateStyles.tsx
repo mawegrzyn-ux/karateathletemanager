@@ -81,7 +81,7 @@ export default function KarateStyles() {
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Karate styles</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Karate styles</h1>
         <AddButton onClick={openCreate} />
       </div>
 
@@ -89,7 +89,7 @@ export default function KarateStyles() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search styles..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
 
       <div className="flex flex-col gap-2">
@@ -97,13 +97,13 @@ export default function KarateStyles() {
           <button
             key={s.id}
             onClick={() => setDrawer(s)}
-            className="min-h-[44px] rounded-lg border border-slate-200 px-3 py-2 text-left font-medium"
+            className="flex min-h-[44px] items-center rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
           >
             {s.name}
           </button>
         ))}
         {filtered.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">No styles yet.</p>
+          <p className="px-1 py-2 text-sm text-stone-500">No styles yet.</p>
         )}
       </div>
 
@@ -118,12 +118,12 @@ export default function KarateStyles() {
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <button
             type="submit"
-            className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white"
+            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
           >
             Create
           </button>
@@ -145,7 +145,7 @@ export default function KarateStyles() {
                     updateStyle(editing.id, { name: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <DeleteButton

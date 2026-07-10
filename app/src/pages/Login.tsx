@@ -28,7 +28,7 @@ export default function Login() {
 
   return (
     <div className="flex min-h-full flex-col justify-center gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Log in</h1>
+      <h1 className="text-2xl font-bold tracking-tight">Log in</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field label="Email">
           <input
@@ -36,7 +36,7 @@ export default function Login() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
           />
         </Field>
         <Field label="Password">
@@ -45,19 +45,19 @@ export default function Login() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
           />
         </Field>
         {error && <p className="text-sm text-red-700">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
-          className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white disabled:opacity-50"
+          className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
         >
           Log in
         </button>
       </form>
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-stone-600">
         No account?{" "}
         <Link to="/register" className="font-medium text-red-700">
           Register

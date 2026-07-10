@@ -127,8 +127,8 @@ function ModuleItemsEditor({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
         Exercises &amp; rest ({items.length})
       </span>
 
@@ -136,7 +136,7 @@ function ModuleItemsEditor({
         {items.map((item, i) => (
           <div
             key={i}
-            className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3"
+            className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-3"
           >
             <div className="flex items-center gap-2">
               <select
@@ -144,7 +144,7 @@ function ModuleItemsEditor({
                 onChange={(e) =>
                   updateItem(i, { item_type: e.target.value as ItemType })
                 }
-                className="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
               >
                 <option value="exercise">Exercise</option>
                 <option value="rest">Rest</option>
@@ -166,7 +166,7 @@ function ModuleItemsEditor({
                     required
                     defaultValue={item.name}
                     onBlur={(e) => updateItem(i, { name: e.target.value })}
-                    className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                    className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                   />
                 </Field>
                 <Field label="Explanation">
@@ -175,14 +175,14 @@ function ModuleItemsEditor({
                     onBlur={(e) =>
                       updateItem(i, { explanation: e.target.value })
                     }
-                    className="rounded-lg border border-slate-300 px-3 py-2"
+                    className="rounded-xl border border-stone-300 px-3 py-2"
                   />
                 </Field>
                 <Field label="Video link">
                   <input
                     defaultValue={item.video_url}
                     onBlur={(e) => updateItem(i, { video_url: e.target.value })}
-                    className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                    className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                   />
                 </Field>
                 <Field label="Measured by">
@@ -191,7 +191,7 @@ function ModuleItemsEditor({
                     onChange={(e) =>
                       updateItem(i, { mode: e.target.value as "reps" | "time" })
                     }
-                    className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                    className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                   >
                     <option value="reps">Sets &amp; reps</option>
                     <option value="time">Time</option>
@@ -205,7 +205,7 @@ function ModuleItemsEditor({
                         min={1}
                         defaultValue={item.sets}
                         onBlur={(e) => updateItem(i, { sets: e.target.value })}
-                        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                       />
                     </Field>
                     <Field label="Reps">
@@ -214,7 +214,7 @@ function ModuleItemsEditor({
                         min={1}
                         defaultValue={item.reps}
                         onBlur={(e) => updateItem(i, { reps: e.target.value })}
-                        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                       />
                     </Field>
                   </div>
@@ -227,7 +227,7 @@ function ModuleItemsEditor({
                       onBlur={(e) =>
                         updateItem(i, { duration_seconds: e.target.value })
                       }
-                      className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                      className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                     />
                   </Field>
                 )}
@@ -241,7 +241,7 @@ function ModuleItemsEditor({
                   onBlur={(e) =>
                     updateItem(i, { duration_seconds: e.target.value })
                   }
-                  className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                 />
               </Field>
             )}
@@ -253,14 +253,14 @@ function ModuleItemsEditor({
         <button
           type="button"
           onClick={() => onChange([...items, { ...EMPTY_EXERCISE }])}
-          className="min-h-[44px] flex-1 rounded-lg border border-slate-300 font-medium text-slate-700"
+          className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
         >
           + Add exercise
         </button>
         <button
           type="button"
           onClick={() => onChange([...items, { ...EMPTY_REST }])}
-          className="min-h-[44px] flex-1 rounded-lg border border-slate-300 font-medium text-slate-700"
+          className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
         >
           + Add rest
         </button>
@@ -347,7 +347,7 @@ export default function TrainingModules() {
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Training modules</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Training modules</h1>
         <AddButton onClick={openCreate} />
       </div>
 
@@ -355,7 +355,7 @@ export default function TrainingModules() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search training modules..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
 
       <div className="flex flex-col gap-2">
@@ -363,18 +363,18 @@ export default function TrainingModules() {
           <button
             key={m.id}
             onClick={() => setDrawer(m)}
-            className="flex min-h-[44px] flex-col items-start gap-1 rounded-lg border border-slate-200 px-3 py-2 text-left"
+            className="flex min-h-[44px] flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 text-left shadow-card"
           >
             <span className="font-medium">{m.title}</span>
             {m.items.length > 0 && (
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-stone-500">
                 {m.items.map(itemSummary).join(", ")}
               </span>
             )}
           </button>
         ))}
         {filtered.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">
+          <p className="px-1 py-2 text-sm text-stone-500">
             No training modules yet.
           </p>
         )}
@@ -391,20 +391,20 @@ export default function TrainingModules() {
               required
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
           <Field label="Explanation">
             <textarea
               value={form.explanation}
               onChange={(e) => setForm({ ...form, explanation: e.target.value })}
-              className="rounded-lg border border-slate-300 px-3 py-2"
+              className="rounded-xl border border-stone-300 px-3 py-2"
             />
           </Field>
           <ModuleItemsEditor items={formItems} onChange={setFormItems} />
           <button
             type="submit"
-            className="min-h-[44px] rounded-lg bg-red-700 font-medium text-white"
+            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
           >
             Create
           </button>
@@ -426,7 +426,7 @@ export default function TrainingModules() {
                     updateModule(editing.id, { title: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Explanation">
@@ -437,7 +437,7 @@ export default function TrainingModules() {
                     updateModule(editing.id, { explanation: e.target.value });
                   }
                 }}
-                className="rounded-lg border border-slate-300 px-3 py-2"
+                className="rounded-xl border border-stone-300 px-3 py-2"
               />
             </Field>
             <ModuleItemsEditor

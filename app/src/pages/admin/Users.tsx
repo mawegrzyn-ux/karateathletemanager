@@ -83,13 +83,13 @@ export default function AdminUsers() {
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <h1 className="text-xl font-semibold">Users</h1>
+      <h1 className="text-2xl font-bold tracking-tight">Users</h1>
 
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search users..."
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
 
       <div className="flex flex-col gap-2">
@@ -97,7 +97,7 @@ export default function AdminUsers() {
           <button
             key={u.id}
             onClick={() => setSelectedId(u.id)}
-            className="flex min-h-[44px] items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-left"
+            className="flex min-h-[44px] items-center justify-between rounded-xl border border-stone-200 px-3 py-2 text-left"
           >
             <span className="font-medium">
               {u.first_name || u.last_name
@@ -124,7 +124,7 @@ export default function AdminUsers() {
                     updateUser(editing.id, { first_name: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Last name">
@@ -135,7 +135,7 @@ export default function AdminUsers() {
                     updateUser(editing.id, { last_name: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Phone">
@@ -146,7 +146,7 @@ export default function AdminUsers() {
                     updateUser(editing.id, { phone: e.target.value });
                   }
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
             <Field label="Role">
@@ -157,7 +157,7 @@ export default function AdminUsers() {
                     role: (e.target.value || null) as Role,
                   })
                 }
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               >
                 <option value="">No role</option>
                 {ROLES.map((r) => (
@@ -173,7 +173,7 @@ export default function AdminUsers() {
                 onChange={(e) =>
                   updateUser(editing.id, { status: e.target.value as Status })
                 }
-                className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               >
                 {STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -183,7 +183,7 @@ export default function AdminUsers() {
               </select>
             </Field>
 
-            <label className="flex min-h-[44px] items-center gap-2 rounded-lg border border-slate-300 px-3">
+            <label className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-300 px-3">
               <input
                 type="checkbox"
                 checked={editing.is_admin}
@@ -240,13 +240,13 @@ function PersonPicker({
   );
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-slate-50 p-2">
-      <span className="text-xs font-medium text-slate-600">{label}</span>
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">{label}</span>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={`Search ${label.toLowerCase()}...`}
-        className="min-h-[44px] rounded-lg border border-slate-300 px-3"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
         {results.map((o) => {
@@ -256,10 +256,10 @@ function PersonPicker({
               key={o.id}
               type="button"
               onClick={() => onSelect(selected ? null : o.id)}
-              className={`flex min-h-[44px] items-center justify-between rounded-lg border px-3 text-left ${
+              className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
                 selected
                   ? "border-green-200 bg-green-50 text-green-800"
-                  : "border-slate-200"
+                  : "border-stone-200"
               }`}
             >
               <span>
@@ -272,7 +272,7 @@ function PersonPicker({
           );
         })}
         {results.length === 0 && (
-          <p className="px-1 py-2 text-sm text-slate-500">No matches.</p>
+          <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
       </div>
     </div>
