@@ -13,6 +13,7 @@ import AdminCoaches from "./pages/admin/Coaches";
 import AdminTrainingModules from "./pages/admin/TrainingModules";
 import AdminKatas from "./pages/admin/Katas";
 import AdminKarateStyles from "./pages/admin/KarateStyles";
+import AdminCoachRoles from "./pages/admin/CoachRoles";
 import RequireAuth from "./components/RequireAuth";
 import RequireLogin from "./components/RequireLogin";
 
@@ -129,6 +130,14 @@ export default function App() {
           element={
             <RequireAuth adminOnly>
               <AdminKarateStyles />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/coach-roles"
+          element={
+            <RequireAuth adminOnly>
+              <AdminCoachRoles />
             </RequireAuth>
           }
         />

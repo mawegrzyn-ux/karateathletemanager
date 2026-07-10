@@ -11,6 +11,7 @@ const events = require("./events");
 const trainingModules = require("./trainingModules");
 const katas = require("./katas");
 const karateStyles = require("./karateStyles");
+const coachRoles = require("./coachRoles");
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use("/events", events);
 router.use("/training-modules", trainingModules);
 router.use("/katas", katas);
 router.use("/karate-styles", karateStyles);
+router.use("/coach-roles", coachRoles);
 
 module.exports = router;

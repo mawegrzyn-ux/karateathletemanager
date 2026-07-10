@@ -81,7 +81,7 @@ Domain: nadakarate.com
 - **Associations** — national/regional governing bodies. Name, description, contact info. A club affiliates with at most one association
 - **Clubs** — individual dojos. Name, location, contact info, optional link to one association. Athletes and coaches can belong to multiple clubs (many-to-many); a person's associations are derived from their club(s)' association, not tracked directly
 - **Athletes** — name, date of birth, contact, emergency contact, belt/grade, join date, photo, medical notes, active/inactive status
-- **Coaches** — name, contact, qualifications, role (head coach / assistant), can also be athletes
+- **Coaches** — name, contact, qualifications, role (admin-managed list, e.g. head coach / assistant), karate style(s), can also be athletes
 - **Classes** — recurring schedule slots (e.g. "Juniors Mon/Wed 5-6pm", "Adults Tue/Thu 7-8:30pm"). Class type (kata, kumite, general, fitness), age group, location, max capacity
 - **Sessions** — individual instances of a class on a specific date. Can be cancelled, rescheduled, or have a substitute coach
 - **Attendance** — which athletes attended which session. Checked in by coach or self-check-in
@@ -244,6 +244,22 @@ coach-run attendance) — this is personal athlete itinerary planning.
   shows styles read-only, same as the rest of an athlete's profile) and
   `PUT /api/admin/clubs/:id/styles` (`isClubAdmin`-gated, same as club
   athlete/coach membership).
+- **Coach roles**: `nk_coaches.role` remains a free-text column, but the
+  set of role names offered in the UI is now admin-managed rather than
+  hardcoded — `nk_coach_roles` (`name` unique), seeded with the two
+  values already in use ("head coach", "assistant"). Admins can add more
+  (e.g. "fitness coach") via the admin Coach Roles page.
+  `api/src/routes/coachRoles.js` — same shape as `karateStyles.js`:
+  `GET` open to any authenticated user, `POST`/`PATCH`/`DELETE`
+  `authorize.requireAdmin`. `admin/Coaches.tsx`'s role `<select>` (both
+  create form and edit drawer) is now populated from this list instead
+  of a hardcoded array.
+- **Coach styles**: coaches can now select one or more karate styles,
+  same as athletes and clubs — `nk_coach_styles` (`coach_id` +
+  `style_id`, many-to-many), replaced as a whole unit via
+  `PUT /api/admin/coaches/:id/styles` (admin-only, matching the existing
+  admin-only gate on all other coach mutations; `GET` open to `admin`/
+  `coach` same as the rest of a coach's record).
 - `api/src/utils/permissions.js`'s `isEventEditor(user, eventId)` gates
   every route in `api/src/routes/events.js`: true for `is_admin`; for
   `role === 'athlete'`, true if they're one of the attached athletes;
