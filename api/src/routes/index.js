@@ -12,6 +12,7 @@ const trainingModules = require("./trainingModules");
 const katas = require("./katas");
 const karateStyles = require("./karateStyles");
 const coachRoles = require("./coachRoles");
+const uploads = require("./uploads");
 
 const router = Router();
 
@@ -28,5 +29,6 @@ router.use("/training-modules", trainingModules);
 router.use("/katas", katas);
 router.use("/karate-styles", karateStyles);
 router.use("/coach-roles", coachRoles);
+router.use("/uploads", uploads);
 
 module.exports = router;
