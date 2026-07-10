@@ -43,7 +43,7 @@ function Shell() {
             }
           >
             <span className="text-lg leading-none">{tab.icon}</span>
-            <span>{tab.label}</span>
+            <span className="font-display uppercase tracking-wide">{tab.label}</span>
           </NavLink>
         ))}
       </nav>

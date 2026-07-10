@@ -26,3 +26,10 @@ body {
   background-color: var(--color-bg);
   color: var(--color-text);
 }
+
+h1,
+h2 {
+  font-family: "Oswald", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
