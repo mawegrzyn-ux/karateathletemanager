@@ -200,6 +200,37 @@ coach-run attendance) — this is personal athlete itinerary planning.
   date (capped at 60) at creation time — there's no ongoing
   series/recurrence-rule link, so each generated item is thereafter
   edited/deleted on its own, same as a manually-created one.
+- **Schedule.tsx view modes**: a `List`/`Day`/`Week`/`Month` segmented
+  control (all client-side, no new endpoints) sits above the event list
+  in `ScheduleManager`. All four operate on the same `events` array —
+  there's no separate "calendar" data source.
+  - **List**: events are grouped into date-headed sections ("Today",
+    "Tomorrow", or a formatted date). On first load the view
+    auto-scrolls the "Today" section (or the nearest future date) into
+    place — once only, via a ref flag, so it never fights a user's
+    manual scroll — and a floating arrow button re-triggers the same
+    scroll on demand.
+  - **Month**: a standard 7×6 day grid; each in-month cell shows up to
+    3 small `TYPE_ICONS` emoji (one per overlapping event, `+N` beyond
+    that) rather than full event rows, since a month cell has no room
+    for detail. Tapping a day switches to Day view for that date.
+  - **Week**: 7 day columns × hourly rows (6 AM–10 PM, `HOUR_HEIGHT`
+    px/hour). An event only gets a time-positioned block if it's
+    single-day *and* has both `start_time`/`end_time` — anything else
+    (multi-day, or no time set) renders instead as a small all-day strip
+    above the grid for each day it overlaps.
+  - **Day**: the same split (timed events on an hourly grid, everything
+    else in an all-day strip) for a single focused date, with the same
+    per-event detail (icon, title, badge, time) as the List view's rows.
+    Timed event cards are draggable (pointer events, not HTML5
+    drag-and-drop, since that doesn't work on touch) — vertical drag
+    moves the block, snapped to 15-minute increments; on release,
+    `PATCH /api/events/:id` updates `start_time`/`end_time` (duration
+    preserved). A `justDraggedRef` flag suppresses the click-to-open
+    that would otherwise fire immediately after a drag's pointerup.
+  - All three calendar views share date-math helpers (`startOfWeek`,
+    `startOfMonth`, `eventOverlapsDate`, `timeToMinutes`/
+    `minutesToTime`, etc.) defined once near the top of `Schedule.tsx`.
 - **Training modules**: `nk_training_modules` (`title`, `explanation`) is
   a reusable library of session plans a coach or admin authors. Each
   plan is an ordered sequence of `nk_training_module_items`

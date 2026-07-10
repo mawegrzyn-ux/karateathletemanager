@@ -1,4 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useApi } from "../hooks/useApi";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -79,6 +85,19 @@ const TYPE_LABELS: Record<string, string> = {
   kata_performance: "Kata performance",
 };
 
+const TYPE_ICONS: Record<string, string> = {
+  competition: "🏆",
+  squad_session: "👥",
+  training: "💪",
+  travel: "✈️",
+  time_off: "🌴",
+  seminar: "🎓",
+  training_camp: "⛺",
+  rest: "😴",
+  other: "📌",
+  kata_performance: "🥋",
+};
+
 const EMPTY_FORM = {
   title: "",
   event_type: "training",
@@ -112,6 +131,128 @@ function toTimeInput(value: string | null) {
   return value ? value.slice(0, 5) : "";
 }
 
+function groupEventsByDate(events: Event[]) {
+  const map = new Map<string, Event[]>();
+  for (const e of events) {
+    const date = toDateInput(e.start_date);
+    if (!map.has(date)) map.set(date, []);
+    map.get(date)!.push(e);
+  }
+  return [...map.entries()]
+    .map(([date, events]) => ({ date, events }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function addDaysStr(dateStr: string, days: number) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function dateLabel(dateStr: string) {
+  const today = todayStr();
+  if (dateStr === today) return "Today";
+  if (dateStr === addDaysStr(today, 1)) return "Tomorrow";
+  if (dateStr === addDaysStr(today, -1)) return "Yesterday";
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function startOfWeek(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+  return d.toISOString().slice(0, 10);
+}
+
+function startOfMonth(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(1);
+  return d.toISOString().slice(0, 10);
+}
+
+function daysInMonthOf(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+}
+
+function monthLabel(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  return d.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function weekRangeLabel(weekStart: string) {
+  const start = new Date(`${weekStart}T00:00:00Z`);
+  const end = new Date(`${addDaysStr(weekStart, 6)}T00:00:00Z`);
+  const fmt = (d: Date, withYear: boolean) =>
+    d.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: withYear ? "numeric" : undefined,
+      timeZone: "UTC",
+    });
+  return `${fmt(start, false)} – ${fmt(end, true)}`;
+}
+
+function shortDateLabel(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function eventOverlapsDate(event: Event, dateStr: string) {
+  return (
+    toDateInput(event.start_date) <= dateStr && dateStr <= toDateInput(event.end_date)
+  );
+}
+
+function timeToMinutes(t: string | null) {
+  if (!t) return null;
+  const [h, m] = t.slice(0, 5).split(":").map(Number);
+  return h * 60 + m;
+}
+
+function minutesToTime(mins: number) {
+  const clamped = Math.max(0, Math.min(24 * 60 - 1, mins));
+  const h = Math.floor(clamped / 60);
+  const m = Math.round(clamped % 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+const DAY_START_HOUR = 6;
+const DAY_END_HOUR = 22;
+const HOUR_HEIGHT = 56;
+const GRID_HOURS = Array.from(
+  { length: DAY_END_HOUR - DAY_START_HOUR + 1 },
+  (_, i) => DAY_START_HOUR + i
+);
+
+function formatHour(hour: number) {
+  const h = hour % 24;
+  const period = h < 12 ? "AM" : "PM";
+  const display = h % 12 === 0 ? 12 : h % 12;
+  return `${display} ${period}`;
+}
+
 export default function Schedule() {
   const { user } = useAuth();
 
@@ -142,11 +283,38 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [drawer, setDrawer] = useState<"closed" | "create" | Event>("closed");
   const [form, setForm] = useState(EMPTY_FORM);
   const [formAthleteIds, setFormAthleteIds] = useState<number[]>([]);
+  const [viewMode, setViewMode] = useState<"list" | "day" | "week" | "month">(
+    "list"
+  );
+  const [focusedDate, setFocusedDate] = useState(todayStr());
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const hasAutoScrolledRef = useRef(false);
+
+  function scrollToToday(behavior: ScrollBehavior = "smooth") {
+    const today = todayStr();
+    const groups = groupEventsByDate(events ?? []);
+    const target =
+      groups.find((g) => g.date >= today) ?? groups[groups.length - 1];
+    if (target) {
+      sectionRefs.current[target.date]?.scrollIntoView({
+        behavior,
+        block: "start",
+      });
+    }
+  }
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (events && !hasAutoScrolledRef.current) {
+      hasAutoScrolledRef.current = true;
+      requestAnimationFrame(() => scrollToToday("auto"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]);
 
   function load() {
     api
@@ -204,6 +372,18 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     );
   }
 
+  async function updateEventTime(
+    event: Event,
+    start_time: string,
+    end_time: string
+  ) {
+    const { event: updated } = await api.patch<{ event: Event }>(
+      `/events/${event.id}`,
+      { start_time, end_time }
+    );
+    updateEventInList(updated);
+  }
+
   if (error) return <div className="p-4 text-red-700">{error}</div>;
   if (!events)
     return (
@@ -235,31 +415,109 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
         className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
 
-      <div className="flex flex-col gap-2">
-        {filteredEvents.map((e) => (
+      <div className="flex gap-1 rounded-full bg-stone-100 p-1">
+        {(["list", "day", "week", "month"] as const).map((mode) => (
           <button
-            key={e.id}
-            onClick={() => setDrawer(e)}
-            className="flex min-h-[44px] flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 text-left shadow-card"
+            key={mode}
+            onClick={() => setViewMode(mode)}
+            className={`min-h-[40px] flex-1 rounded-full px-2 text-sm font-medium capitalize transition-colors ${
+              viewMode === mode
+                ? "bg-red-600 text-white shadow-sm"
+                : "text-stone-600"
+            }`}
           >
-            <span className="font-medium">{e.title}</span>
-            <div className="flex items-center gap-2">
-              <Badge>{TYPE_LABELS[e.event_type] ?? e.event_type}</Badge>
-              <span className="text-xs text-stone-500">
-                {toDateInput(e.start_date)}
-                {e.end_date !== e.start_date ? ` – ${toDateInput(e.end_date)}` : ""}
-                {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
-                {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
-              </span>
-            </div>
+            {mode}
           </button>
         ))}
-        {filteredEvents.length === 0 && (
-          <p className="px-1 py-2 text-sm text-stone-500">
-            Nothing scheduled yet.
-          </p>
-        )}
       </div>
+
+      {viewMode === "list" && (
+        <div className="flex flex-col gap-4">
+          {groupEventsByDate(filteredEvents).map(({ date, events: dayEvents }) => (
+            <div
+              key={date}
+              ref={(el) => {
+                sectionRefs.current[date] = el;
+              }}
+              className="flex flex-col gap-2"
+            >
+              <h2 className="text-sm font-semibold text-stone-500">
+                {dateLabel(date)}
+              </h2>
+              {dayEvents.map((e) => (
+                <button
+                  key={e.id}
+                  onClick={() => setDrawer(e)}
+                  className="flex min-h-[44px] flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 text-left shadow-card"
+                >
+                  <span className="font-medium">
+                    {TYPE_ICONS[e.event_type] ?? ""} {e.title}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Badge>{TYPE_LABELS[e.event_type] ?? e.event_type}</Badge>
+                    <span className="text-xs text-stone-500">
+                      {toDateInput(e.start_date)}
+                      {e.end_date !== e.start_date
+                        ? ` – ${toDateInput(e.end_date)}`
+                        : ""}
+                      {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
+                      {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ))}
+          {filteredEvents.length === 0 && (
+            <p className="px-1 py-2 text-sm text-stone-500">
+              Nothing scheduled yet.
+            </p>
+          )}
+        </div>
+      )}
+
+      {viewMode === "month" && (
+        <MonthView
+          focusedDate={focusedDate}
+          setFocusedDate={setFocusedDate}
+          events={filteredEvents}
+          onGoToDay={(date) => {
+            setFocusedDate(date);
+            setViewMode("day");
+          }}
+        />
+      )}
+
+      {viewMode === "week" && (
+        <WeekView
+          focusedDate={focusedDate}
+          setFocusedDate={setFocusedDate}
+          events={filteredEvents}
+          onOpenEvent={setDrawer}
+        />
+      )}
+
+      {viewMode === "day" && (
+        <DayView
+          focusedDate={focusedDate}
+          setFocusedDate={setFocusedDate}
+          events={filteredEvents}
+          onOpenEvent={setDrawer}
+          onReschedule={(event, start_time, end_time) =>
+            updateEventTime(event, start_time, end_time)
+          }
+        />
+      )}
+
+      {viewMode === "list" && (
+        <button
+          onClick={() => scrollToToday("smooth")}
+          aria-label="Jump to today"
+          className="fixed bottom-24 right-4 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-red-600 text-lg text-white shadow-lg"
+        >
+          ↑
+        </button>
+      )}
 
       <Drawer
         open={drawer === "create"}
@@ -650,6 +908,426 @@ function SingleSelectPicker({
         {results.length === 0 && (
           <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
+      </div>
+    </div>
+  );
+}
+
+function CalendarNav({
+  label,
+  onPrev,
+  onNext,
+  onToday,
+}: {
+  label: string;
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <button
+        onClick={onPrev}
+        aria-label="Previous"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-stone-300 text-lg"
+      >
+        ‹
+      </button>
+      <div className="flex flex-col items-center">
+        <span className="font-semibold">{label}</span>
+        <button
+          onClick={onToday}
+          className="text-xs font-medium text-red-700"
+        >
+          Today
+        </button>
+      </div>
+      <button
+        onClick={onNext}
+        aria-label="Next"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-stone-300 text-lg"
+      >
+        ›
+      </button>
+    </div>
+  );
+}
+
+function MonthView({
+  focusedDate,
+  setFocusedDate,
+  events,
+  onGoToDay,
+}: {
+  focusedDate: string;
+  setFocusedDate: (date: string) => void;
+  events: Event[];
+  onGoToDay: (date: string) => void;
+}) {
+  const monthStart = startOfMonth(focusedDate);
+  const gridStart = startOfWeek(monthStart);
+  const totalDays = daysInMonthOf(focusedDate);
+  const monthEnd = addDaysStr(monthStart, totalDays - 1);
+  const gridEnd = startOfWeek(monthEnd) === startOfWeek(monthEnd) ? addDaysStr(startOfWeek(monthEnd), 6) : monthEnd;
+  const cells: string[] = [];
+  for (let d = gridStart; d <= gridEnd; d = addDaysStr(d, 1)) {
+    cells.push(d);
+  }
+
+  const today = todayStr();
+
+  return (
+    <div className="flex flex-col gap-3">
+      <CalendarNav
+        label={monthLabel(focusedDate)}
+        onPrev={() => setFocusedDate(addDaysStr(startOfMonth(focusedDate), -1))}
+        onNext={() => setFocusedDate(addDaysStr(monthEnd, 1))}
+        onToday={() => setFocusedDate(todayStr())}
+      />
+      <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-stone-500">
+        {WEEKDAY_LABELS.map((label) => (
+          <span key={label}>{label}</span>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((date) => {
+          const inMonth = date >= monthStart && date <= monthEnd;
+          const dayEvents = events.filter((e) => eventOverlapsDate(e, date));
+          const isToday = date === today;
+          return (
+            <button
+              key={date}
+              onClick={() => onGoToDay(date)}
+              className={`flex min-h-[56px] flex-col items-center gap-0.5 rounded-xl p-1 text-xs ${
+                inMonth ? "bg-white shadow-card" : "bg-transparent text-stone-300"
+              } ${isToday ? "ring-2 ring-red-600" : ""}`}
+            >
+              <span className={inMonth ? "font-medium" : ""}>
+                {Number(date.slice(8, 10))}
+              </span>
+              <div className="flex flex-wrap justify-center gap-0.5 leading-none">
+                {dayEvents.slice(0, 3).map((e) => (
+                  <span key={e.id} title={e.title}>
+                    {TYPE_ICONS[e.event_type] ?? "•"}
+                  </span>
+                ))}
+                {dayEvents.length > 3 && (
+                  <span className="text-[10px] text-stone-500">
+                    +{dayEvents.length - 3}
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function WeekView({
+  focusedDate,
+  setFocusedDate,
+  events,
+  onOpenEvent,
+}: {
+  focusedDate: string;
+  setFocusedDate: (date: string) => void;
+  events: Event[];
+  onOpenEvent: (event: Event) => void;
+}) {
+  const weekStart = startOfWeek(focusedDate);
+  const days = Array.from({ length: 7 }, (_, i) => addDaysStr(weekStart, i));
+
+  function timedEventsFor(date: string) {
+    return events.filter(
+      (e) =>
+        toDateInput(e.start_date) === date &&
+        toDateInput(e.end_date) === date &&
+        e.start_time &&
+        e.end_time
+    );
+  }
+
+  function allDayEventsFor(date: string) {
+    return events.filter(
+      (e) =>
+        eventOverlapsDate(e, date) &&
+        !(toDateInput(e.start_date) === date && toDateInput(e.end_date) === date && e.start_time && e.end_time)
+    );
+  }
+
+  const gridHeight = (DAY_END_HOUR - DAY_START_HOUR + 1) * HOUR_HEIGHT;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <CalendarNav
+        label={weekRangeLabel(weekStart)}
+        onPrev={() => setFocusedDate(addDaysStr(weekStart, -7))}
+        onNext={() => setFocusedDate(addDaysStr(weekStart, 7))}
+        onToday={() => setFocusedDate(todayStr())}
+      />
+
+      <div className="grid grid-cols-[36px_repeat(7,1fr)] gap-1 text-center text-xs font-medium text-stone-500">
+        <span />
+        {days.map((d) => (
+          <span key={d} className={d === todayStr() ? "text-red-600" : ""}>
+            {shortDateLabel(d)}
+          </span>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-[36px_repeat(7,1fr)] gap-1">
+        <span />
+        {days.map((date) => {
+          const allDay = allDayEventsFor(date);
+          if (allDay.length === 0) return <span key={date} />;
+          return (
+            <div key={date} className="flex flex-col gap-0.5">
+              {allDay.slice(0, 2).map((e) => (
+                <button
+                  key={e.id}
+                  onClick={() => onOpenEvent(e)}
+                  className="truncate rounded bg-stone-100 px-1 py-0.5 text-left text-[10px]"
+                  title={e.title}
+                >
+                  {TYPE_ICONS[e.event_type] ?? ""} {e.title}
+                </button>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex overflow-x-auto">
+        <div className="flex flex-col text-right text-[10px] text-stone-500" style={{ width: 36 }}>
+          {GRID_HOURS.map((h) => (
+            <div key={h} style={{ height: HOUR_HEIGHT }} className="pr-1 -translate-y-2">
+              {formatHour(h)}
+            </div>
+          ))}
+        </div>
+        <div className="grid flex-1 grid-cols-7 gap-1">
+          {days.map((date) => (
+            <div
+              key={date}
+              className="relative rounded-lg bg-white shadow-card"
+              style={{ height: gridHeight }}
+            >
+              {GRID_HOURS.map((h, i) => (
+                <div
+                  key={h}
+                  className="absolute inset-x-0 border-t border-stone-100"
+                  style={{ top: i * HOUR_HEIGHT }}
+                />
+              ))}
+              {timedEventsFor(date).map((e) => {
+                const start = timeToMinutes(e.start_time) ?? DAY_START_HOUR * 60;
+                const end = timeToMinutes(e.end_time) ?? start + 30;
+                const top = ((start - DAY_START_HOUR * 60) / 60) * HOUR_HEIGHT;
+                const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, 20);
+                return (
+                  <button
+                    key={e.id}
+                    onClick={() => onOpenEvent(e)}
+                    className="absolute inset-x-0.5 overflow-hidden rounded bg-red-50 px-1 text-left text-[10px] text-red-800"
+                    style={{ top, height }}
+                  >
+                    {TYPE_ICONS[e.event_type] ?? ""} {e.title}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DayView({
+  focusedDate,
+  setFocusedDate,
+  events,
+  onOpenEvent,
+  onReschedule,
+}: {
+  focusedDate: string;
+  setFocusedDate: (date: string) => void;
+  events: Event[];
+  onOpenEvent: (event: Event) => void;
+  onReschedule: (event: Event, start_time: string, end_time: string) => void;
+}) {
+  const gridRef = useRef<HTMLDivElement>(null);
+  const justDraggedRef = useRef(false);
+  const [drag, setDrag] = useState<{
+    id: number;
+    pointerId: number;
+    startY: number;
+    origStartMin: number;
+    origEndMin: number;
+    offsetMin: number;
+  } | null>(null);
+
+  const timedEvents = events.filter(
+    (e) =>
+      toDateInput(e.start_date) === focusedDate &&
+      toDateInput(e.end_date) === focusedDate &&
+      e.start_time &&
+      e.end_time
+  );
+  const allDayEvents = events.filter(
+    (e) =>
+      eventOverlapsDate(e, focusedDate) &&
+      !(
+        toDateInput(e.start_date) === focusedDate &&
+        toDateInput(e.end_date) === focusedDate &&
+        e.start_time &&
+        e.end_time
+      )
+  );
+
+  const gridHeight = (DAY_END_HOUR - DAY_START_HOUR + 1) * HOUR_HEIGHT;
+  const minutesPerPixel = 60 / HOUR_HEIGHT;
+
+  function handlePointerDown(e: ReactPointerEvent, event: Event) {
+    const startMin = timeToMinutes(event.start_time)!;
+    const endMin = timeToMinutes(event.end_time)!;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    setDrag({
+      id: event.id,
+      pointerId: e.pointerId,
+      startY: e.clientY,
+      origStartMin: startMin,
+      origEndMin: endMin,
+      offsetMin: 0,
+    });
+  }
+
+  function handlePointerMove(e: ReactPointerEvent) {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const deltaY = e.clientY - drag.startY;
+    const rawOffset = Math.round((deltaY * minutesPerPixel) / 15) * 15;
+    setDrag({ ...drag, offsetMin: rawOffset });
+  }
+
+  function handlePointerUp(e: ReactPointerEvent, event: Event) {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const duration = drag.origEndMin - drag.origStartMin;
+    let newStart = drag.origStartMin + drag.offsetMin;
+    newStart = Math.max(0, Math.min(24 * 60 - duration, newStart));
+    const newEnd = newStart + duration;
+    if (drag.offsetMin !== 0) {
+      justDraggedRef.current = true;
+      onReschedule(event, minutesToTime(newStart), minutesToTime(newEnd));
+    }
+    setDrag(null);
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <CalendarNav
+        label={dateLabel(focusedDate)}
+        onPrev={() => setFocusedDate(addDaysStr(focusedDate, -1))}
+        onNext={() => setFocusedDate(addDaysStr(focusedDate, 1))}
+        onToday={() => setFocusedDate(todayStr())}
+      />
+
+      {allDayEvents.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {allDayEvents.map((e) => (
+            <button
+              key={e.id}
+              onClick={() => onOpenEvent(e)}
+              className="flex min-h-[36px] items-center gap-2 rounded-xl bg-stone-100 px-3 text-left text-sm"
+            >
+              <Badge>{TYPE_ICONS[e.event_type] ?? ""} {TYPE_LABELS[e.event_type] ?? e.event_type}</Badge>
+              <span className="truncate">{e.title}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <p className="text-xs text-stone-500">
+        Drag a timed event up or down to reschedule it.
+      </p>
+
+      <div className="flex overflow-x-auto">
+        <div
+          className="flex flex-col text-right text-[10px] text-stone-500"
+          style={{ width: 44 }}
+        >
+          {GRID_HOURS.map((h) => (
+            <div key={h} style={{ height: HOUR_HEIGHT }} className="pr-1 -translate-y-2">
+              {formatHour(h)}
+            </div>
+          ))}
+        </div>
+        <div
+          ref={gridRef}
+          className="relative flex-1 rounded-lg bg-white shadow-card"
+          style={{ height: gridHeight }}
+        >
+          {GRID_HOURS.map((h, i) => (
+            <div
+              key={h}
+              className="absolute inset-x-0 border-t border-stone-100"
+              style={{ top: i * HOUR_HEIGHT }}
+            />
+          ))}
+          {timedEvents.map((e) => {
+            const isDragging = drag?.id === e.id;
+            const start = timeToMinutes(e.start_time)!;
+            const end = timeToMinutes(e.end_time)!;
+            const top =
+              ((start - DAY_START_HOUR * 60) / 60) * HOUR_HEIGHT +
+              (isDragging ? (drag.offsetMin / 60) * HOUR_HEIGHT : 0);
+            const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, 32);
+            return (
+              <div
+                key={e.id}
+                onPointerDown={(ev) => handlePointerDown(ev, e)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={(ev) => handlePointerUp(ev, e)}
+                onClick={() => {
+                  if (justDraggedRef.current) {
+                    justDraggedRef.current = false;
+                    return;
+                  }
+                  onOpenEvent(e);
+                }}
+                className={`absolute inset-x-1 flex cursor-grab flex-col overflow-hidden rounded-xl px-2 py-1 text-left shadow-card active:cursor-grabbing ${
+                  isDragging ? "z-10 bg-red-100" : "bg-red-50"
+                }`}
+                style={{ top, height, touchAction: "none" }}
+              >
+                <span className="truncate text-xs font-medium text-red-900">
+                  {TYPE_ICONS[e.event_type] ?? ""} {e.title}
+                </span>
+                <span className="text-[10px] text-red-700">
+                  {toTimeInput(
+                    minutesToTime(
+                      isDragging ? drag.origStartMin + drag.offsetMin : start
+                    )
+                  )}
+                  –
+                  {toTimeInput(
+                    minutesToTime(
+                      isDragging
+                        ? drag.origStartMin + drag.offsetMin + (end - start)
+                        : end
+                    )
+                  )}
+                </span>
+              </div>
+            );
+          })}
+          {timedEvents.length === 0 && allDayEvents.length === 0 && (
+            <p className="absolute inset-x-0 top-4 text-center text-sm text-stone-500">
+              Nothing scheduled.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
