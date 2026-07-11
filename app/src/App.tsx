@@ -36,6 +36,12 @@ const tabClassName = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-red-50 text-red-600" : "text-stone-500"
   }`;
 
+const PROFILE_LABELS: Record<string, string> = {
+  athlete: "Athlete",
+  coach: "Coach",
+  parent: "Parent",
+};
+
 function Shell() {
   const { user } = useAuth();
   const tabs = user?.role === "athlete" ? ATHLETE_TABS : DEFAULT_TABS;
@@ -50,30 +56,47 @@ function Shell() {
     [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
     user?.email ||
     "";
+  const profileLabel = (user?.role && PROFILE_LABELS[user.role]) || "Profile";
 
   return (
     <div className="flex h-full flex-col bg-stone-100">
-      {activeProfileName && (
-        <div className="bg-red-600 px-4 py-1.5 text-center text-xs font-medium uppercase tracking-wide text-white">
-          Viewing as {activeProfileName} (
-          {user?.role === "athlete" ? "Athlete" : "Coach"})
-        </div>
-      )}
       <main className="flex-1 overflow-y-auto pb-24">
         <Outlet />
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 flex justify-around bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-1px_2px_rgba(28,25,23,0.04),0_-8px_20px_-6px_rgba(28,25,23,0.10)] backdrop-blur">
-        <NavLink to="/profile" className={tabClassName}>
+      <nav className="fixed inset-x-0 bottom-0 flex bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-1px_2px_rgba(28,25,23,0.04),0_-8px_20px_-6px_rgba(28,25,23,0.10)] backdrop-blur">
+        <NavLink
+          to="/profile"
+          className={({ isActive }) =>
+            `relative my-2 flex min-h-[44px] w-24 flex-col items-center justify-center gap-0.5 py-2 pl-2 pr-5 text-xs font-medium transition-colors ${
+              isActive ? "text-red-600" : "text-stone-600"
+            }`
+          }
+        >
+          <span
+            className="absolute inset-y-0 left-0 right-0 -z-10 bg-red-50"
+            style={{ clipPath: "polygon(0 0, 100% 0, 70% 100%, 0 100%)" }}
+          />
           <Avatar name={profileName} size={22} />
-          <span className="font-display uppercase tracking-wide">Profile</span>
+          <span className="font-display uppercase tracking-wide">
+            {profileLabel}
+          </span>
         </NavLink>
-        {tabs.map((tab) => (
-          <NavLink key={tab.to} to={tab.to} end={tab.end} className={tabClassName}>
-            <span className="text-lg leading-none">{tab.icon}</span>
-            <span className="font-display uppercase tracking-wide">{tab.label}</span>
-          </NavLink>
-        ))}
+        <div className="flex flex-1 justify-around">
+          {tabs.map((tab) => (
+            <NavLink
+              key={tab.to}
+              to={tab.to}
+              end={tab.end}
+              className={tabClassName}
+            >
+              <span className="text-lg leading-none">{tab.icon}</span>
+              <span className="font-display uppercase tracking-wide">
+                {tab.label}
+              </span>
+            </NavLink>
+          ))}
+        </div>
       </nav>
     </div>
   );

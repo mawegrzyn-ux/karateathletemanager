@@ -292,7 +292,14 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `client_max_body_size` (`nginx/nadakarate.com.conf`) must be at least
   as large as multer's 50MB cap — it isn't part of the automated deploy,
   so bumping it requires a manual `sudo nginx -s reload` on the server
-  after updating `/etc/nginx/sites-available/nadakarate.com`.
+  after updating `/etc/nginx/sites-available/nadakarate.com`. The `/api/`
+  location also needs its `^~` modifier: without it, nginx prefers a
+  matching *regex* location over a plain prefix one, so the static-asset
+  cache rule below (`location ~* \.(js|css|png|...)$`) would otherwise
+  intercept any uploaded `/api/uploads/files/*.png` (or `.jpg`/`.gif`/
+  etc.) before it reaches the proxy, 404ing the image instead of serving
+  it — this bit us in production once already; don't drop the `^~` when
+  touching this file.
 - **Katas**: `nk_katas` (`name` unique, `style`, `wkf_number`) is an
   admin-managed reference list, seeded via migration with the full
   official WKF Kata Name/Order List — 102 kata names numbered 1-102 in
@@ -618,7 +625,7 @@ server {
     root /var/www/nadakarate/frontend;
     index index.html;
 
-    location /api/ {
+    location ^~ /api/ {
         proxy_pass http://127.0.0.1:3001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
