@@ -532,6 +532,9 @@ const migrations = [
   `INSERT INTO nk_user_coaches (user_id, coach_id)
      SELECT id, coach_id FROM nk_users WHERE coach_id IS NOT NULL
      ON CONFLICT DO NOTHING`,
+
+  `ALTER TABLE nk_coaches
+     ADD COLUMN IF NOT EXISTS photo_url TEXT`,
 ];
 
 async function migrate() {

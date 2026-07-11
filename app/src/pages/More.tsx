@@ -77,6 +77,7 @@ export default function More() {
 
       <TileGrid>
         <Tile to="/profile" icon="👤" label="My profile" />
+        <Tile to="/grades" icon="🥋" label="Grades" />
       </TileGrid>
 
       {availableRoles.length >= 2 && (

@@ -1,7 +1,16 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useApi } from "../hooks/useApi";
 import { useAuth } from "../context/AuthContext";
-import { Spinner, Drawer, AddButton, DeleteButton, Field } from "../components/ui";
+import {
+  Spinner,
+  Drawer,
+  AddButton,
+  DeleteButton,
+  Field,
+  Avatar,
+  MediaField,
+  Toast,
+} from "../components/ui";
 
 interface Athlete {
   id: number;
@@ -14,6 +23,7 @@ interface Athlete {
   emergency_phone: string | null;
   belt: string;
   join_date: string;
+  photo_url: string | null;
   medical_notes: string | null;
   is_active: boolean;
 }
@@ -100,9 +110,16 @@ function MyAthleteProfile({ athleteId }: { athleteId: number }) {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-2xl font-bold tracking-tight">
-        {athlete.first_name} {athlete.last_name}
-      </h1>
+      <div className="flex items-center gap-3">
+        <Avatar
+          name={`${athlete.first_name} ${athlete.last_name}`}
+          url={athlete.photo_url}
+          size={56}
+        />
+        <h1 className="text-2xl font-bold tracking-tight">
+          {athlete.first_name} {athlete.last_name}
+        </h1>
+      </div>
       <ReadOnlyField label="Belt" value={athlete.belt} />
       <ReadOnlyField
         label="Styles"
@@ -211,6 +228,13 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
     "closed"
   );
   const [form, setForm] = useState(EMPTY_FORM);
+  const [createPhotoUrl, setCreatePhotoUrl] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 4000);
+  }
 
   useEffect(() => {
     load("");
@@ -259,6 +283,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
 
   function openCreate() {
     setForm(EMPTY_FORM);
+    setCreatePhotoUrl("");
     setDrawer("create");
   }
 
@@ -268,6 +293,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
     const { athlete } = await api.post<{ athlete: Athlete }>("/athletes", {
       ...form,
       date_of_birth: form.date_of_birth || null,
+      photo_url: createPhotoUrl || null,
     });
     setAthletes((prev) => (prev ? [...prev, athlete] : [athlete]));
     setDrawer("closed");
@@ -327,8 +353,9 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
           <button
             key={a.id}
             onClick={() => setDrawer(a)}
-            className="flex min-h-[44px] items-center rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
+            className="flex min-h-[44px] items-center gap-3 rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
           >
+            <Avatar name={`${a.first_name} ${a.last_name}`} url={a.photo_url} />
             {a.first_name} {a.last_name}
           </button>
         ))}
@@ -340,6 +367,13 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
         title="New athlete"
       >
         <form onSubmit={createAthlete} className="flex flex-col gap-4">
+          <MediaField
+            label="Photo"
+            kind="image"
+            value={createPhotoUrl}
+            onChange={setCreatePhotoUrl}
+            onError={showToast}
+          />
           <Field label="First name">
             <input
               required
@@ -437,6 +471,15 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
       >
         {editing && (
           <div className="flex flex-col gap-4">
+            <MediaField
+              label="Photo"
+              kind="image"
+              value={editing.photo_url ?? ""}
+              onChange={(url) =>
+                updateAthlete(editing.id, { photo_url: url || null })
+              }
+              onError={showToast}
+            />
             <Field label="First name">
               <input
                 defaultValue={editing.first_name}
@@ -572,6 +615,8 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
           </div>
         )}
       </Drawer>
+
+      {toast && <Toast message={toast} />}
     </div>
   );
 }

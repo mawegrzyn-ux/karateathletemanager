@@ -169,6 +169,11 @@ this way.
   read-only (`MyAthleteProfile` in `Athletes.tsx`) instead — editing your
   own profile isn't supported yet. Everyone else (`parent`, no role) sees
   a placeholder ("ask your coach").
+- Both `nk_athletes` and `nk_coaches` carry a `photo_url`, editable via
+  the shared `MediaField` (`kind="image"`) in the create/edit drawer.
+  Anywhere a person's photo is displayed instead of edited (list rows,
+  `MyAthleteProfile`'s read-only header), use `Avatar` (`ui.tsx`) — it
+  renders the photo if set, otherwise a circle with the name's initials.
 
 ### Scheduling API
 
@@ -264,18 +269,23 @@ coach-run attendance) — this is personal athlete itinerary planning.
   failure (bad bounds, network error) via a `Toast`, since every field
   edit auto-saves immediately and previously failed silently.
 - **Media uploads**: `video_url`/`image_url` on an exercise item accept
-  either a pasted link or an uploaded file, via `MediaField` in
-  `admin/TrainingModules.tsx`. A pasted YouTube link renders an embedded
-  player preview; any other video/image URL (including an uploaded
-  file's own URL) renders a native `<video>`/`<img>` preview. Uploading
-  posts multipart form data to `POST /api/uploads` (`authorize("coach")`,
-  image/video mimetypes only, 50MB cap) via `multer`, which saves to
-  `api/uploads/` (gitignored — persists across `git pull` deploys since
-  it's untracked, unlike the frontend `dist/` build) and returns
-  `/api/uploads/files/<uuid>.<ext>`; that path is served back by the
-  same router's `express.static`, gated by the router's `authorize()` so
-  only logged-in users can view a module's media, matching the module
-  list's own read gating.
+  either a pasted link or an uploaded file, via `MediaField` — a shared
+  component in `components/ui.tsx` (also used for athlete/coach photos,
+  see below) — in `admin/TrainingModules.tsx`. A pasted YouTube link
+  renders an embedded player preview; any other video/image URL
+  (including an uploaded file's own URL) renders a native
+  `<video>`/`<img>` preview. Uploading posts multipart form data to
+  `POST /api/uploads` (`authorize("coach")`, image/video mimetypes only,
+  50MB cap) via `multer`, which saves to `api/uploads/` (gitignored —
+  persists across `git pull` deploys since it's untracked, unlike the
+  frontend `dist/` build) and returns `/api/uploads/files/<uuid>.<ext>`;
+  that path is served back by the same router's `express.static`, gated
+  by the router's `authorize()` so only logged-in users can view a
+  module's media, matching the module list's own read gating. Nginx's
+  `client_max_body_size` (`nginx/nadakarate.com.conf`) must be at least
+  as large as multer's 50MB cap — it isn't part of the automated deploy,
+  so bumping it requires a manual `sudo nginx -s reload` on the server
+  after updating `/etc/nginx/sites-available/nadakarate.com`.
 - **Katas**: `nk_katas` (`name` unique, `style`, `wkf_number`) is an
   admin-managed reference list, seeded via migration with the full
   official WKF Kata Name/Order List — 102 kata names numbered 1-102 in
@@ -541,7 +551,12 @@ const migrations = [
 
 ## Frontend Conventions
 
-- Mobile-first layout — bottom tab navigation (Schedule, Athletes, Grades, More)
+- Mobile-first layout — bottom tab navigation (Profile, Schedule, Athletes,
+  More). Profile is an `Avatar` showing the logged-in user's own name
+  initials (the account, not the linked athlete/coach record, so no photo
+  lookup needed) and links to `/profile`; Grades moved off the bottom nav
+  into a tile on the More page (still its own route, rendered inside the
+  same `Shell` layout).
 - Vite dev server on port 5173, proxies `/api` to `localhost:3001`
 - `useApi()` hook wraps fetch with auth headers (if applicable)
 - Shared UI components in `components/ui.tsx` (Modal, Toast, Field, Badge, Spinner, etc.)
@@ -588,7 +603,7 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
-        client_max_body_size 20M;
+        client_max_body_size 50M;
     }
 
     location / {

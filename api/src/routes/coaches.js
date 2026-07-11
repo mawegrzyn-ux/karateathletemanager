@@ -6,7 +6,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const router = Router();
 
 const FIELDS = `id, first_name, last_name, email, phone, qualifications,
-                role, athlete_id, is_active, created_at`;
+                role, athlete_id, photo_url, is_active, created_at`;
 
 router.use(authorize("coach"));
 
@@ -35,6 +35,7 @@ router.post(
       qualifications,
       role,
       athlete_id,
+      photo_url,
       is_active,
     } = req.body ?? {};
 
@@ -47,8 +48,8 @@ router.post(
     try {
       const { rows } = await pool.query(
         `INSERT INTO nk_coaches
-           (first_name, last_name, email, phone, qualifications, role, athlete_id, is_active)
-         VALUES ($1, $2, $3, $4, $5, COALESCE($6, 'assistant'), $7, COALESCE($8, TRUE))
+           (first_name, last_name, email, phone, qualifications, role, athlete_id, photo_url, is_active)
+         VALUES ($1, $2, $3, $4, $5, COALESCE($6, 'assistant'), $7, $8, COALESCE($9, TRUE))
          RETURNING ${FIELDS}`,
         [
           first_name,
@@ -58,6 +59,7 @@ router.post(
           qualifications,
           role,
           athlete_id,
+          photo_url,
           is_active,
         ]
       );
@@ -94,42 +96,39 @@ router.patch(
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
-    const {
-      first_name,
-      last_name,
-      email,
-      phone,
-      qualifications,
-      role,
-      athlete_id,
-      is_active,
-    } = req.body ?? {};
+    const body = req.body ?? {};
+    const fields = {
+      first_name: body.first_name,
+      last_name: body.last_name,
+      email: body.email,
+      phone: body.phone,
+      qualifications: body.qualifications,
+      role: body.role,
+      athlete_id: body.athlete_id,
+      photo_url: body.photo_url,
+      is_active: body.is_active,
+    };
+    const setClauses = [];
+    const values = [];
+    for (const [key, value] of Object.entries(fields)) {
+      if (key in body) {
+        values.push(value);
+        setClauses.push(`${key} = $${values.length}`);
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: { message: "No fields to update" } });
+    }
+
+    values.push(req.params.id);
 
     try {
       const { rows } = await pool.query(
-        `UPDATE nk_coaches SET
-           first_name     = COALESCE($1, first_name),
-           last_name      = COALESCE($2, last_name),
-           email          = COALESCE($3, email),
-           phone          = COALESCE($4, phone),
-           qualifications = COALESCE($5, qualifications),
-           role           = COALESCE($6, role),
-           athlete_id     = COALESCE($7, athlete_id),
-           is_active      = COALESCE($8, is_active),
-           updated_at     = NOW()
-         WHERE id = $9
+        `UPDATE nk_coaches SET ${setClauses.join(", ")}, updated_at = NOW()
+         WHERE id = $${values.length}
          RETURNING ${FIELDS}`,
-        [
-          first_name,
-          last_name,
-          email,
-          phone,
-          qualifications,
-          role,
-          athlete_id,
-          is_active,
-          req.params.id,
-        ]
+        values
       );
 
       if (rows.length === 0) {

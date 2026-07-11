@@ -19,7 +19,10 @@ Don't invent a new layout per page; extend this one.
 
 - **List rows show only the name** (or, where there's no guaranteed name,
   email + a status `Badge`) — nothing else. Rows are full-width tappable
-  buttons, minimum 44px tall.
+  buttons, minimum 44px tall. Entities with a `photo_url` (athletes,
+  coaches) prefix the name with an `Avatar` (`ui.tsx`) — the photo, or the
+  name's initials if none is set — this is how the name is presented, not
+  extra info on the row.
 - **Adding a record**: a `+` icon (`AddButton`) in the top-right of the
   page header opens a `Drawer` with a blank form containing *every* field
   the entity supports. Submitting `POST`s, appends the new record to the
@@ -39,10 +42,25 @@ Don't invent a new layout per page; extend this one.
   bottom-sheet, used for lighter-weight confirmations).
 
 Reusable pieces, all in `app/src/components/ui.tsx`: `Drawer`,
-`AddButton`, `DeleteButton`, `Field`, `Badge`, `Spinner`, `Modal`, `Toast`.
-Look at `app/src/pages/admin/Clubs.tsx` for the fullest example (it also
-has the sub-pattern for many-to-many membership pickers — see
-`MemberEditor` in that file).
+`AddButton`, `DeleteButton`, `Field`, `Badge`, `Spinner`, `Modal`, `Toast`,
+`Avatar`, `MediaField`. Look at `app/src/pages/admin/Clubs.tsx` for the
+fullest example (it also has the sub-pattern for many-to-many membership
+pickers — see `MemberEditor` in that file).
+
+## UI convention: photo/video upload
+
+Any field that holds a photo or video (athlete/coach `photo_url`, a
+training-module exercise's `video_url`/`image_url` — see
+`admin/TrainingModules.tsx`) uses the shared `MediaField` (`ui.tsx`,
+`kind: "image" | "video"`): a text input to paste a link, an "Upload"
+button that posts the chosen file to `POST /api/uploads`, and a live
+preview (YouTube links embed a player; other video/image URLs render a
+native `<video>`/`<img>`). Don't build a page-local copy of this — extend
+`MediaField` itself if the pattern needs to change. Anywhere a person's
+photo is displayed instead of edited (list rows, read-only profile
+views), use `Avatar` — it renders the photo if `photo_url` is set,
+otherwise a circle with the name's initials; never leave a person-shaped
+field blank when there's no photo.
 
 ## UI convention: delete confirmation
 
@@ -113,3 +131,7 @@ list rather than opening anything else.
   IF NOT EXISTS`) — never edit a past entry, only append new ones.
 - Mobile-first, 44px minimum tap targets, bottom tab nav — see the
   "Design Principles" section of `docs/ARCHITECTURE.md`.
+- Bottom nav tabs: Profile (an `Avatar` of the logged-in user's own name
+  initials, links to `/profile`), Schedule, Athletes, More. Keep the tab
+  bar to the handful of most-used destinations — anything else (Grades,
+  admin pages) lives under More as a tile instead of getting its own tab.

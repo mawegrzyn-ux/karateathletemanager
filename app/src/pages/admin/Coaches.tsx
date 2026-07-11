@@ -6,6 +6,9 @@ import {
   AddButton,
   DeleteButton,
   Field,
+  Avatar,
+  MediaField,
+  Toast,
 } from "../../components/ui";
 
 interface Athlete {
@@ -33,6 +36,7 @@ interface Coach {
   qualifications: string | null;
   role: string;
   athlete_id: number | null;
+  photo_url: string | null;
   is_active: boolean;
 }
 
@@ -55,7 +59,14 @@ export default function Coaches() {
   const [error, setError] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<"closed" | "create" | Coach>("closed");
   const [form, setForm] = useState(EMPTY_FORM);
+  const [createPhotoUrl, setCreatePhotoUrl] = useState("");
   const [query, setQuery] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 4000);
+  }
 
   useEffect(() => {
     Promise.all([
@@ -87,16 +98,17 @@ export default function Coaches() {
 
   function openCreate() {
     setForm(EMPTY_FORM);
+    setCreatePhotoUrl("");
     setDrawer("create");
   }
 
   async function createCoach(e: FormEvent) {
     e.preventDefault();
     if (!form.first_name.trim() || !form.last_name.trim()) return;
-    const { coach } = await api.post<{ coach: Coach }>(
-      "/admin/coaches",
-      form
-    );
+    const { coach } = await api.post<{ coach: Coach }>("/admin/coaches", {
+      ...form,
+      photo_url: createPhotoUrl || null,
+    });
     setCoaches((prev) => (prev ? [...prev, coach] : [coach]));
     setDrawer("closed");
   }
@@ -166,8 +178,9 @@ export default function Coaches() {
           <button
             key={c.id}
             onClick={() => setDrawer(c)}
-            className="flex min-h-[44px] items-center rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
+            className="flex min-h-[44px] items-center gap-3 rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
           >
+            <Avatar name={`${c.first_name} ${c.last_name}`} url={c.photo_url} />
             {c.first_name} {c.last_name}
           </button>
         ))}
@@ -179,6 +192,13 @@ export default function Coaches() {
         title="New coach"
       >
         <form onSubmit={createCoach} className="flex flex-col gap-4">
+          <MediaField
+            label="Photo"
+            kind="image"
+            value={createPhotoUrl}
+            onChange={setCreatePhotoUrl}
+            onError={showToast}
+          />
           <Field label="First name">
             <input
               required
@@ -248,6 +268,15 @@ export default function Coaches() {
       >
         {editing && (
           <div className="flex flex-col gap-4">
+            <MediaField
+              label="Photo"
+              kind="image"
+              value={editing.photo_url ?? ""}
+              onChange={(url) =>
+                updateCoach(editing.id, { photo_url: url || null })
+              }
+              onError={showToast}
+            />
             <Field label="First name">
               <input
                 defaultValue={editing.first_name}
@@ -361,6 +390,8 @@ export default function Coaches() {
           </div>
         )}
       </Drawer>
+
+      {toast && <Toast message={toast} />}
     </div>
   );
 }
