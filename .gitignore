@@ -145,3 +145,7 @@ vite.config.ts.timestamp-*
 # User-uploaded media (persists on the server, not tracked in git)
 api/uploads/*
 !api/uploads/.gitkeep
+
+# Playwright test output
+app/playwright-report/
+app/test-results/

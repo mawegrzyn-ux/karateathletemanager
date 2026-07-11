@@ -688,6 +688,34 @@ The deploy workflow triggers on push to `main`:
 5. SSH into server: `git pull`, `npm install`, `npm run migrate`, `pm2 restart`
 6. Reload Nginx
 7. Health check
+8. `scripts/smoke-test.sh` — fast curl-based checks (see below)
+9. Playwright smoke suite (`app/tests/e2e/smoke.spec.ts`)
+
+Both test steps run read-only against the live site (`https://nadakarate.com`)
+right after the health check, so a broken deploy is caught immediately —
+though note the deploy itself has already happened by that point; there's
+no automatic rollback. A failing Playwright run uploads its report
+(`playwright-report/`) as a workflow artifact for debugging.
+
+### Smoke tests
+
+- `scripts/smoke-test.sh [base-url]` — bash + curl, no dependencies beyond
+  `curl`/`grep`. Checks `/api/health`, that `/` and `/login` serve the SPA,
+  and — the one regression-specific check — that a bogus
+  `/api/uploads/files/*.png` path reaches Express (401/404 with a JSON
+  `error` body) rather than getting swallowed by nginx's static-asset
+  cache `location` block (see the "Media uploads" section above for why
+  that block needs `^~`). Defaults to `https://nadakarate.com`.
+- `app/tests/e2e/smoke.spec.ts` (Playwright, `npm run test:e2e` from
+  `app/`) — the same core checks plus rendering assertions (login/register
+  pages have the expected fields, an unauthenticated visit redirects to
+  `/login`). `SMOKE_BASE_URL` picks the target (defaults to
+  `http://localhost:5173`). An optional `describe` block additionally logs
+  in and checks the bottom nav renders with no console errors, but only
+  runs when `SMOKE_TEST_EMAIL`/`SMOKE_TEST_PASSWORD` are set (env vars
+  locally, repo secrets in CI) — a dedicated test account, not a real
+  coach/athlete's login. Neither suite ever creates, edits, or deletes
+  data, so both are safe to run directly against production.
 
 ### Manual deploy
 
