@@ -15,6 +15,7 @@ import {
   Field,
   Badge,
 } from "../components/ui";
+import { TrainingModuleView, type TrainingModule } from "../components/TrainingModuleView";
 
 interface Event {
   id: number;
@@ -47,11 +48,6 @@ interface Person {
   id: number;
   first_name: string;
   last_name: string;
-}
-
-interface TrainingModule {
-  id: number;
-  title: string;
 }
 
 interface Kata {
@@ -676,6 +672,7 @@ function EventDetail({
   const [athleteIds, setAthleteIds] = useState<number[]>([]);
   const [items, setItems] = useState<EventItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     api
@@ -713,106 +710,163 @@ function EventDetail({
       </div>
     );
 
+  const linkedModule =
+    event.event_type === "training" && event.training_module_id
+      ? modules.find((m) => m.id === event.training_module_id)
+      : undefined;
+  const athleteNames = allAthletes.filter((a) => athleteIds.includes(a.id));
+
   return (
     <div className="flex flex-col gap-4">
-      <Field label="Title">
-        <input
-          defaultValue={event.title}
-          onBlur={(e) => {
-            if (e.target.value !== event.title) {
-              updateEvent({ title: e.target.value });
-            }
-          }}
-          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-        />
-      </Field>
-      <Field label="Type">
-        <select
-          value={event.event_type}
-          onChange={(e) => updateEvent({ event_type: e.target.value })}
-          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setIsEditing((v) => !v)}
+          className="min-h-[44px] rounded-full border border-stone-300 px-4 text-sm font-medium text-stone-700"
         >
-          {EVENT_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {TYPE_LABELS[t]}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Start date">
-        <input
-          type="date"
-          defaultValue={toDateInput(event.start_date)}
-          onChange={(e) => updateEvent({ start_date: e.target.value })}
-          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-        />
-      </Field>
-      <Field label="End date">
-        <input
-          type="date"
-          defaultValue={toDateInput(event.end_date)}
-          onChange={(e) => updateEvent({ end_date: e.target.value })}
-          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-        />
-      </Field>
-      <Field label="Start time">
-        <input
-          type="time"
-          defaultValue={toTimeInput(event.start_time)}
-          onChange={(e) =>
-            updateEvent({ start_time: e.target.value || null })
-          }
-          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-        />
-      </Field>
-      <Field label="End time">
-        <input
-          type="time"
-          defaultValue={toTimeInput(event.end_time)}
-          onChange={(e) => updateEvent({ end_time: e.target.value || null })}
-          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-        />
-      </Field>
-      <Field label="Location">
-        <input
-          defaultValue={event.location ?? ""}
-          onBlur={(e) => {
-            if (e.target.value !== (event.location ?? "")) {
-              updateEvent({ location: e.target.value });
-            }
-          }}
-          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-        />
-      </Field>
-      <Field label="Notes">
-        <textarea
-          defaultValue={event.notes ?? ""}
-          onBlur={(e) => {
-            if (e.target.value !== (event.notes ?? "")) {
-              updateEvent({ notes: e.target.value });
-            }
-          }}
-          className="rounded-xl border border-stone-300 px-3 py-2"
-        />
-      </Field>
+          {isEditing ? "Done" : "✏️ Edit"}
+        </button>
+      </div>
 
-      {event.event_type === "training" && (
-        <SingleSelectPicker
-          label="Training module"
-          placeholder="Search training modules..."
-          options={modules.map((m) => ({ id: m.id, label: m.title }))}
-          selectedId={event.training_module_id}
-          onSelect={(id) => updateEvent({ training_module_id: id })}
-        />
-      )}
+      {isEditing ? (
+        <>
+          <Field label="Title">
+            <input
+              defaultValue={event.title}
+              onBlur={(e) => {
+                if (e.target.value !== event.title) {
+                  updateEvent({ title: e.target.value });
+                }
+              }}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Type">
+            <select
+              value={event.event_type}
+              onChange={(e) => updateEvent({ event_type: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            >
+              {EVENT_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {TYPE_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Start date">
+            <input
+              type="date"
+              defaultValue={toDateInput(event.start_date)}
+              onChange={(e) => updateEvent({ start_date: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="End date">
+            <input
+              type="date"
+              defaultValue={toDateInput(event.end_date)}
+              onChange={(e) => updateEvent({ end_date: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Start time">
+            <input
+              type="time"
+              defaultValue={toTimeInput(event.start_time)}
+              onChange={(e) =>
+                updateEvent({ start_time: e.target.value || null })
+              }
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="End time">
+            <input
+              type="time"
+              defaultValue={toTimeInput(event.end_time)}
+              onChange={(e) => updateEvent({ end_time: e.target.value || null })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Location">
+            <input
+              defaultValue={event.location ?? ""}
+              onBlur={(e) => {
+                if (e.target.value !== (event.location ?? "")) {
+                  updateEvent({ location: e.target.value });
+                }
+              }}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Notes">
+            <textarea
+              defaultValue={event.notes ?? ""}
+              onBlur={(e) => {
+                if (e.target.value !== (event.notes ?? "")) {
+                  updateEvent({ notes: e.target.value });
+                }
+              }}
+              className="rounded-xl border border-stone-300 px-3 py-2"
+            />
+          </Field>
 
-      {canPickAthletes && (
-        <AthletePicker
-          ids={athleteIds}
-          options={allAthletes}
-          onAdd={(id) => setAthletes([...athleteIds, id])}
-          onRemove={(id) => setAthletes(athleteIds.filter((i) => i !== id))}
-        />
+          {event.event_type === "training" && (
+            <SingleSelectPicker
+              label="Training module"
+              placeholder="Search training modules..."
+              options={modules.map((m) => ({ id: m.id, label: m.title }))}
+              selectedId={event.training_module_id}
+              onSelect={(id) => updateEvent({ training_module_id: id })}
+            />
+          )}
+
+          {canPickAthletes && (
+            <AthletePicker
+              ids={athleteIds}
+              options={allAthletes}
+              onAdd={(id) => setAthletes([...athleteIds, id])}
+              onRemove={(id) => setAthletes(athleteIds.filter((i) => i !== id))}
+            />
+          )}
+
+          <DeleteButton onClick={onDeleted} itemLabel={event.title} />
+        </>
+      ) : (
+        <>
+          <div className="flex items-center gap-2">
+            <Badge>{TYPE_LABELS[event.event_type] ?? event.event_type}</Badge>
+            <span className="text-sm text-stone-500">
+              {toDateInput(event.start_date)}
+              {event.end_date !== event.start_date
+                ? ` – ${toDateInput(event.end_date)}`
+                : ""}
+              {event.start_time ? ` ${toTimeInput(event.start_time)}` : ""}
+              {event.end_time ? `–${toTimeInput(event.end_time)}` : ""}
+            </span>
+          </div>
+          {event.location && (
+            <p className="text-sm text-stone-600">📍 {event.location}</p>
+          )}
+          {event.notes && <p className="text-stone-700">{event.notes}</p>}
+
+          {linkedModule && <TrainingModuleView module={linkedModule} />}
+
+          {athleteNames.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-stone-600">
+                Athletes ({athleteNames.length})
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {athleteNames.map((a) => (
+                  <Badge key={a.id}>
+                    {a.first_name} {a.last_name}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <ItemsSection
@@ -821,9 +875,8 @@ function EventDetail({
         setItems={setItems}
         modules={modules}
         katas={katas}
+        editable={isEditing}
       />
-
-      <DeleteButton onClick={onDeleted} itemLabel={event.title} />
     </div>
   );
 }
@@ -1383,12 +1436,14 @@ function ItemsSection({
   setItems,
   modules,
   katas,
+  editable,
 }: {
   eventId: number;
   items: EventItem[];
   setItems: (items: EventItem[]) => void;
   modules: TrainingModule[];
   katas: Kata[];
+  editable: boolean;
 }) {
   const api = useApi();
   const [adding, setAdding] = useState(false);
@@ -1511,7 +1566,33 @@ function ItemsSection({
                   )}
                 </button>
               </div>
-              {expanded && (
+              {expanded && !editable && (
+                <div className="flex flex-col gap-3 border-t border-stone-200 p-3">
+                  <div className="flex items-center gap-2 text-sm text-stone-500">
+                    <span>
+                      {toTimeInput(item.start_time)}–{toTimeInput(item.end_time)}
+                    </span>
+                  </div>
+                  {item.notes && (
+                    <p className="text-sm text-stone-700">{item.notes}</p>
+                  )}
+                  {item.item_type === "training" &&
+                    item.training_module_id &&
+                    (() => {
+                      const module = modules.find(
+                        (m) => m.id === item.training_module_id
+                      );
+                      return module ? <TrainingModuleView module={module} /> : null;
+                    })()}
+                  {item.item_type === "kata_performance" && item.kata_id && (
+                    <p className="text-sm text-stone-600">
+                      {katas.find((k) => k.id === item.kata_id) &&
+                        kataLabel(katas.find((k) => k.id === item.kata_id)!)}
+                    </p>
+                  )}
+                </div>
+              )}
+              {expanded && editable && (
                 <div className="flex flex-col gap-3 border-t border-stone-200 p-3">
                   <Field label="Title">
                     <input
@@ -1639,7 +1720,7 @@ function ItemsSection({
         )}
       </div>
 
-      {adding ? (
+      {editable && (adding ? (
         <form
           onSubmit={addItem}
           className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-3"
@@ -1830,7 +1911,7 @@ function ItemsSection({
         >
           + Add itinerary item
         </button>
-      )}
+      ))}
     </div>
   );
 }
