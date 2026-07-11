@@ -7,7 +7,6 @@ import {
   AddButton,
   DeleteButton,
   Field,
-  Avatar,
   MediaField,
   Toast,
 } from "../components/ui";
@@ -218,10 +217,12 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
           <button
             key={a.id}
             onClick={() => setDrawer(a)}
-            className="flex min-h-[44px] items-center gap-3 rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
+            className="flex min-h-[56px] items-stretch overflow-hidden rounded-2xl bg-white text-left font-medium shadow-card"
           >
-            <Avatar name={`${a.first_name} ${a.last_name}`} url={a.photo_url} />
-            {a.first_name} {a.last_name}
+            <AthleteThumb name={`${a.first_name} ${a.last_name}`} url={a.photo_url} />
+            <span className="flex flex-1 items-center py-3 pr-4">
+              {a.first_name} {a.last_name}
+            </span>
           </button>
         ))}
       </div>
@@ -482,6 +483,33 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
       </Drawer>
 
       {toast && <Toast message={toast} />}
+    </div>
+  );
+}
+
+function AthleteThumb({ name, url }: { name: string; url?: string | null }) {
+  if (url) {
+    return (
+      <img
+        src={url}
+        alt={name}
+        className="w-[15%] min-w-[56px] shrink-0 object-cover"
+      />
+    );
+  }
+
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  return (
+    <div className="flex w-[15%] min-w-[56px] shrink-0 items-center justify-center bg-red-100 font-semibold text-red-700">
+      {initials || "?"}
     </div>
   );
 }
