@@ -2,6 +2,10 @@ name: Deploy
 
 # Requires repo secrets before this can run against a real server:
 #   SSH_HOST, SSH_USER, SSH_KEY (private key with access to the Lightsail box)
+# Optional, for the authenticated Playwright check (skipped without them):
+#   SMOKE_TEST_EMAIL, SMOKE_TEST_PASSWORD — a real account on the live site
+#   that the smoke suite logs in with read-only. Use a dedicated account,
+#   not a real coach/athlete's own login.
 on:
   push:
     branches: [main]
@@ -55,3 +59,28 @@ jobs:
         run: |
           sleep 5
           curl -f https://nadakarate.com/api/health
+
+      - name: Smoke test
+        run: bash scripts/smoke-test.sh https://nadakarate.com
+
+      - name: Install Playwright browsers
+        working-directory: app
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright smoke tests
+        working-directory: app
+        env:
+          SMOKE_BASE_URL: https://nadakarate.com
+          # Optional: set these repo secrets to also exercise a real
+          # login + authenticated page load. Skipped automatically if unset.
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: app/playwright-report/
+          retention-days: 7
