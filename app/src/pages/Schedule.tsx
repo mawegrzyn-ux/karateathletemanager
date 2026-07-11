@@ -403,32 +403,34 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Schedule</h1>
-        <AddButton onClick={openCreate} />
-      </div>
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 flex flex-col gap-3 bg-stone-100 px-4 pb-2 pt-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Schedule</h1>
+          <AddButton onClick={openCreate} />
+        </div>
 
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search schedule..."
-        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-      />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search schedule..."
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+        />
 
-      <div className="flex gap-1 rounded-full bg-stone-100 p-1">
-        {(["list", "day", "week", "month"] as const).map((mode) => (
-          <button
-            key={mode}
-            onClick={() => setViewMode(mode)}
-            className={`min-h-[40px] flex-1 rounded-full px-2 text-sm font-medium capitalize transition-colors ${
-              viewMode === mode
-                ? "bg-red-600 text-white shadow-sm"
-                : "text-stone-600"
-            }`}
-          >
-            {mode}
-          </button>
-        ))}
+        <div className="flex gap-1 rounded-full bg-stone-200 p-1">
+          {(["list", "day", "week", "month"] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`min-h-[40px] flex-1 rounded-full px-2 text-sm font-medium capitalize transition-colors ${
+                viewMode === mode
+                  ? "bg-red-600 text-white shadow-sm"
+                  : "text-stone-600"
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
       </div>
 
       {viewMode === "list" && (
@@ -439,7 +441,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               ref={(el) => {
                 sectionRefs.current[date] = el;
               }}
-              className="flex flex-col gap-2"
+              className="flex scroll-mt-[190px] flex-col gap-2"
             >
               <h2 className="text-sm font-semibold text-stone-500">
                 {dateLabel(date)}
@@ -1099,8 +1101,8 @@ function WeekView({
         })}
       </div>
 
-      <div className="flex overflow-x-auto">
-        <div className="flex flex-col text-right text-[10px] text-stone-500" style={{ width: 36 }}>
+      <div className="flex max-h-[60vh] overflow-auto rounded-lg">
+        <div className="sticky left-0 flex flex-col bg-stone-100 text-right text-[10px] text-stone-500" style={{ width: 36 }}>
           {GRID_HOURS.map((h) => (
             <div key={h} style={{ height: HOUR_HEIGHT }} className="pr-1 -translate-y-2">
               {formatHour(h)}
@@ -1252,9 +1254,9 @@ function DayView({
         Drag a timed event up or down to reschedule it.
       </p>
 
-      <div className="flex overflow-x-auto">
+      <div className="flex max-h-[60vh] overflow-auto rounded-lg">
         <div
-          className="flex flex-col text-right text-[10px] text-stone-500"
+          className="sticky left-0 flex flex-col bg-stone-100 text-right text-[10px] text-stone-500"
           style={{ width: 44 }}
         >
           {GRID_HOURS.map((h) => (

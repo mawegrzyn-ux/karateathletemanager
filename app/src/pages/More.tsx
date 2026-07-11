@@ -1,6 +1,7 @@
-import type { PropsWithChildren } from "react";
+import { useEffect, useState, type PropsWithChildren } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, type Profile } from "../context/AuthContext";
+import { Drawer } from "../components/ui";
 
 function Tile({
   to,
@@ -27,7 +28,19 @@ function TileGrid({ children }: PropsWithChildren) {
 }
 
 export default function More() {
-  const { user, logout, switchRole } = useAuth();
+  const { user, logout, switchRole, fetchMyProfiles } = useAuth();
+  const [profiles, setProfiles] = useState<{
+    athletes: Profile[];
+    coaches: Profile[];
+  }>({ athletes: [], coaches: [] });
+  const [picker, setPicker] = useState<"athlete" | "coach" | null>(null);
+
+  useEffect(() => {
+    if (user?.athlete_id || user?.coach_id) {
+      fetchMyProfiles().then(setProfiles);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.athlete_id, user?.coach_id]);
 
   const availableRoles = (
     [
@@ -36,6 +49,27 @@ export default function More() {
       { role: "parent" as const, label: "Parent", has: !!user?.is_parent },
     ]
   ).filter((r) => r.has);
+
+  async function handleRoleClick(role: "athlete" | "coach" | "parent") {
+    if (role === "athlete" && profiles.athletes.length > 1) {
+      setPicker("athlete");
+      return;
+    }
+    if (role === "coach" && profiles.coaches.length > 1) {
+      setPicker("coach");
+      return;
+    }
+    await switchRole(role);
+  }
+
+  const pickerOptions =
+    picker === "athlete"
+      ? profiles.athletes
+      : picker === "coach"
+        ? profiles.coaches
+        : [];
+  const pickerSelectedId =
+    picker === "athlete" ? user?.athlete_id : user?.coach_id;
 
   return (
     <div className="flex flex-col gap-5 p-4">
@@ -54,7 +88,7 @@ export default function More() {
             {availableRoles.map(({ role, label }) => (
               <button
                 key={role}
-                onClick={() => switchRole(role)}
+                onClick={() => handleRoleClick(role)}
                 className={`min-h-[40px] flex-1 rounded-full px-3 text-sm font-medium transition-colors ${
                   user?.role === role
                     ? "bg-red-600 text-white shadow-sm"
@@ -67,6 +101,21 @@ export default function More() {
           </div>
         </div>
       )}
+
+      <Drawer
+        open={picker !== null}
+        onClose={() => setPicker(null)}
+        title={`Choose ${picker ?? ""} profile`}
+      >
+        <ProfilePicker
+          options={pickerOptions}
+          selectedId={pickerSelectedId ?? null}
+          onSelect={async (id) => {
+            if (picker) await switchRole(picker, id);
+            setPicker(null);
+          }}
+        />
+      </Drawer>
 
       {user?.is_admin && (
         <div className="flex flex-col gap-2">
@@ -106,6 +155,59 @@ export default function More() {
       >
         Log out
       </button>
+    </div>
+  );
+}
+
+function ProfilePicker({
+  options,
+  selectedId,
+  onSelect,
+}: {
+  options: Profile[];
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const results = options.filter((o) =>
+    `${o.first_name} ${o.last_name}`.toLowerCase().includes(q)
+  );
+
+  return (
+    <div className="flex flex-col gap-2">
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search profiles..."
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+      />
+      <div className="flex flex-col gap-1 overflow-y-auto">
+        {results.map((o) => {
+          const selected = selectedId === o.id;
+          return (
+            <button
+              key={o.id}
+              onClick={() => onSelect(o.id)}
+              className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
+                selected
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : "border-stone-200"
+              }`}
+            >
+              <span>
+                {o.first_name} {o.last_name}
+              </span>
+              <span className="text-sm">
+                {selected ? "✓ Selected" : "Select"}
+              </span>
+            </button>
+          );
+        })}
+        {results.length === 0 && (
+          <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
+        )}
+      </div>
     </div>
   );
 }

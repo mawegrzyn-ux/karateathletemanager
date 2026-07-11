@@ -4,6 +4,7 @@ const pool = require("../db/pool");
 const { signSession, SESSION_MAX_AGE_MS } = require("../utils/jwt");
 const asyncHandler = require("../utils/asyncHandler");
 const pinRateLimit = require("../utils/pinRateLimit");
+const { USER_SELECT_FIELDS } = require("../utils/userFields");
 
 const router = Router();
 
@@ -55,12 +56,7 @@ router.post(
            CASE WHEN (SELECT COUNT(*) FROM nk_users) = 0 THEN TRUE ELSE FALSE END,
            COALESCE($3, FALSE), COALESCE($4, FALSE), $5
          )
-         RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
-                   first_name, last_name, phone,
-                   EXISTS(
-                     SELECT 1 FROM nk_parent_athletes
-                     WHERE user_id = nk_users.id
-                   ) AS is_parent`,
+         RETURNING ${USER_SELECT_FIELDS}`,
         [
           email.toLowerCase(),
           passwordHash,
@@ -101,11 +97,7 @@ router.post(
     }
 
     const { rows } = await pool.query(
-      `SELECT id, email, password_hash, role, status, is_admin, athlete_id, coach_id,
-              first_name, last_name, phone,
-              EXISTS(
-                SELECT 1 FROM nk_parent_athletes WHERE user_id = nk_users.id
-              ) AS is_parent
+      `SELECT password_hash, ${USER_SELECT_FIELDS}
        FROM nk_users WHERE email = $1`,
       [email.toLowerCase()]
     );
@@ -119,21 +111,8 @@ router.post(
     }
 
     setSessionCookie(res, user.id);
-    res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-        is_admin: user.is_admin,
-        athlete_id: user.athlete_id,
-        coach_id: user.coach_id,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        phone: user.phone,
-        is_parent: user.is_parent,
-      },
-    });
+    const { password_hash, ...publicUser } = user;
+    res.json({ user: publicUser });
   })
 );
 
@@ -178,12 +157,7 @@ router.patch(
          phone      = COALESCE($3, phone),
          updated_at = NOW()
        WHERE id = $4
-       RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
-                 first_name, last_name, phone,
-                 EXISTS(
-                   SELECT 1 FROM nk_parent_athletes
-                   WHERE user_id = nk_users.id
-                 ) AS is_parent`,
+       RETURNING ${USER_SELECT_FIELDS}`,
       [first_name, last_name, phone, req.user.id]
     );
 
@@ -198,22 +172,62 @@ router.post(
       return res.status(401).json({ error: { message: "Not authenticated" } });
     }
 
-    const { role } = req.body ?? {};
+    const { role, profile_id } = req.body ?? {};
     if (role !== "athlete" && role !== "coach" && role !== "parent") {
       return res.status(400).json({
         error: { message: "role must be 'athlete', 'coach', or 'parent'" },
       });
     }
-    if (role === "athlete" && !req.user.athlete_id) {
-      return res
-        .status(400)
-        .json({ error: { message: "You don't have an athlete profile" } });
+
+    let athleteId = req.user.athlete_id;
+    let coachId = req.user.coach_id;
+
+    if (role === "athlete") {
+      const { rows } = await pool.query(
+        `SELECT athlete_id FROM nk_user_athletes WHERE user_id = $1 ORDER BY athlete_id`,
+        [req.user.id]
+      );
+      const ids = rows.map((r) => r.athlete_id);
+      if (ids.length === 0) {
+        return res
+          .status(400)
+          .json({ error: { message: "You don't have an athlete profile" } });
+      }
+      if (profile_id !== undefined && profile_id !== null) {
+        if (!ids.includes(Number(profile_id))) {
+          return res
+            .status(400)
+            .json({ error: { message: "Invalid athlete profile" } });
+        }
+        athleteId = Number(profile_id);
+      } else if (!ids.includes(athleteId)) {
+        athleteId = ids[0];
+      }
     }
-    if (role === "coach" && !req.user.coach_id) {
-      return res
-        .status(400)
-        .json({ error: { message: "You don't have a coach profile" } });
+
+    if (role === "coach") {
+      const { rows } = await pool.query(
+        `SELECT coach_id FROM nk_user_coaches WHERE user_id = $1 ORDER BY coach_id`,
+        [req.user.id]
+      );
+      const ids = rows.map((r) => r.coach_id);
+      if (ids.length === 0) {
+        return res
+          .status(400)
+          .json({ error: { message: "You don't have a coach profile" } });
+      }
+      if (profile_id !== undefined && profile_id !== null) {
+        if (!ids.includes(Number(profile_id))) {
+          return res
+            .status(400)
+            .json({ error: { message: "Invalid coach profile" } });
+        }
+        coachId = Number(profile_id);
+      } else if (!ids.includes(coachId)) {
+        coachId = ids[0];
+      }
     }
+
     if (role === "parent" && !req.user.is_parent) {
       return res
         .status(400)
@@ -221,18 +235,43 @@ router.post(
     }
 
     const { rows } = await pool.query(
-      `UPDATE nk_users SET role = $1, updated_at = NOW()
-       WHERE id = $2
-       RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
-                 first_name, last_name, phone,
-                 EXISTS(
-                   SELECT 1 FROM nk_parent_athletes
-                   WHERE user_id = nk_users.id
-                 ) AS is_parent`,
-      [role, req.user.id]
+      `UPDATE nk_users SET role = $1, athlete_id = $2, coach_id = $3, updated_at = NOW()
+       WHERE id = $4
+       RETURNING ${USER_SELECT_FIELDS}`,
+      [role, athleteId, coachId, req.user.id]
     );
 
     res.json({ user: rows[0] });
+  })
+);
+
+router.get(
+  "/my-profiles",
+  asyncHandler(async (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ error: { message: "Not authenticated" } });
+    }
+
+    const [athletes, coaches] = await Promise.all([
+      pool.query(
+        `SELECT a.id, a.first_name, a.last_name
+         FROM nk_user_athletes ua
+         JOIN nk_athletes a ON a.id = ua.athlete_id
+         WHERE ua.user_id = $1
+         ORDER BY a.last_name, a.first_name`,
+        [req.user.id]
+      ),
+      pool.query(
+        `SELECT c.id, c.first_name, c.last_name
+         FROM nk_user_coaches uc
+         JOIN nk_coaches c ON c.id = uc.coach_id
+         WHERE uc.user_id = $1
+         ORDER BY c.last_name, c.first_name`,
+        [req.user.id]
+      ),
+    ]);
+
+    res.json({ athletes: athletes.rows, coaches: coaches.rows });
   })
 );
 
@@ -309,12 +348,7 @@ router.post(
       const { rows: userRows } = await client.query(
         `UPDATE nk_users SET role = COALESCE(role, 'parent'), updated_at = NOW()
          WHERE id = $1
-         RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
-                   first_name, last_name, phone,
-                   EXISTS(
-                     SELECT 1 FROM nk_parent_athletes
-                     WHERE user_id = nk_users.id
-                   ) AS is_parent`,
+         RETURNING ${USER_SELECT_FIELDS}`,
         [req.user.id]
       );
 

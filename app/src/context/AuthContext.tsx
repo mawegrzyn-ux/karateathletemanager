@@ -20,6 +20,8 @@ export interface User {
   is_parent: boolean;
   athlete_id: number | null;
   coach_id: number | null;
+  athlete_name: string | null;
+  coach_name: string | null;
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
@@ -43,6 +45,12 @@ export interface Child {
   last_name: string;
 }
 
+export interface Profile {
+  id: number;
+  first_name: string;
+  last_name: string;
+}
+
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
@@ -54,8 +62,12 @@ interface AuthContextValue {
   ) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (update: ProfileUpdate) => Promise<void>;
-  switchRole: (role: "athlete" | "coach" | "parent") => Promise<void>;
+  switchRole: (
+    role: "athlete" | "coach" | "parent",
+    profileId?: number
+  ) => Promise<void>;
   linkChild: (pin: string) => Promise<Child>;
+  fetchMyProfiles: () => Promise<{ athletes: Profile[]; coaches: Profile[] }>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -115,11 +127,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const switchRole = useCallback(async (role: "athlete" | "coach" | "parent") => {
-    const { user } = await api.post<{ user: User }>("/auth/switch-role", {
-      role,
-    });
-    setUser(user);
+  const switchRole = useCallback(
+    async (role: "athlete" | "coach" | "parent", profileId?: number) => {
+      const { user } = await api.post<{ user: User }>("/auth/switch-role", {
+        role,
+        profile_id: profileId,
+      });
+      setUser(user);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  const fetchMyProfiles = useCallback(async () => {
+    return api.get<{ athletes: Profile[]; coaches: Profile[] }>(
+      "/auth/my-profiles"
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -144,6 +167,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         updateProfile,
         switchRole,
         linkChild,
+        fetchMyProfiles,
       }}
     >
       {children}

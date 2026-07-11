@@ -508,6 +508,30 @@ const migrations = [
      style_id INTEGER NOT NULL REFERENCES nk_karate_styles(id) ON DELETE CASCADE,
      PRIMARY KEY (coach_id, style_id)
   )`,
+
+  // A user account can own more than one athlete/coach profile (e.g. two
+  // separate club registrations). nk_users.athlete_id/coach_id remain as
+  // the "currently active" profile pointer used everywhere else in the
+  // app; these tables hold the full set the user can switch between.
+  `CREATE TABLE IF NOT EXISTS nk_user_athletes (
+     user_id    INTEGER NOT NULL REFERENCES nk_users(id) ON DELETE CASCADE,
+     athlete_id INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     PRIMARY KEY (user_id, athlete_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS nk_user_coaches (
+     user_id  INTEGER NOT NULL REFERENCES nk_users(id) ON DELETE CASCADE,
+     coach_id INTEGER NOT NULL REFERENCES nk_coaches(id) ON DELETE CASCADE,
+     PRIMARY KEY (user_id, coach_id)
+  )`,
+
+  `INSERT INTO nk_user_athletes (user_id, athlete_id)
+     SELECT id, athlete_id FROM nk_users WHERE athlete_id IS NOT NULL
+     ON CONFLICT DO NOTHING`,
+
+  `INSERT INTO nk_user_coaches (user_id, coach_id)
+     SELECT id, coach_id FROM nk_users WHERE coach_id IS NOT NULL
+     ON CONFLICT DO NOTHING`,
 ];
 
 async function migrate() {

@@ -11,6 +11,8 @@ interface ManagedUser {
   is_admin: boolean;
   athlete_id: number | null;
   coach_id: number | null;
+  athlete_ids: number[];
+  coach_ids: number[];
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
@@ -55,7 +57,7 @@ export default function AdminUsers() {
       patch
     );
     setUsers((prev) =>
-      prev ? prev.map((u) => (u.id === id ? user : u)) : prev
+      prev ? prev.map((u) => (u.id === id ? { ...u, ...user } : u)) : prev
     );
   }
 
@@ -63,6 +65,55 @@ export default function AdminUsers() {
     await api.del(`/admin/users/${id}`);
     setUsers((prev) => (prev ? prev.filter((u) => u.id !== id) : prev));
     setSelectedId(null);
+  }
+
+  async function addLinkedProfile(
+    userId: number,
+    kind: "athlete" | "coach",
+    idValue: string
+  ) {
+    const id = Number(idValue);
+    if (!Number.isInteger(id) || id <= 0) return;
+    const current = users?.find((u) => u.id === userId);
+    if (!current) return;
+    const key = kind === "athlete" ? "athlete_ids" : "coach_ids";
+    if (current[key].includes(id)) return;
+    const nextIds = [...current[key], id];
+    const path =
+      kind === "athlete"
+        ? `/admin/users/${userId}/athletes`
+        : `/admin/users/${userId}/coaches`;
+    const body =
+      kind === "athlete" ? { athleteIds: nextIds } : { coachIds: nextIds };
+    await api.put(path, body);
+    setUsers((prev) =>
+      prev
+        ? prev.map((u) => (u.id === userId ? { ...u, [key]: nextIds } : u))
+        : prev
+    );
+  }
+
+  async function removeLinkedProfile(
+    userId: number,
+    kind: "athlete" | "coach",
+    id: number
+  ) {
+    const current = users?.find((u) => u.id === userId);
+    if (!current) return;
+    const key = kind === "athlete" ? "athlete_ids" : "coach_ids";
+    const nextIds = current[key].filter((existing) => existing !== id);
+    const path =
+      kind === "athlete"
+        ? `/admin/users/${userId}/athletes`
+        : `/admin/users/${userId}/coaches`;
+    const body =
+      kind === "athlete" ? { athleteIds: nextIds } : { coachIds: nextIds };
+    await api.put(path, body);
+    setUsers((prev) =>
+      prev
+        ? prev.map((u) => (u.id === userId ? { ...u, [key]: nextIds } : u))
+        : prev
+    );
   }
 
   if (error) return <div className="p-4 text-red-700">{error}</div>;
@@ -194,17 +245,19 @@ export default function AdminUsers() {
               Admin access
             </label>
 
-            <PersonPicker
-              label="Linked athlete"
-              selectedId={editing.athlete_id}
+            <MemberEditor
+              label="Linked athlete profiles"
+              ids={editing.athlete_ids}
               options={athletes}
-              onSelect={(id) => updateUser(editing.id, { athlete_id: id })}
+              onAdd={(value) => addLinkedProfile(editing.id, "athlete", value)}
+              onRemove={(id) => removeLinkedProfile(editing.id, "athlete", id)}
             />
-            <PersonPicker
-              label="Linked coach"
-              selectedId={editing.coach_id}
+            <MemberEditor
+              label="Linked coach profiles"
+              ids={editing.coach_ids}
               options={coaches}
-              onSelect={(id) => updateUser(editing.id, { coach_id: id })}
+              onAdd={(value) => addLinkedProfile(editing.id, "coach", value)}
+              onRemove={(id) => removeLinkedProfile(editing.id, "coach", id)}
             />
 
             <DeleteButton
@@ -222,16 +275,18 @@ export default function AdminUsers() {
   );
 }
 
-function PersonPicker({
+function MemberEditor({
   label,
-  selectedId,
+  ids,
   options,
-  onSelect,
+  onAdd,
+  onRemove,
 }: {
   label: string;
-  selectedId: number | null;
+  ids: number[];
   options: Person[];
-  onSelect: (id: number | null) => void;
+  onAdd: (value: string) => void;
+  onRemove: (id: number) => void;
 }) {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
@@ -241,7 +296,9 @@ function PersonPicker({
 
   return (
     <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
-      <span className="text-xs font-medium text-stone-600">{label}</span>
+      <span className="text-xs font-medium text-stone-600">
+        {label} ({ids.length})
+      </span>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -250,14 +307,14 @@ function PersonPicker({
       />
       <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
         {results.map((o) => {
-          const selected = selectedId === o.id;
+          const added = ids.includes(o.id);
           return (
             <button
               key={o.id}
               type="button"
-              onClick={() => onSelect(selected ? null : o.id)}
+              onClick={() => (added ? onRemove(o.id) : onAdd(String(o.id)))}
               className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
-                selected
+                added
                   ? "border-green-200 bg-green-50 text-green-800"
                   : "border-stone-200"
               }`}
@@ -265,9 +322,7 @@ function PersonPicker({
               <span>
                 {o.first_name} {o.last_name}
               </span>
-              <span className="text-sm">
-                {selected ? "✓ Selected" : "Select"}
-              </span>
+              <span className="text-sm">{added ? "✓ Added" : "+ Add"}</span>
             </button>
           );
         })}
