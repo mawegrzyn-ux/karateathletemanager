@@ -232,7 +232,13 @@ coach-run attendance) — this is personal athlete itinerary planning.
   listing every visible athlete with a checkbox + notes textarea,
   disabled per-row when `can_edit` is false — this section is interactive
   regardless of the item's edit/read-only mode, same as the old shared
-  checkbox was.
+  checkbox was. The same model applies one level up, to the **event
+  itself** (`nk_event_athlete_status`, `PATCH /api/events/:id/athletes/:athleteId`)
+  — a simple single-block event with no itemized itinerary (the common
+  case for a personal schedule entry, e.g. a "rest day") still needs its
+  own per-athlete completed/notes; `EventDetail` renders the same
+  `AthleteStatusList` for `event.athlete_status`, always visible above the
+  Itinerary section regardless of edit mode.
 - **Recurring items**: `POST /api/events/:id/items` accepts an optional
   `repeat: {freq: 'daily'|'weekly', until, weekdays?}`. The server
   expands this into one independent `nk_event_items` row per occurrence

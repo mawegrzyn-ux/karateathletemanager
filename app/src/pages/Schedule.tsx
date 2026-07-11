@@ -28,6 +28,7 @@ interface Event {
   location: string | null;
   notes: string | null;
   training_module_id: number | null;
+  athlete_status: AthleteStatus[];
 }
 
 interface AthleteStatus {
@@ -709,6 +710,26 @@ function EventDetail({
     setAthleteIds(ids);
   }
 
+  async function updateEventAthleteStatus(
+    athleteId: number,
+    patch: Record<string, unknown>
+  ) {
+    const { status } = await api.patch<{ status: AthleteStatus }>(
+      `/events/${eventId}/athletes/${athleteId}`,
+      patch
+    );
+    setEvent((prev) =>
+      prev
+        ? {
+            ...prev,
+            athlete_status: prev.athlete_status.map((s) =>
+              s.athlete_id === athleteId ? status : s
+            ),
+          }
+        : prev
+    );
+  }
+
   if (error) return <div className="text-red-700">{error}</div>;
   if (!event || !items)
     return (
@@ -875,6 +896,12 @@ function EventDetail({
           )}
         </>
       )}
+
+      <AthleteStatusList
+        statuses={event.athlete_status}
+        athletes={athleteNames}
+        onUpdate={updateEventAthleteStatus}
+      />
 
       <ItemsSection
         eventId={eventId}

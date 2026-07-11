@@ -617,6 +617,17 @@ const migrations = [
    END $$`,
 
   `ALTER TABLE nk_event_items DROP COLUMN IF EXISTS completed`,
+
+  // Simple single-block events (no itemized itinerary) still need their
+  // own per-athlete completed/notes record, same shape as items above.
+  `CREATE TABLE IF NOT EXISTS nk_event_athlete_status (
+     event_id    INTEGER NOT NULL REFERENCES nk_events(id) ON DELETE CASCADE,
+     athlete_id  INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     completed   BOOLEAN NOT NULL DEFAULT FALSE,
+     notes       TEXT,
+     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (event_id, athlete_id)
+  )`,
 ];
 
 async function migrate() {

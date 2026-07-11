@@ -79,26 +79,10 @@ async function coachSharedAthleteIds(coachId, athleteIds) {
   return new Set(rows.map((r) => r.athlete_id));
 }
 
-// Attaches each item's per-athlete completed/notes to it, scoped to what
-// `user` is allowed to see: admins and coaches see the whole event roster
-// (coaches can only edit the athletes they share a club with), an athlete
-// sees only their own row.
-async function attachAthleteStatus(user, items, eventAthletes) {
-  const itemIds = items.map((i) => i.id);
-  const statusByItem = new Map();
-  if (itemIds.length > 0) {
-    const { rows } = await pool.query(
-      `SELECT item_id, athlete_id, completed, notes
-       FROM nk_event_item_athlete_status
-       WHERE item_id = ANY($1::int[])`,
-      [itemIds]
-    );
-    for (const row of rows) {
-      if (!statusByItem.has(row.item_id)) statusByItem.set(row.item_id, new Map());
-      statusByItem.get(row.item_id).set(row.athlete_id, row);
-    }
-  }
-
+// Splits `eventAthletes` into what `user` may see and may edit: admins and
+// coaches see the whole roster (coaches can only edit athletes they share a
+// club with), an athlete sees/edits only their own entry.
+async function athleteVisibility(user, eventAthletes) {
   let visible = [];
   let editableIds = new Set();
   if (user.is_admin) {
@@ -117,6 +101,28 @@ async function attachAthleteStatus(user, items, eventAthletes) {
       editableIds = new Set([user.athlete_id]);
     }
   }
+  return { visible, editableIds };
+}
+
+// Attaches each item's per-athlete completed/notes to it, scoped to what
+// `user` is allowed to see (see `athleteVisibility`).
+async function attachAthleteStatus(user, items, eventAthletes) {
+  const itemIds = items.map((i) => i.id);
+  const statusByItem = new Map();
+  if (itemIds.length > 0) {
+    const { rows } = await pool.query(
+      `SELECT item_id, athlete_id, completed, notes
+       FROM nk_event_item_athlete_status
+       WHERE item_id = ANY($1::int[])`,
+      [itemIds]
+    );
+    for (const row of rows) {
+      if (!statusByItem.has(row.item_id)) statusByItem.set(row.item_id, new Map());
+      statusByItem.get(row.item_id).set(row.athlete_id, row);
+    }
+  }
+
+  const { visible, editableIds } = await athleteVisibility(user, eventAthletes);
 
   return items.map((item) => {
     const byAthlete = statusByItem.get(item.id);
@@ -133,6 +139,34 @@ async function attachAthleteStatus(user, items, eventAthletes) {
       }),
     };
   });
+}
+
+// Same idea as `attachAthleteStatus` but for the event itself, since a
+// simple single-block event (no itemized itinerary) still needs a
+// per-athlete completed/notes record of its own.
+async function attachEventAthleteStatus(user, event, eventAthletes) {
+  const { rows } = await pool.query(
+    `SELECT athlete_id, completed, notes
+     FROM nk_event_athlete_status
+     WHERE event_id = $1`,
+    [event.id]
+  );
+  const byAthlete = new Map(rows.map((r) => [r.athlete_id, r]));
+
+  const { visible, editableIds } = await athleteVisibility(user, eventAthletes);
+
+  return {
+    ...event,
+    athlete_status: visible.map((a) => {
+      const row = byAthlete.get(a.id);
+      return {
+        athlete_id: a.id,
+        completed: row?.completed ?? false,
+        notes: row?.notes ?? null,
+        can_edit: editableIds.has(a.id),
+      };
+    }),
+  };
 }
 
 // Resolves which athlete_ids the caller is allowed to attach, or throws a
@@ -316,8 +350,9 @@ router.get(
       [req.params.id]
     );
     const itemsWithStatus = await attachAthleteStatus(req.user, items, athletes);
+    const event = await attachEventAthleteStatus(req.user, rows[0], athletes);
 
-    res.json({ event: rows[0], athletes, items: itemsWithStatus });
+    res.json({ event, athletes, items: itemsWithStatus });
   })
 );
 
@@ -443,6 +478,77 @@ router.put(
     } finally {
       client.release();
     }
+  })
+);
+
+router.patch(
+  "/:id/athletes/:athleteId",
+  asyncHandler(async (req, res) => {
+    if (!(await isEventEditor(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const athleteId = Number(req.params.athleteId);
+
+    const { rows: rosterRows } = await pool.query(
+      `SELECT 1 FROM nk_event_athletes WHERE event_id = $1 AND athlete_id = $2`,
+      [req.params.id, athleteId]
+    );
+    if (rosterRows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: { message: "Athlete is not on this event" } });
+    }
+
+    let allowed = req.user.is_admin;
+    if (!allowed && req.user.role === "athlete") {
+      allowed = req.user.athlete_id === athleteId;
+    }
+    if (!allowed && req.user.role === "coach" && req.user.coach_id) {
+      const shared = await coachSharedAthleteIds(req.user.coach_id, [athleteId]);
+      allowed = shared.has(athleteId);
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const body = req.body ?? {};
+    const { completed, notes } = body;
+    if (completed !== undefined && typeof completed !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: { message: "completed must be a boolean" } });
+    }
+
+    const fields = { completed, notes };
+    const setClauses = [];
+    const values = [];
+    for (const [key, value] of Object.entries(fields)) {
+      if (key in body) {
+        values.push(value);
+        setClauses.push(`${key} = $${values.length}`);
+      }
+    }
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: { message: "No fields to update" } });
+    }
+
+    await pool.query(
+      `INSERT INTO nk_event_athlete_status (event_id, athlete_id)
+       VALUES ($1, $2) ON CONFLICT (event_id, athlete_id) DO NOTHING`,
+      [req.params.id, athleteId]
+    );
+
+    values.push(req.params.id, athleteId);
+    const { rows } = await pool.query(
+      `UPDATE nk_event_athlete_status
+       SET ${setClauses.join(", ")}, updated_at = NOW()
+       WHERE event_id = $${values.length - 1} AND athlete_id = $${values.length}
+       RETURNING event_id, athlete_id, completed, notes`,
+      values
+    );
+
+    res.json({ status: { ...rows[0], can_edit: true } });
   })
 );
 
