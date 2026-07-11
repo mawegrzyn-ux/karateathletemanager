@@ -20,7 +20,7 @@ const REPEAT_FREQS = ["daily", "weekly"];
 const MAX_REPEAT_OCCURRENCES = 60;
 
 const EVENT_FIELDS = `id, title, event_type, start_date, end_date, start_time, end_time, location, notes, training_module_id, created_at`;
-const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id, completed`;
+const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id`;
 
 router.use(authorize());
 
@@ -77,6 +77,62 @@ async function coachSharedAthleteIds(coachId, athleteIds) {
     [coachId, athleteIds]
   );
   return new Set(rows.map((r) => r.athlete_id));
+}
+
+// Attaches each item's per-athlete completed/notes to it, scoped to what
+// `user` is allowed to see: admins and coaches see the whole event roster
+// (coaches can only edit the athletes they share a club with), an athlete
+// sees only their own row.
+async function attachAthleteStatus(user, items, eventAthletes) {
+  const itemIds = items.map((i) => i.id);
+  const statusByItem = new Map();
+  if (itemIds.length > 0) {
+    const { rows } = await pool.query(
+      `SELECT item_id, athlete_id, completed, notes
+       FROM nk_event_item_athlete_status
+       WHERE item_id = ANY($1::int[])`,
+      [itemIds]
+    );
+    for (const row of rows) {
+      if (!statusByItem.has(row.item_id)) statusByItem.set(row.item_id, new Map());
+      statusByItem.get(row.item_id).set(row.athlete_id, row);
+    }
+  }
+
+  let visible = [];
+  let editableIds = new Set();
+  if (user.is_admin) {
+    visible = eventAthletes;
+    editableIds = new Set(eventAthletes.map((a) => a.id));
+  } else if (user.role === "coach" && user.coach_id) {
+    visible = eventAthletes;
+    editableIds = await coachSharedAthleteIds(
+      user.coach_id,
+      eventAthletes.map((a) => a.id)
+    );
+  } else if (user.role === "athlete" && user.athlete_id) {
+    const self = eventAthletes.find((a) => a.id === user.athlete_id);
+    if (self) {
+      visible = [self];
+      editableIds = new Set([user.athlete_id]);
+    }
+  }
+
+  return items.map((item) => {
+    const byAthlete = statusByItem.get(item.id);
+    return {
+      ...item,
+      athlete_status: visible.map((a) => {
+        const row = byAthlete?.get(a.id);
+        return {
+          athlete_id: a.id,
+          completed: row?.completed ?? false,
+          notes: row?.notes ?? null,
+          can_edit: editableIds.has(a.id),
+        };
+      }),
+    };
+  });
 }
 
 // Resolves which athlete_ids the caller is allowed to attach, or throws a
@@ -259,8 +315,9 @@ router.get(
        ORDER BY item_date, start_time NULLS LAST`,
       [req.params.id]
     );
+    const itemsWithStatus = await attachAthleteStatus(req.user, items, athletes);
 
-    res.json({ event: rows[0], athletes, items });
+    res.json({ event: rows[0], athletes, items: itemsWithStatus });
   })
 );
 
@@ -396,13 +453,22 @@ router.get(
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
+    const { rows: athletes } = await pool.query(
+      `SELECT a.id, a.first_name, a.last_name
+       FROM nk_event_athletes ea
+       JOIN nk_athletes a ON a.id = ea.athlete_id
+       WHERE ea.event_id = $1`,
+      [req.params.id]
+    );
+
     const { rows } = await pool.query(
       `SELECT ${ITEM_FIELDS} FROM nk_event_items
        WHERE event_id = $1
        ORDER BY item_date, start_time NULLS LAST`,
       [req.params.id]
     );
-    res.json({ items: rows });
+    const items = await attachAthleteStatus(req.user, rows, athletes);
+    res.json({ items });
   })
 );
 
@@ -478,10 +544,20 @@ router.post(
         items.push(rows[0]);
       }
       await client.query("COMMIT");
+
+      const { rows: athletes } = await pool.query(
+        `SELECT a.id, a.first_name, a.last_name
+         FROM nk_event_athletes ea
+         JOIN nk_athletes a ON a.id = ea.athlete_id
+         WHERE ea.event_id = $1`,
+        [req.params.id]
+      );
+      const itemsWithStatus = await attachAthleteStatus(req.user, items, athletes);
+
       if (repeat) {
-        res.status(201).json({ items });
+        res.status(201).json({ items: itemsWithStatus });
       } else {
-        res.status(201).json({ item: items[0] });
+        res.status(201).json({ item: itemsWithStatus[0] });
       }
     } catch (err) {
       await client.query("ROLLBACK");
@@ -509,7 +585,6 @@ router.patch(
       notes,
       training_module_id,
       kata_id,
-      completed,
     } = body;
 
     if (item_type !== undefined && !ITEM_TYPES.includes(item_type)) {
@@ -521,11 +596,6 @@ router.patch(
     if ("end_time" in body && !end_time) {
       return res.status(400).json({ error: { message: "end_time is required" } });
     }
-    if (completed !== undefined && typeof completed !== "boolean") {
-      return res
-        .status(400)
-        .json({ error: { message: "completed must be a boolean" } });
-    }
 
     const fields = {
       item_type,
@@ -536,7 +606,6 @@ router.patch(
       notes,
       training_module_id,
       kata_id,
-      completed,
     };
     const setClauses = [];
     const values = [];
@@ -562,7 +631,95 @@ router.patch(
     if (rows.length === 0) {
       return res.status(404).json({ error: { message: "Item not found" } });
     }
-    res.json({ item: rows[0] });
+
+    const { rows: athletes } = await pool.query(
+      `SELECT a.id, a.first_name, a.last_name
+       FROM nk_event_athletes ea
+       JOIN nk_athletes a ON a.id = ea.athlete_id
+       WHERE ea.event_id = $1`,
+      [req.params.id]
+    );
+    const [item] = await attachAthleteStatus(req.user, rows, athletes);
+    res.json({ item });
+  })
+);
+
+router.patch(
+  "/:id/items/:itemId/athletes/:athleteId",
+  asyncHandler(async (req, res) => {
+    if (!(await isEventEditor(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const athleteId = Number(req.params.athleteId);
+
+    const { rows: itemRows } = await pool.query(
+      `SELECT 1 FROM nk_event_items WHERE id = $1 AND event_id = $2`,
+      [req.params.itemId, req.params.id]
+    );
+    if (itemRows.length === 0) {
+      return res.status(404).json({ error: { message: "Item not found" } });
+    }
+
+    const { rows: rosterRows } = await pool.query(
+      `SELECT 1 FROM nk_event_athletes WHERE event_id = $1 AND athlete_id = $2`,
+      [req.params.id, athleteId]
+    );
+    if (rosterRows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: { message: "Athlete is not on this event" } });
+    }
+
+    let allowed = req.user.is_admin;
+    if (!allowed && req.user.role === "athlete") {
+      allowed = req.user.athlete_id === athleteId;
+    }
+    if (!allowed && req.user.role === "coach" && req.user.coach_id) {
+      const shared = await coachSharedAthleteIds(req.user.coach_id, [athleteId]);
+      allowed = shared.has(athleteId);
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const body = req.body ?? {};
+    const { completed, notes } = body;
+    if (completed !== undefined && typeof completed !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: { message: "completed must be a boolean" } });
+    }
+
+    const fields = { completed, notes };
+    const setClauses = [];
+    const values = [];
+    for (const [key, value] of Object.entries(fields)) {
+      if (key in body) {
+        values.push(value);
+        setClauses.push(`${key} = $${values.length}`);
+      }
+    }
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: { message: "No fields to update" } });
+    }
+
+    await pool.query(
+      `INSERT INTO nk_event_item_athlete_status (item_id, athlete_id)
+       VALUES ($1, $2) ON CONFLICT (item_id, athlete_id) DO NOTHING`,
+      [req.params.itemId, athleteId]
+    );
+
+    values.push(req.params.itemId, athleteId);
+    const { rows } = await pool.query(
+      `UPDATE nk_event_item_athlete_status
+       SET ${setClauses.join(", ")}, updated_at = NOW()
+       WHERE item_id = $${values.length - 1} AND athlete_id = $${values.length}
+       RETURNING item_id, athlete_id, completed, notes`,
+      values
+    );
+
+    res.json({ status: { ...rows[0], can_edit: true } });
   })
 );
 

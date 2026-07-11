@@ -30,6 +30,13 @@ interface Event {
   training_module_id: number | null;
 }
 
+interface AthleteStatus {
+  athlete_id: number;
+  completed: boolean;
+  notes: string | null;
+  can_edit: boolean;
+}
+
 interface EventItem {
   id: number;
   event_id: number;
@@ -41,7 +48,7 @@ interface EventItem {
   notes: string | null;
   training_module_id: number | null;
   kata_id: number | null;
-  completed: boolean;
+  athlete_status: AthleteStatus[];
 }
 
 interface Person {
@@ -876,6 +883,7 @@ function EventDetail({
         modules={modules}
         katas={katas}
         editable={isEditing}
+        eventAthletes={athleteNames}
       />
     </div>
   );
@@ -1430,6 +1438,57 @@ function kataLabel(k: Kata) {
   return k.style ? `${label} (${k.style})` : label;
 }
 
+function AthleteStatusList({
+  statuses,
+  athletes,
+  onUpdate,
+}: {
+  statuses: AthleteStatus[];
+  athletes: Person[];
+  onUpdate: (athleteId: number, patch: Record<string, unknown>) => void;
+}) {
+  if (statuses.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-stone-200 p-3">
+      <span className="text-xs font-medium text-stone-600">Completion</span>
+      {statuses.map((s) => {
+        const athlete = athletes.find((a) => a.id === s.athlete_id);
+        return (
+          <div
+            key={s.athlete_id}
+            className="flex flex-col gap-1 rounded-lg bg-stone-50 p-2"
+          >
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={s.completed}
+                disabled={!s.can_edit}
+                onChange={(e) => onUpdate(s.athlete_id, { completed: e.target.checked })}
+                className="h-5 w-5"
+              />
+              <span className={s.completed ? "line-through text-stone-400" : ""}>
+                {athlete ? `${athlete.first_name} ${athlete.last_name}` : "Athlete"}
+              </span>
+            </label>
+            <textarea
+              defaultValue={s.notes ?? ""}
+              placeholder="Notes..."
+              disabled={!s.can_edit}
+              onBlur={(e) => {
+                if (e.target.value !== (s.notes ?? "")) {
+                  onUpdate(s.athlete_id, { notes: e.target.value });
+                }
+              }}
+              className="rounded-lg border border-stone-300 px-2 py-1 text-sm disabled:bg-stone-100 disabled:text-stone-400"
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ItemsSection({
   eventId,
   items,
@@ -1437,6 +1496,7 @@ function ItemsSection({
   modules,
   katas,
   editable,
+  eventAthletes,
 }: {
   eventId: number;
   items: EventItem[];
@@ -1444,8 +1504,10 @@ function ItemsSection({
   modules: TrainingModule[];
   katas: Kata[];
   editable: boolean;
+  eventAthletes: Person[];
 }) {
   const api = useApi();
+  const { user } = useAuth();
   const [adding, setAdding] = useState(false);
   const [addForm, setAddForm] = useState(EMPTY_ITEM_FORM);
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -1508,6 +1570,29 @@ function ItemsSection({
     setItems(items.map((i) => (i.id === id ? item : i)));
   }
 
+  async function updateAthleteStatus(
+    itemId: number,
+    athleteId: number,
+    patch: Record<string, unknown>
+  ) {
+    const { status } = await api.patch<{ status: AthleteStatus }>(
+      `/events/${eventId}/items/${itemId}/athletes/${athleteId}`,
+      patch
+    );
+    setItems(
+      items.map((i) =>
+        i.id === itemId
+          ? {
+              ...i,
+              athlete_status: i.athlete_status.map((s) =>
+                s.athlete_id === athleteId ? status : s
+              ),
+            }
+          : i
+      )
+    );
+  }
+
   async function deleteItem(id: number) {
     await api.del(`/events/${eventId}/items/${id}`);
     setItems(items.filter((i) => i.id !== id));
@@ -1523,29 +1608,46 @@ function ItemsSection({
       <div className="flex flex-col gap-1">
         {sorted.map((item) => {
           const expanded = expandedId === item.id;
+          const myStatus =
+            user?.role === "athlete" && user.athlete_id
+              ? item.athlete_status.find((s) => s.athlete_id === user.athlete_id)
+              : undefined;
+          const doneCount = item.athlete_status.filter((s) => s.completed).length;
+          const totalCount = item.athlete_status.length;
+          const isDone = myStatus ? myStatus.completed : totalCount > 0 && doneCount === totalCount;
           return (
             <div
               key={item.id}
               className="rounded-xl border border-stone-200 bg-white"
             >
               <div className="flex w-full items-start gap-2 px-3 py-2">
-                <input
-                  type="checkbox"
-                  aria-label={`Mark "${item.title}" as complete`}
-                  checked={item.completed}
-                  onChange={(e) =>
-                    updateItem(item.id, { completed: e.target.checked })
-                  }
-                  onClick={(e) => e.stopPropagation()}
-                  className="mt-1 h-5 w-5 shrink-0"
-                />
+                {myStatus ? (
+                  <input
+                    type="checkbox"
+                    aria-label={`Mark "${item.title}" as complete`}
+                    checked={myStatus.completed}
+                    onChange={(e) =>
+                      updateAthleteStatus(item.id, myStatus.athlete_id, {
+                        completed: e.target.checked,
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-1 h-5 w-5 shrink-0"
+                  />
+                ) : totalCount > 0 ? (
+                  <span className="mt-1.5 shrink-0 text-xs font-medium text-stone-500">
+                    {doneCount}/{totalCount}
+                  </span>
+                ) : (
+                  <span className="mt-1.5 w-5 shrink-0" />
+                )}
                 <button
                   type="button"
                   onClick={() => setExpandedId(expanded ? null : item.id)}
                   className="flex min-h-[44px] flex-1 flex-col items-start gap-1 text-left"
                 >
                   <div className="flex w-full items-center justify-between">
-                    <span className={item.completed ? "line-through text-stone-400" : ""}>
+                    <span className={isDone ? "line-through text-stone-400" : ""}>
                       {item.title}
                     </span>
                     <div className="flex items-center gap-2">
@@ -1667,16 +1769,6 @@ function ItemsSection({
                       className="rounded-xl border border-stone-300 px-3 py-2"
                     />
                   </Field>
-                  <label className="flex items-center gap-2 text-sm text-stone-600">
-                    <input
-                      type="checkbox"
-                      checked={item.completed}
-                      onChange={(e) =>
-                        updateItem(item.id, { completed: e.target.checked })
-                      }
-                    />
-                    Completed
-                  </label>
                   {item.item_type === "training" && (
                     <SingleSelectPicker
                       label="Training module"
@@ -1709,6 +1801,15 @@ function ItemsSection({
                     itemLabel={item.title}
                   />
                 </div>
+              )}
+              {expanded && (
+                <AthleteStatusList
+                  statuses={item.athlete_status}
+                  athletes={eventAthletes}
+                  onUpdate={(athleteId, patch) =>
+                    updateAthleteStatus(item.id, athleteId, patch)
+                  }
+                />
               )}
             </div>
           );

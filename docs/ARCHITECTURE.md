@@ -207,15 +207,32 @@ coach-run attendance) — this is personal athlete itinerary planning.
   one, squad-level events have several. `nk_event_items` are the nested
   itinerary rows under an event (`item_type`, `title`, `item_date`,
   `start_time`, `end_time` — both required — `notes`, `training_module_id`,
-  `kata_id`, `completed`) — `item_type` reuses the same vocabulary plus
+  `kata_id`) — `item_type` reuses the same vocabulary plus
   `rest`, `other`, and `kata_performance` for things that don't fit the
   top-level list (e.g. an "active rest day" or a single kata
-  run-through). `completed` is a plain boolean any event editor
-  (athlete/coach/admin — same `isEventEditor` check as everything else
-  on the event) can toggle to mark an itinerary item done; surfaced as a
-  checkbox both inline on the collapsed itinerary row (quick-toggle,
-  strikes through the title when checked) and inside the expanded detail
-  view.
+  run-through). `item.notes` here is a general note about the task
+  itself (e.g. "bring your own equipment"), separate from the per-athlete
+  progress notes below.
+- **Per-athlete completion/notes**: `nk_event_item_athlete_status`
+  (`item_id`, `athlete_id`, `completed`, `notes`, `updated_at`, PK on the
+  pair) tracks one completed flag + one notes field per (item, athlete)
+  — a squad-session item assigned to several athletes needs each of them
+  checked off and annotated independently, not one shared value for the
+  whole item. `GET /api/events/:id` and `/:id/items` attach an
+  `athlete_status` array to every item, scoped to what the requester is
+  allowed to see: an athlete only gets their own entry, an admin/coach
+  gets the full event roster (each entry also carries `can_edit`, true
+  for admins, for coaches sharing a club with that athlete, and for the
+  athlete on their own row). `PATCH /api/events/:id/items/:itemId/athletes/:athleteId`
+  (presence-based `{completed?, notes?}`) upserts a row, gated by the
+  same rule. In `Schedule.tsx`'s `ItemsSection`, the collapsed row's
+  leading control is the current user's own checkbox when they're one of
+  the event's athletes, or a read-only `done/total` fraction otherwise;
+  expanding a row always reveals a `Completion` section (`AthleteStatusList`)
+  listing every visible athlete with a checkbox + notes textarea,
+  disabled per-row when `can_edit` is false — this section is interactive
+  regardless of the item's edit/read-only mode, same as the old shared
+  checkbox was.
 - **Recurring items**: `POST /api/events/:id/items` accepts an optional
   `repeat: {freq: 'daily'|'weekly', until, weekdays?}`. The server
   expands this into one independent `nk_event_items` row per occurrence
@@ -271,9 +288,10 @@ coach-run attendance) — this is personal athlete itinerary planning.
     "✏️ Edit" toggle at the top of the drawer that swaps in the previous
     always-editable form (`EventDetail`'s `isEditing` state). Itinerary
     items (`ItemsSection`, `editable` prop threaded down from the same
-    toggle) follow the same split: the collapsed row's completed
-    checkbox stays interactive either way (checking off a task isn't
-    "editing", it's the point of the reading view), but expanding a row
+    toggle) follow the same split: the collapsed row's completion
+    control (see the per-athlete completion/notes model above) stays
+    interactive either way (checking off a task isn't "editing", it's the
+    point of the reading view), but expanding a row
     shows read-only notes + linked module/kata details when not
     editing, or the full field-editing form (plus the "+ Add itinerary
     item" control, hidden entirely outside edit mode) when editing.

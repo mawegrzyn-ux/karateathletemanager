@@ -583,6 +583,40 @@ const migrations = [
   // it done, same trust level as editing its notes.
   `ALTER TABLE nk_event_items
      ADD COLUMN IF NOT EXISTS completed BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  // Completion/notes move from one shared value per item to one per
+  // (item, athlete) pair, since a squad-session item is often assigned to
+  // several athletes who each need their own checkbox and coach notes.
+  `CREATE TABLE IF NOT EXISTS nk_event_item_athlete_status (
+     item_id     INTEGER NOT NULL REFERENCES nk_event_items(id) ON DELETE CASCADE,
+     athlete_id  INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     completed   BOOLEAN NOT NULL DEFAULT FALSE,
+     notes       TEXT,
+     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (item_id, athlete_id)
+  )`,
+
+  // Best-effort carry-over of the old shared completed/notes into the new
+  // per-athlete table, only for single-athlete events (unambiguous owner).
+  // Guarded by information_schema since nk_event_items.completed is
+  // dropped by the statement below on a later run of this same script.
+  `DO $$
+   BEGIN
+     IF EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_name = 'nk_event_items' AND column_name = 'completed'
+     ) THEN
+       INSERT INTO nk_event_item_athlete_status (item_id, athlete_id, completed, notes)
+         SELECT i.id, ea.athlete_id, i.completed, i.notes
+         FROM nk_event_items i
+         JOIN nk_event_athletes ea ON ea.event_id = i.event_id
+         WHERE (i.completed = TRUE OR i.notes IS NOT NULL)
+           AND (SELECT COUNT(*) FROM nk_event_athletes ea2 WHERE ea2.event_id = i.event_id) = 1
+         ON CONFLICT (item_id, athlete_id) DO NOTHING;
+     END IF;
+   END $$`,
+
+  `ALTER TABLE nk_event_items DROP COLUMN IF EXISTS completed`,
 ];
 
 async function migrate() {
