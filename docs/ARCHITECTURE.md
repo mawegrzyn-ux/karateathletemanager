@@ -263,6 +263,20 @@ coach-run attendance) — this is personal athlete itinerary planning.
   - All three calendar views share date-math helpers (`startOfWeek`,
     `startOfMonth`, `eventOverlapsDate`, `timeToMinutes`/
     `minutesToTime`, etc.) defined once near the top of `Schedule.tsx`.
+  - **Event detail drawer opens read-only, not into a form**: tapping an
+    event (from any view) shows a formatted reading view — badge/date/
+    time, location, notes as plain text, a linked training module
+    rendered in full via `TrainingModuleView` (images/video/exercise
+    list, not just its title), and invited athletes as badges — with an
+    "✏️ Edit" toggle at the top of the drawer that swaps in the previous
+    always-editable form (`EventDetail`'s `isEditing` state). Itinerary
+    items (`ItemsSection`, `editable` prop threaded down from the same
+    toggle) follow the same split: the collapsed row's completed
+    checkbox stays interactive either way (checking off a task isn't
+    "editing", it's the point of the reading view), but expanding a row
+    shows read-only notes + linked module/kata details when not
+    editing, or the full field-editing form (plus the "+ Add itinerary
+    item" control, hidden entirely outside edit mode) when editing.
   - **Frozen headers**: the page title/search/view-switcher block is
     `sticky top-0` (negative-margin trick to bleed its background under
     the parent's padding) in every view mode, so it never scrolls out of
@@ -298,7 +312,10 @@ coach-run attendance) — this is personal athlete itinerary planning.
   renders read-only for anyone who isn't `admin`/`coach`
   (`canEdit` check inside the page): no add button, no edit/delete
   controls, just the title/explanation and each item's name/media
-  preview (`ModuleItemsReadOnly`). For editors, the page surfaces any
+  preview (`TrainingModuleView`, `app/src/components/TrainingModuleView.tsx`
+  — shared with the Schedule reading view below, so a linked module
+  looks identical whether you're viewing it from the module library or
+  from a training event/item). For editors, the page surfaces any
   save failure (bad bounds, network error) via a `Toast`, since every
   field edit auto-saves immediately and previously failed silently.
 - **Media uploads**: `video_url`/`image_url` on an exercise item accept

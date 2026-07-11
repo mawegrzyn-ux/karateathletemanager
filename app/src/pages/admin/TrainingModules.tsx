@@ -9,34 +9,18 @@ import {
   Field,
   MediaField,
   Toast,
-  extractYouTubeId,
 } from "../../components/ui";
-
-type ItemType = "exercise" | "rest";
+import {
+  TrainingModuleView,
+  itemSummary,
+  type TrainingModule,
+  type TrainingModuleItem,
+  type TrainingModuleItemType as ItemType,
+} from "../../components/TrainingModuleView";
 
 const MAX_SETS = 50;
 const MAX_REPS = 1000;
 const MAX_DURATION_SECONDS = 6 * 60 * 60; // 6 hours
-
-interface TrainingModuleItem {
-  id: number;
-  position: number;
-  item_type: ItemType;
-  name: string | null;
-  explanation: string | null;
-  video_url: string | null;
-  image_url: string | null;
-  sets: number | null;
-  reps: number | null;
-  duration_seconds: number | null;
-}
-
-interface TrainingModule {
-  id: number;
-  title: string;
-  explanation: string | null;
-  items: TrainingModuleItem[];
-}
 
 interface DraftItem {
   item_type: ItemType;
@@ -117,69 +101,6 @@ function toApiItem(it: DraftItem) {
     sets: it.sets ? Number(it.sets) : null,
     reps: it.reps ? Number(it.reps) : null,
   };
-}
-
-function itemSummary(it: TrainingModuleItem) {
-  if (it.item_type === "rest") {
-    return it.duration_seconds ? `Rest ${it.duration_seconds}s` : "Rest";
-  }
-  const name = it.name?.trim() || "Untitled exercise";
-  if (it.duration_seconds != null && it.sets == null) {
-    return `${name} — ${it.duration_seconds}s`;
-  }
-  if (it.sets != null && it.reps != null) {
-    return `${name} — ${it.sets} × ${it.reps}`;
-  }
-  return name;
-}
-
-function ModuleItemsReadOnly({ items }: { items: TrainingModuleItem[] }) {
-  return (
-    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
-      <span className="text-xs font-medium text-stone-600">
-        Exercises &amp; rest ({items.length})
-      </span>
-      <div className="flex flex-col gap-2">
-        {items.map((item) => {
-          const youTubeId = item.video_url ? extractYouTubeId(item.video_url) : null;
-          return (
-            <div
-              key={item.id}
-              className="flex flex-col gap-2 rounded-xl border border-stone-200 bg-white p-3"
-            >
-              <span className="font-medium">{itemSummary(item)}</span>
-              {item.explanation && (
-                <p className="text-sm text-stone-600">{item.explanation}</p>
-              )}
-              {youTubeId ? (
-                <iframe
-                  className="aspect-video w-full rounded-xl"
-                  src={`https://www.youtube.com/embed/${youTubeId}`}
-                  title="Video preview"
-                  allowFullScreen
-                />
-              ) : (
-                item.video_url && (
-                  // eslint-disable-next-line jsx-a11y/media-has-caption
-                  <video src={item.video_url} controls className="w-full rounded-xl" />
-                )
-              )}
-              {item.image_url && (
-                <img
-                  src={item.image_url}
-                  alt={item.name ?? "Exercise"}
-                  className="max-h-40 w-full rounded-xl object-cover"
-                />
-              )}
-            </div>
-          );
-        })}
-        {items.length === 0 && (
-          <p className="px-1 py-2 text-sm text-stone-500">No exercises yet.</p>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function ModuleItemsEditor({
@@ -571,10 +492,7 @@ export default function TrainingModules() {
         )}
         {editing && !canEdit && (
           <div className="flex flex-col gap-4">
-            {editing.explanation && (
-              <p className="text-stone-600">{editing.explanation}</p>
-            )}
-            <ModuleItemsReadOnly items={editing.items} />
+            <TrainingModuleView module={editing} />
           </div>
         )}
       </Drawer>
