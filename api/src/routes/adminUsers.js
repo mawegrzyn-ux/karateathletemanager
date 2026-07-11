@@ -5,7 +5,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const { activateUser } = require("../utils/activateUser");
 
 const router = Router();
-const ROLES = ["coach", "athlete", "parent"];
+const ROLES = ["coach", "athlete", "parent", "referee"];
 const STATUSES = ["pending", "active", "disabled"];
 
 router.use(authorize.requireAdmin);
@@ -14,7 +14,7 @@ router.get(
   "/",
   asyncHandler(async (req, res) => {
     const { rows } = await pool.query(
-      `SELECT id, email, role, status, is_admin, athlete_id, coach_id,
+      `SELECT id, email, role, status, is_admin, athlete_id, coach_id, referee_id,
               created_at, first_name, last_name, phone,
               COALESCE(
                 (SELECT array_agg(athlete_id ORDER BY athlete_id)
@@ -25,7 +25,12 @@ router.get(
                 (SELECT array_agg(coach_id ORDER BY coach_id)
                  FROM nk_user_coaches WHERE user_id = nk_users.id),
                 '{}'
-              ) AS coach_ids
+              ) AS coach_ids,
+              COALESCE(
+                (SELECT array_agg(referee_id ORDER BY referee_id)
+                 FROM nk_user_referees WHERE user_id = nk_users.id),
+                '{}'
+              ) AS referee_ids
        FROM nk_users ORDER BY created_at ASC`
     );
     res.json({ users: rows });
@@ -83,9 +88,9 @@ router.patch(
       const { rows } = await client.query(
         `UPDATE nk_users SET ${setClauses.join(", ")}, updated_at = NOW()
          WHERE id = $${values.length}
-         RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
+         RETURNING id, email, role, status, is_admin, athlete_id, coach_id, referee_id,
                    first_name, last_name, phone,
-                   wants_athlete, wants_coach, requested_club_id`,
+                   wants_athlete, wants_coach, wants_referee, requested_club_id`,
         values
       );
 
@@ -109,6 +114,7 @@ router.patch(
           is_admin: user.is_admin,
           athlete_id: user.athlete_id,
           coach_id: user.coach_id,
+          referee_id: user.referee_id,
           first_name: user.first_name,
           last_name: user.last_name,
           phone: user.phone,
@@ -270,6 +276,51 @@ router.put(
         return res
           .status(400)
           .json({ error: { message: "One or more coach IDs do not exist" } });
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  })
+);
+
+router.put(
+  "/:id/referees",
+  asyncHandler(async (req, res) => {
+    const { refereeIds } = req.body ?? {};
+    if (!Array.isArray(refereeIds)) {
+      return res
+        .status(400)
+        .json({ error: { message: "refereeIds must be an array" } });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`DELETE FROM nk_user_referees WHERE user_id = $1`, [
+        req.params.id,
+      ]);
+      for (const refereeId of refereeIds) {
+        await client.query(
+          `INSERT INTO nk_user_referees (user_id, referee_id) VALUES ($1, $2)`,
+          [req.params.id, refereeId]
+        );
+      }
+      await client.query(
+        `UPDATE nk_users SET
+           referee_id = CASE WHEN referee_id = ANY($2::int[]) THEN referee_id ELSE $3 END,
+           updated_at = NOW()
+         WHERE id = $1`,
+        [req.params.id, refereeIds, refereeIds[0] ?? null]
+      );
+      await client.query("COMMIT");
+      res.json({ refereeIds });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      if (err.code === "23503") {
+        return res
+          .status(400)
+          .json({ error: { message: "One or more referee IDs do not exist" } });
       }
       throw err;
     } finally {

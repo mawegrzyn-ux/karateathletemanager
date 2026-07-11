@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useApi } from "../hooks/useApi";
 
-export type Role = "admin" | "coach" | "athlete" | "parent";
+export type Role = "admin" | "coach" | "athlete" | "parent" | "referee";
 export type Status = "pending" | "active" | "disabled";
 
 export interface User {
@@ -20,22 +20,27 @@ export interface User {
   is_parent: boolean;
   athlete_id: number | null;
   coach_id: number | null;
+  referee_id: number | null;
   athlete_name: string | null;
   coach_name: string | null;
+  referee_name: string | null;
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
+  photo_url: string | null;
 }
 
 export interface ProfileUpdate {
   first_name?: string;
   last_name?: string;
   phone?: string;
+  photo_url?: string;
 }
 
 export interface RegisterOptions {
   wants_athlete?: boolean;
   wants_coach?: boolean;
+  wants_referee?: boolean;
   requested_club_id?: number | null;
 }
 
@@ -63,11 +68,15 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   updateProfile: (update: ProfileUpdate) => Promise<void>;
   switchRole: (
-    role: "athlete" | "coach" | "parent",
+    role: "athlete" | "coach" | "parent" | "referee",
     profileId?: number
   ) => Promise<void>;
   linkChild: (pin: string) => Promise<Child>;
-  fetchMyProfiles: () => Promise<{ athletes: Profile[]; coaches: Profile[] }>;
+  fetchMyProfiles: () => Promise<{
+    athletes: Profile[];
+    coaches: Profile[];
+    referees: Profile[];
+  }>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -128,7 +137,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const switchRole = useCallback(
-    async (role: "athlete" | "coach" | "parent", profileId?: number) => {
+    async (
+      role: "athlete" | "coach" | "parent" | "referee",
+      profileId?: number
+    ) => {
       const { user } = await api.post<{ user: User }>("/auth/switch-role", {
         role,
         profile_id: profileId,
@@ -140,9 +152,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
   );
 
   const fetchMyProfiles = useCallback(async () => {
-    return api.get<{ athletes: Profile[]; coaches: Profile[] }>(
-      "/auth/my-profiles"
-    );
+    return api.get<{
+      athletes: Profile[];
+      coaches: Profile[];
+      referees: Profile[];
+    }>("/auth/my-profiles");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

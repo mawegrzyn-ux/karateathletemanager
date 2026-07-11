@@ -92,27 +92,34 @@ router.get(
 router.patch(
   "/:id",
   asyncHandler(async (req, res) => {
-    if (!req.user.is_admin) {
+    const isSelf =
+      req.user.role === "coach" && req.user.coach_id === Number(req.params.id);
+    if (!req.user.is_admin && !isSelf) {
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
     const body = req.body ?? {};
-    const fields = {
-      first_name: body.first_name,
-      last_name: body.last_name,
-      email: body.email,
-      phone: body.phone,
-      qualifications: body.qualifications,
-      role: body.role,
-      athlete_id: body.athlete_id,
-      photo_url: body.photo_url,
-      is_active: body.is_active,
-    };
+    // Self-service edits are restricted to contact/profile fields — role,
+    // athlete_id, and is_active stay admin-only.
+    const allowedKeys = req.user.is_admin
+      ? [
+          "first_name",
+          "last_name",
+          "email",
+          "phone",
+          "qualifications",
+          "role",
+          "athlete_id",
+          "photo_url",
+          "is_active",
+        ]
+      : ["first_name", "last_name", "email", "phone", "qualifications", "photo_url"];
+
     const setClauses = [];
     const values = [];
-    for (const [key, value] of Object.entries(fields)) {
+    for (const key of allowedKeys) {
       if (key in body) {
-        values.push(value);
+        values.push(body[key]);
         setClauses.push(`${key} = $${values.length}`);
       }
     }

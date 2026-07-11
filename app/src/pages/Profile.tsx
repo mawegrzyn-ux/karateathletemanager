@@ -2,7 +2,11 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, type Child, type Profile as ProfileRecord } from "../context/AuthContext";
 import { ApiError, useApi } from "../hooks/useApi";
-import { Field, Drawer } from "../components/ui";
+import { Field, Drawer, MediaField, Toast } from "../components/ui";
+import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
+import { StaffSelfProfile } from "../components/StaffSelfProfile";
+
+type SwitchableRole = "athlete" | "coach" | "parent" | "referee";
 
 export default function Profile() {
   const { user, updateProfile, switchRole, fetchMyProfiles } = useAuth();
@@ -12,54 +16,65 @@ export default function Profile() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<{
     athletes: ProfileRecord[];
     coaches: ProfileRecord[];
-  }>({ athletes: [], coaches: [] });
-  const [picker, setPicker] = useState<"athlete" | "coach" | null>(null);
+    referees: ProfileRecord[];
+  }>({ athletes: [], coaches: [], referees: [] });
+  const [picker, setPicker] = useState<SwitchableRole | null>(null);
 
   const showActiveNav = user?.status === "active" && user.role;
 
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 4000);
+  }
+
   useEffect(() => {
-    if (user?.athlete_id || user?.coach_id) {
+    if (user?.athlete_id || user?.coach_id || user?.referee_id) {
       fetchMyProfiles().then(setProfiles);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.athlete_id, user?.coach_id]);
+  }, [user?.athlete_id, user?.coach_id, user?.referee_id]);
 
   const availableRoles = (
     [
       { role: "athlete" as const, label: "Athlete", has: !!user?.athlete_id },
       { role: "coach" as const, label: "Coach", has: !!user?.coach_id },
+      { role: "referee" as const, label: "Referee", has: !!user?.referee_id },
       { role: "parent" as const, label: "Parent", has: !!user?.is_parent },
     ]
   ).filter((r) => r.has);
 
+  const profilesByRole: Record<SwitchableRole, ProfileRecord[]> = {
+    athlete: profiles.athletes,
+    coach: profiles.coaches,
+    referee: profiles.referees,
+    parent: [],
+  };
+
   const singleRoleMultiProfile =
     availableRoles.length === 1 &&
-    ((availableRoles[0].role === "athlete" && profiles.athletes.length > 1) ||
-      (availableRoles[0].role === "coach" && profiles.coaches.length > 1));
+    profilesByRole[availableRoles[0].role].length > 1;
 
-  async function handleRoleClick(role: "athlete" | "coach" | "parent") {
-    if (role === "athlete" && profiles.athletes.length > 1) {
-      setPicker("athlete");
-      return;
-    }
-    if (role === "coach" && profiles.coaches.length > 1) {
-      setPicker("coach");
+  async function handleRoleClick(role: SwitchableRole) {
+    if (profilesByRole[role].length > 1) {
+      setPicker(role);
       return;
     }
     await switchRole(role);
   }
 
-  const pickerOptions =
-    picker === "athlete"
-      ? profiles.athletes
-      : picker === "coach"
-        ? profiles.coaches
-        : [];
+  const pickerOptions = picker ? profilesByRole[picker] : [];
   const pickerSelectedId =
-    picker === "athlete" ? user?.athlete_id : user?.coach_id;
+    picker === "athlete"
+      ? user?.athlete_id
+      : picker === "coach"
+        ? user?.coach_id
+        : picker === "referee"
+          ? user?.referee_id
+          : null;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -109,9 +124,7 @@ export default function Profile() {
           ) : (
             <button
               type="button"
-              onClick={() =>
-                setPicker(availableRoles[0].role as "athlete" | "coach")
-              }
+              onClick={() => setPicker(availableRoles[0].role)}
               className="min-h-[44px] rounded-full border border-stone-300 px-4 text-sm font-medium text-stone-700"
             >
               Switch {availableRoles[0].label.toLowerCase()} profile
@@ -135,7 +148,31 @@ export default function Profile() {
         />
       </Drawer>
 
+      {user?.role === "athlete" && user.athlete_id && (
+        <div className="rounded-2xl bg-white p-4 shadow-card">
+          <AthleteSelfProfile athleteId={user.athlete_id} />
+        </div>
+      )}
+      {user?.role === "coach" && user.coach_id && (
+        <div className="rounded-2xl bg-white p-4 shadow-card">
+          <StaffSelfProfile kind="coach" id={user.coach_id} />
+        </div>
+      )}
+      {user?.role === "referee" && user.referee_id && (
+        <div className="rounded-2xl bg-white p-4 shadow-card">
+          <StaffSelfProfile kind="referee" id={user.referee_id} />
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <h2 className="font-semibold">Account</h2>
+        <MediaField
+          label="Avatar"
+          kind="image"
+          value={user?.photo_url ?? ""}
+          onChange={(url) => updateProfile({ photo_url: url })}
+          onError={showToast}
+        />
         <Field label="First name">
           <input
             value={firstName}
@@ -170,6 +207,7 @@ export default function Profile() {
       </form>
 
       <LinkChild />
+      {toast && <Toast message={toast} />}
 
       {showActiveNav && (
         <Link to="/" className="text-center text-sm font-medium text-red-700">

@@ -46,6 +46,7 @@ export default function More() {
           <TileGrid>
             <Tile to="/admin/users" icon="🔐" label="Users" />
             <Tile to="/admin/coaches" icon="🧑‍🏫" label="Coaches" />
+            <Tile to="/admin/referees" icon="🚩" label="Referees" />
             <Tile to="/admin/coach-roles" icon="🏷️" label="Coach roles" />
             <Tile to="/admin/katas" icon="📜" label="Katas" />
             <Tile to="/admin/karate-styles" icon="🥋" label="Karate styles" />

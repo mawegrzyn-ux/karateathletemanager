@@ -3,10 +3,11 @@
 // reflect whichever profile is currently active (nk_users.athlete_id/
 // coach_id), used to label the "acting as" banner in the app header.
 const USER_SELECT_FIELDS = `
-  id, email, role, status, is_admin, athlete_id, coach_id,
-  first_name, last_name, phone,
+  id, email, role, status, is_admin, athlete_id, coach_id, referee_id,
+  first_name, last_name, phone, photo_url,
   (SELECT first_name || ' ' || last_name FROM nk_athletes WHERE id = nk_users.athlete_id) AS athlete_name,
   (SELECT first_name || ' ' || last_name FROM nk_coaches WHERE id = nk_users.coach_id) AS coach_name,
+  (SELECT first_name || ' ' || last_name FROM nk_referees WHERE id = nk_users.referee_id) AS referee_name,
   EXISTS(
     SELECT 1 FROM nk_parent_athletes WHERE user_id = nk_users.id
   ) AS is_parent
