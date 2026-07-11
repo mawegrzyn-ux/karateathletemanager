@@ -165,10 +165,11 @@ this way.
   `POST`/`PATCH`/`DELETE` are admin-only (inline check). `athlete_id`
   optionally links a coach who is also an athlete.
 - The "Athletes" bottom-nav tab shows the full manager UI to `admin`/`coach`
-  roles. A user acting as `athlete` sees their own linked athlete record
-  read-only (`MyAthleteProfile` in `Athletes.tsx`) instead — editing your
-  own profile isn't supported yet. Everyone else (`parent`, no role) sees
-  a placeholder ("ask your coach").
+  roles. A user acting as `athlete` doesn't get this tab at all (see the
+  Frontend Conventions bottom-nav note) — their own linked athlete record
+  is still reachable read-only at `/athletes` (`MyAthleteProfile` in
+  `Athletes.tsx`) — editing your own profile isn't supported yet.
+  Everyone else (`parent`, no role) sees a placeholder ("ask your coach").
 - Both `nk_athletes` and `nk_coaches` carry a `photo_url`, editable via
   the shared `MediaField` (`kind="image"`) in the create/edit drawer.
   Anywhere a person's photo is displayed instead of edited (list rows,
@@ -265,9 +266,15 @@ coach-run attendance) — this is personal athlete itinerary planning.
   authenticated user (used by the Schedule item picker),
   `POST`/`PATCH`/`DELETE` require `authorize("coach")` (coach or admin).
   A `training` item can optionally link to one module via
-  `training_module_id`. `admin/TrainingModules.tsx` surfaces any save
-  failure (bad bounds, network error) via a `Toast`, since every field
-  edit auto-saves immediately and previously failed silently.
+  `training_module_id`. `admin/TrainingModules.tsx` is reachable by the
+  `athlete` role too (route `roles={["coach", "athlete"]}` in
+  `App.tsx` — it's also the athlete bottom-nav's "Training" tab), but
+  renders read-only for anyone who isn't `admin`/`coach`
+  (`canEdit` check inside the page): no add button, no edit/delete
+  controls, just the title/explanation and each item's name/media
+  preview (`ModuleItemsReadOnly`). For editors, the page surfaces any
+  save failure (bad bounds, network error) via a `Toast`, since every
+  field edit auto-saves immediately and previously failed silently.
 - **Media uploads**: `video_url`/`image_url` on an exercise item accept
   either a pasted link or an uploaded file, via `MediaField` — a shared
   component in `components/ui.tsx` (also used for athlete/coach photos,
@@ -468,7 +475,7 @@ athletes (GDPR — no directory of children's names is ever exposed):
 - `nk_users.is_parent` is a computed `EXISTS(SELECT 1 FROM
   nk_parent_athletes WHERE user_id = ...)`, included in `req.user` and
   every auth response — mirrors how `athlete_id`/`coach_id` already
-  drive the More-page "Acting as" switcher (`POST /api/auth/switch-role`
+  drive the `Profile.tsx` "Acting as" switcher (`POST /api/auth/switch-role`
   now also accepts `'parent'`, valid only when `is_parent` is true). The
   switcher shows a pill for each identity the account actually has
   whenever 2 or more of {athlete, coach, parent} apply.
@@ -497,10 +504,17 @@ unchanged.
   accepts an optional `profile_id`, validated against that same set,
   and always re-sends `athlete_id`/`coach_id` on the response so the
   active pointer updates atomically with the role.
-- In `More.tsx`, tapping "Athlete" or "Coach" in the role switcher goes
-  straight through if the user only has one profile of that kind;
-  with more than one, it opens a single-select search picker (same
-  pattern as `AssociationPicker`) instead.
+- The profile switcher lives on `Profile.tsx` (reachable via the bottom
+  nav's Profile tab, not `More.tsx`): with 2+ role *types* (athlete/
+  coach/parent) it renders the same pills as before; tapping "Athlete"
+  or "Coach" goes straight through if the user only has one profile of
+  that kind, or opens a single-select search picker (same pattern as
+  `AssociationPicker`) if there's more than one. With only **one** role
+  type but multiple profiles of it (e.g. two athlete profiles, no coach/
+  parent role at all), the pills would never render — instead a single
+  "Switch {role} profile" button opens that same picker directly, so a
+  same-type multi-profile account always has a way to switch even
+  without a second role type.
 - `athlete_name`/`coach_name` (the active profile's full name) are
   computed server-side and included on every user-returning auth
   response (`USER_SELECT_FIELDS` in `api/src/utils/userFields.js`).
@@ -551,12 +565,23 @@ const migrations = [
 
 ## Frontend Conventions
 
-- Mobile-first layout — bottom tab navigation (Profile, Schedule, Athletes,
-  More). Profile is an `Avatar` showing the logged-in user's own name
-  initials (the account, not the linked athlete/coach record, so no photo
-  lookup needed) and links to `/profile`; Grades moved off the bottom nav
-  into a tile on the More page (still its own route, rendered inside the
-  same `Shell` layout).
+- Mobile-first layout — bottom tab navigation. Profile is an `Avatar`
+  showing the logged-in user's own name initials (the account, not the
+  linked athlete/coach record, so no photo lookup needed) and links to
+  `/profile`; Grades moved off the bottom nav into a tile on the More
+  page (still its own route, rendered inside the same `Shell` layout).
+  The middle two tabs depend on the active `role` (`Shell` in
+  `App.tsx`): `athlete` gets Schedule + Training (the read-only
+  `admin/TrainingModules.tsx` view — see the Training modules section);
+  everyone else (coach, admin, parent, no role) gets Schedule + Athletes,
+  same as before. Full tab order: Profile, Schedule, Athletes|Training,
+  More.
+- The profile switcher (multiple athlete/coach/parent identities on one
+  account) lives on `Profile.tsx`, not `More.tsx` — reachable via the
+  bottom nav's Profile tab for both viewing/editing your account fields
+  and switching which profile you're acting as. See "Multiple
+  athlete/coach profiles per account" above for the switcher's exact
+  behavior.
 - Vite dev server on port 5173, proxies `/api` to `localhost:3001`
 - `useApi()` hook wraps fetch with auth headers (if applicable)
 - Shared UI components in `components/ui.tsx` (Modal, Toast, Field, Badge, Spinner, etc.)

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ApiError, useApi } from "../../hooks/useApi";
+import { useAuth } from "../../context/AuthContext";
 import {
   Spinner,
   Drawer,
@@ -8,6 +9,7 @@ import {
   Field,
   MediaField,
   Toast,
+  extractYouTubeId,
 } from "../../components/ui";
 
 type ItemType = "exercise" | "rest";
@@ -129,6 +131,55 @@ function itemSummary(it: TrainingModuleItem) {
     return `${name} — ${it.sets} × ${it.reps}`;
   }
   return name;
+}
+
+function ModuleItemsReadOnly({ items }: { items: TrainingModuleItem[] }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
+        Exercises &amp; rest ({items.length})
+      </span>
+      <div className="flex flex-col gap-2">
+        {items.map((item) => {
+          const youTubeId = item.video_url ? extractYouTubeId(item.video_url) : null;
+          return (
+            <div
+              key={item.id}
+              className="flex flex-col gap-2 rounded-xl border border-stone-200 bg-white p-3"
+            >
+              <span className="font-medium">{itemSummary(item)}</span>
+              {item.explanation && (
+                <p className="text-sm text-stone-600">{item.explanation}</p>
+              )}
+              {youTubeId ? (
+                <iframe
+                  className="aspect-video w-full rounded-xl"
+                  src={`https://www.youtube.com/embed/${youTubeId}`}
+                  title="Video preview"
+                  allowFullScreen
+                />
+              ) : (
+                item.video_url && (
+                  // eslint-disable-next-line jsx-a11y/media-has-caption
+                  <video src={item.video_url} controls className="w-full rounded-xl" />
+                )
+              )}
+              {item.image_url && (
+                <img
+                  src={item.image_url}
+                  alt={item.name ?? "Exercise"}
+                  className="max-h-40 w-full rounded-xl object-cover"
+                />
+              )}
+            </div>
+          );
+        })}
+        {items.length === 0 && (
+          <p className="px-1 py-2 text-sm text-stone-500">No exercises yet.</p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function ModuleItemsEditor({
@@ -304,6 +355,8 @@ function ModuleItemsEditor({
 
 export default function TrainingModules() {
   const api = useApi();
+  const { user } = useAuth();
+  const canEdit = !!user?.is_admin || user?.role === "coach";
   const [modules, setModules] = useState<TrainingModule[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -405,7 +458,7 @@ export default function TrainingModules() {
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Training modules</h1>
-        <AddButton onClick={openCreate} />
+        {canEdit && <AddButton onClick={openCreate} />}
       </div>
 
       <input
@@ -437,47 +490,49 @@ export default function TrainingModules() {
         )}
       </div>
 
-      <Drawer
-        open={drawer === "create"}
-        onClose={() => setDrawer("closed")}
-        title="New training module"
-      >
-        <form onSubmit={createModule} className="flex flex-col gap-4">
-          <Field label="Title">
-            <input
-              required
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+      {canEdit && (
+        <Drawer
+          open={drawer === "create"}
+          onClose={() => setDrawer("closed")}
+          title="New training module"
+        >
+          <form onSubmit={createModule} className="flex flex-col gap-4">
+            <Field label="Title">
+              <input
+                required
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Explanation">
+              <textarea
+                value={form.explanation}
+                onChange={(e) => setForm({ ...form, explanation: e.target.value })}
+                className="rounded-xl border border-stone-300 px-3 py-2"
+              />
+            </Field>
+            <ModuleItemsEditor
+              items={formItems}
+              onChange={setFormItems}
+              onError={showToast}
             />
-          </Field>
-          <Field label="Explanation">
-            <textarea
-              value={form.explanation}
-              onChange={(e) => setForm({ ...form, explanation: e.target.value })}
-              className="rounded-xl border border-stone-300 px-3 py-2"
-            />
-          </Field>
-          <ModuleItemsEditor
-            items={formItems}
-            onChange={setFormItems}
-            onError={showToast}
-          />
-          <button
-            type="submit"
-            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
-          >
-            Create
-          </button>
-        </form>
-      </Drawer>
+            <button
+              type="submit"
+              className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
+            >
+              Create
+            </button>
+          </form>
+        </Drawer>
+      )}
 
       <Drawer
         open={editing !== null}
         onClose={() => setDrawer("closed")}
         title={editing?.title ?? ""}
       >
-        {editing && (
+        {editing && canEdit && (
           <div className="flex flex-col gap-4">
             <Field label="Title">
               <input
@@ -512,6 +567,14 @@ export default function TrainingModules() {
               onClick={() => deleteModule(editing.id)}
               itemLabel={editing.title}
             />
+          </div>
+        )}
+        {editing && !canEdit && (
+          <div className="flex flex-col gap-4">
+            {editing.explanation && (
+              <p className="text-stone-600">{editing.explanation}</p>
+            )}
+            <ModuleItemsReadOnly items={editing.items} />
           </div>
         )}
       </Drawer>

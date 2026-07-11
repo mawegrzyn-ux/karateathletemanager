@@ -132,6 +132,15 @@ list rather than opening anything else.
 - Mobile-first, 44px minimum tap targets, bottom tab nav — see the
   "Design Principles" section of `docs/ARCHITECTURE.md`.
 - Bottom nav tabs: Profile (an `Avatar` of the logged-in user's own name
-  initials, links to `/profile`), Schedule, Athletes, More. Keep the tab
-  bar to the handful of most-used destinations — anything else (Grades,
-  admin pages) lives under More as a tile instead of getting its own tab.
+  initials, links to `/profile`), Schedule, Athletes, More — except the
+  `athlete` role, which gets Training (read-only `admin/TrainingModules.tsx`)
+  instead of Athletes, since a plain athlete has no access to the athlete
+  directory anyway (see `App.tsx`'s `ATHLETE_TABS`/`DEFAULT_TABS`). Keep
+  the tab bar to the handful of most-used destinations for the active
+  role — anything else (Grades, admin pages) lives under More as a tile
+  instead of getting its own tab.
+- The profile switcher (when an account has 2+ role identities, or
+  multiple profiles of the same type) lives on `Profile.tsx`, reached via
+  the bottom nav's Profile tab — not on `More.tsx`. A single-profile
+  account just sees the plain edit form there; don't re-add a second
+  switcher UI elsewhere.

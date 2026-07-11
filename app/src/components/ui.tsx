@@ -58,7 +58,7 @@ async function uploadFile(file: File): Promise<string> {
 const YOUTUBE_ID_PATTERN =
   /(?:youtube\.com\/watch\?v=|youtube\.com\/embed\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
 
-function extractYouTubeId(url: string): string | null {
+export function extractYouTubeId(url: string): string | null {
   return url.match(YOUTUBE_ID_PATTERN)?.[1] ?? null;
 }
 

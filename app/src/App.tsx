@@ -19,7 +19,13 @@ import AdminCoachRoles from "./pages/admin/CoachRoles";
 import RequireAuth from "./components/RequireAuth";
 import RequireLogin from "./components/RequireLogin";
 
-const tabs = [
+const ATHLETE_TABS = [
+  { to: "/", label: "Schedule", icon: "📅", end: true },
+  { to: "/admin/training-modules", label: "Training", icon: "💪" },
+  { to: "/more", label: "More", icon: "⚙️" },
+];
+
+const DEFAULT_TABS = [
   { to: "/", label: "Schedule", icon: "📅", end: true },
   { to: "/athletes", label: "Athletes", icon: "👥" },
   { to: "/more", label: "More", icon: "⚙️" },
@@ -32,6 +38,7 @@ const tabClassName = ({ isActive }: { isActive: boolean }) =>
 
 function Shell() {
   const { user } = useAuth();
+  const tabs = user?.role === "athlete" ? ATHLETE_TABS : DEFAULT_TABS;
   const activeProfileName =
     user?.role === "athlete"
       ? user.athlete_name
@@ -132,7 +139,7 @@ export default function App() {
         <Route
           path="/admin/training-modules"
           element={
-            <RequireAuth roles={["coach"]}>
+            <RequireAuth roles={["coach", "athlete"]}>
               <AdminTrainingModules />
             </RequireAuth>
           }
