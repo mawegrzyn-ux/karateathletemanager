@@ -1,4 +1,151 @@
-import { useState, type PropsWithChildren } from "react";
+import {
+  useRef,
+  useState,
+  type ChangeEvent,
+  type PropsWithChildren,
+} from "react";
+
+export function Avatar({
+  name,
+  url,
+  size = 40,
+}: {
+  name: string;
+  url?: string | null;
+  size?: number;
+}) {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  if (url) {
+    return (
+      <img
+        src={url}
+        alt={name}
+        style={{ width: size, height: size }}
+        className="rounded-full object-cover"
+      />
+    );
+  }
+
+  return (
+    <div
+      style={{ width: size, height: size, fontSize: size * 0.4 }}
+      className="flex items-center justify-center rounded-full bg-red-100 font-semibold leading-none text-red-700"
+    >
+      {initials || "?"}
+    </div>
+  );
+}
+
+async function uploadFile(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("/api/uploads", { method: "POST", body: formData });
+  const body = await res.json().catch(() => undefined);
+  if (!res.ok) {
+    throw new Error(body?.error?.message ?? "Upload failed");
+  }
+  return body.url as string;
+}
+
+const YOUTUBE_ID_PATTERN =
+  /(?:youtube\.com\/watch\?v=|youtube\.com\/embed\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+
+export function extractYouTubeId(url: string): string | null {
+  return url.match(YOUTUBE_ID_PATTERN)?.[1] ?? null;
+}
+
+export function MediaField({
+  label,
+  kind,
+  value,
+  onChange,
+  onError,
+}: {
+  label: string;
+  kind: "video" | "image";
+  value: string;
+  onChange: (url: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      onChange(await uploadFile(file));
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const youTubeId = kind === "video" ? extractYouTubeId(value) : null;
+
+  return (
+    <Field label={label}>
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          <input
+            key={value}
+            defaultValue={value}
+            onBlur={(e) => onChange(e.target.value)}
+            placeholder={
+              kind === "video"
+                ? "Paste a YouTube or video link"
+                : "Paste an image link"
+            }
+            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-sm font-medium text-stone-700 disabled:opacity-50"
+          >
+            {uploading ? "Uploading…" : "Upload"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={kind === "video" ? "video/*" : "image/*"}
+            onChange={handleFile}
+            className="hidden"
+          />
+        </div>
+        {youTubeId ? (
+          <iframe
+            className="aspect-video w-full rounded-xl"
+            src={`https://www.youtube.com/embed/${youTubeId}`}
+            title="Video preview"
+            allowFullScreen
+          />
+        ) : kind === "video" && value ? (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video src={value} controls className="w-full rounded-xl" />
+        ) : kind === "image" && value ? (
+          <img
+            src={value}
+            alt={`${label} preview`}
+            className="max-h-40 w-full rounded-xl object-cover"
+          />
+        ) : null}
+      </div>
+    </Field>
+  );
+}
 
 export function Spinner() {
   return (

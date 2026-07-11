@@ -1,5 +1,6 @@
 import { NavLink, Outlet, Route, Routes } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
+import { Avatar } from "./components/ui";
 import Schedule from "./pages/Schedule";
 import Athletes from "./pages/Athletes";
 import Grades from "./pages/Grades";
@@ -18,21 +19,37 @@ import AdminCoachRoles from "./pages/admin/CoachRoles";
 import RequireAuth from "./components/RequireAuth";
 import RequireLogin from "./components/RequireLogin";
 
-const tabs = [
+const ATHLETE_TABS = [
   { to: "/", label: "Schedule", icon: "📅", end: true },
-  { to: "/athletes", label: "Athletes", icon: "👥" },
-  { to: "/grades", label: "Grades", icon: "🥋" },
+  { to: "/admin/training-modules", label: "Training", icon: "💪" },
   { to: "/more", label: "More", icon: "⚙️" },
 ];
 
+const DEFAULT_TABS = [
+  { to: "/", label: "Schedule", icon: "📅", end: true },
+  { to: "/athletes", label: "Athletes", icon: "👥" },
+  { to: "/more", label: "More", icon: "⚙️" },
+];
+
+const tabClassName = ({ isActive }: { isActive: boolean }) =>
+  `my-2 flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl py-2 text-xs font-medium transition-colors ${
+    isActive ? "bg-red-50 text-red-600" : "text-stone-500"
+  }`;
+
 function Shell() {
   const { user } = useAuth();
+  const tabs = user?.role === "athlete" ? ATHLETE_TABS : DEFAULT_TABS;
   const activeProfileName =
     user?.role === "athlete"
       ? user.athlete_name
       : user?.role === "coach"
         ? user.coach_name
         : null;
+  const profileName =
+    activeProfileName ||
+    [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
+    user?.email ||
+    "";
 
   return (
     <div className="flex h-full flex-col bg-stone-100">
@@ -47,17 +64,12 @@ function Shell() {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 flex justify-around bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-1px_2px_rgba(28,25,23,0.04),0_-8px_20px_-6px_rgba(28,25,23,0.10)] backdrop-blur">
+        <NavLink to="/profile" className={tabClassName}>
+          <Avatar name={profileName} size={22} />
+          <span className="font-display uppercase tracking-wide">Profile</span>
+        </NavLink>
         {tabs.map((tab) => (
-          <NavLink
-            key={tab.to}
-            to={tab.to}
-            end={tab.end}
-            className={({ isActive }) =>
-              `my-2 flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl py-2 text-xs font-medium transition-colors ${
-                isActive ? "bg-red-50 text-red-600" : "text-stone-500"
-              }`
-            }
-          >
+          <NavLink key={tab.to} to={tab.to} end={tab.end} className={tabClassName}>
             <span className="text-lg leading-none">{tab.icon}</span>
             <span className="font-display uppercase tracking-wide">{tab.label}</span>
           </NavLink>
@@ -127,7 +139,7 @@ export default function App() {
         <Route
           path="/admin/training-modules"
           element={
-            <RequireAuth roles={["coach"]}>
+            <RequireAuth roles={["coach", "athlete"]}>
               <AdminTrainingModules />
             </RequireAuth>
           }

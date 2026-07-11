@@ -6,7 +6,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const router = Router();
 
 const FIELDS = `id, first_name, last_name, date_of_birth, email, phone,
-                emergency_name, emergency_phone, belt, join_date,
+                emergency_name, emergency_phone, belt, join_date, photo_url,
                 medical_notes, is_active, created_at`;
 
 router.use(authorize());
@@ -50,6 +50,7 @@ router.post(
       emergency_phone,
       belt,
       join_date,
+      photo_url,
       medical_notes,
       is_active,
     } = req.body ?? {};
@@ -63,8 +64,8 @@ router.post(
     const { rows } = await pool.query(
       `INSERT INTO nk_athletes
          (first_name, last_name, date_of_birth, email, phone,
-          emergency_name, emergency_phone, belt, join_date, medical_notes, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'white'), COALESCE($9, CURRENT_DATE), $10, COALESCE($11, TRUE))
+          emergency_name, emergency_phone, belt, join_date, photo_url, medical_notes, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'white'), COALESCE($9, CURRENT_DATE), $10, $11, COALESCE($12, TRUE))
        RETURNING ${FIELDS}`,
       [
         first_name,
@@ -76,6 +77,7 @@ router.post(
         emergency_phone,
         belt,
         join_date,
+        photo_url,
         medical_notes,
         is_active,
       ]
@@ -113,50 +115,41 @@ router.patch(
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
-    const {
-      first_name,
-      last_name,
-      date_of_birth,
-      email,
-      phone,
-      emergency_name,
-      emergency_phone,
-      belt,
-      join_date,
-      medical_notes,
-      is_active,
-    } = req.body ?? {};
+    const body = req.body ?? {};
+    const fields = {
+      first_name: body.first_name,
+      last_name: body.last_name,
+      date_of_birth: body.date_of_birth,
+      email: body.email,
+      phone: body.phone,
+      emergency_name: body.emergency_name,
+      emergency_phone: body.emergency_phone,
+      belt: body.belt,
+      join_date: body.join_date,
+      photo_url: body.photo_url,
+      medical_notes: body.medical_notes,
+      is_active: body.is_active,
+    };
+    const setClauses = [];
+    const values = [];
+    for (const [key, value] of Object.entries(fields)) {
+      if (key in body) {
+        values.push(value);
+        setClauses.push(`${key} = $${values.length}`);
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: { message: "No fields to update" } });
+    }
+
+    values.push(req.params.id);
 
     const { rows } = await pool.query(
-      `UPDATE nk_athletes SET
-         first_name      = COALESCE($1, first_name),
-         last_name       = COALESCE($2, last_name),
-         date_of_birth   = COALESCE($3, date_of_birth),
-         email           = COALESCE($4, email),
-         phone           = COALESCE($5, phone),
-         emergency_name  = COALESCE($6, emergency_name),
-         emergency_phone = COALESCE($7, emergency_phone),
-         belt            = COALESCE($8, belt),
-         join_date       = COALESCE($9, join_date),
-         medical_notes   = COALESCE($10, medical_notes),
-         is_active       = COALESCE($11, is_active),
-         updated_at      = NOW()
-       WHERE id = $12
+      `UPDATE nk_athletes SET ${setClauses.join(", ")}, updated_at = NOW()
+       WHERE id = $${values.length}
        RETURNING ${FIELDS}`,
-      [
-        first_name,
-        last_name,
-        date_of_birth,
-        email,
-        phone,
-        emergency_name,
-        emergency_phone,
-        belt,
-        join_date,
-        medical_notes,
-        is_active,
-        req.params.id,
-      ]
+      values
     );
 
     if (rows.length === 0) {

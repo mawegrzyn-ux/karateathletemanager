@@ -1,18 +1,15 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type FormEvent,
-} from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ApiError, useApi } from "../../hooks/useApi";
+import { useAuth } from "../../context/AuthContext";
 import {
   Spinner,
   Drawer,
   AddButton,
   DeleteButton,
   Field,
+  MediaField,
   Toast,
+  extractYouTubeId,
 } from "../../components/ui";
 
 type ItemType = "exercise" | "rest";
@@ -136,106 +133,52 @@ function itemSummary(it: TrainingModuleItem) {
   return name;
 }
 
-const YOUTUBE_ID_PATTERN =
-  /(?:youtube\.com\/watch\?v=|youtube\.com\/embed\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
-
-function extractYouTubeId(url: string): string | null {
-  return url.match(YOUTUBE_ID_PATTERN)?.[1] ?? null;
-}
-
-async function uploadFile(file: File): Promise<string> {
-  const formData = new FormData();
-  formData.append("file", file);
-  const res = await fetch("/api/uploads", { method: "POST", body: formData });
-  const body = await res.json().catch(() => undefined);
-  if (!res.ok) {
-    throw new Error(body?.error?.message ?? "Upload failed");
-  }
-  return body.url as string;
-}
-
-function MediaField({
-  label,
-  kind,
-  value,
-  onChange,
-  onError,
-}: {
-  label: string;
-  kind: "video" | "image";
-  value: string;
-  onChange: (url: string) => void;
-  onError: (message: string) => void;
-}) {
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  async function handleFile(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setUploading(true);
-    try {
-      onChange(await uploadFile(file));
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  const youTubeId = kind === "video" ? extractYouTubeId(value) : null;
-
+function ModuleItemsReadOnly({ items }: { items: TrainingModuleItem[] }) {
   return (
-    <Field label={label}>
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
+        Exercises &amp; rest ({items.length})
+      </span>
       <div className="flex flex-col gap-2">
-        <div className="flex gap-2">
-          <input
-            key={value}
-            defaultValue={value}
-            onBlur={(e) => onChange(e.target.value)}
-            placeholder={
-              kind === "video"
-                ? "Paste a YouTube or video link"
-                : "Paste an image link"
-            }
-            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-sm font-medium text-stone-700 disabled:opacity-50"
-          >
-            {uploading ? "Uploading…" : "Upload"}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={kind === "video" ? "video/*" : "image/*"}
-            onChange={handleFile}
-            className="hidden"
-          />
-        </div>
-        {youTubeId ? (
-          <iframe
-            className="aspect-video w-full rounded-xl"
-            src={`https://www.youtube.com/embed/${youTubeId}`}
-            title="Video preview"
-            allowFullScreen
-          />
-        ) : kind === "video" && value ? (
-          // eslint-disable-next-line jsx-a11y/media-has-caption
-          <video src={value} controls className="w-full rounded-xl" />
-        ) : kind === "image" && value ? (
-          <img
-            src={value}
-            alt="Exercise preview"
-            className="max-h-40 w-full rounded-xl object-cover"
-          />
-        ) : null}
+        {items.map((item) => {
+          const youTubeId = item.video_url ? extractYouTubeId(item.video_url) : null;
+          return (
+            <div
+              key={item.id}
+              className="flex flex-col gap-2 rounded-xl border border-stone-200 bg-white p-3"
+            >
+              <span className="font-medium">{itemSummary(item)}</span>
+              {item.explanation && (
+                <p className="text-sm text-stone-600">{item.explanation}</p>
+              )}
+              {youTubeId ? (
+                <iframe
+                  className="aspect-video w-full rounded-xl"
+                  src={`https://www.youtube.com/embed/${youTubeId}`}
+                  title="Video preview"
+                  allowFullScreen
+                />
+              ) : (
+                item.video_url && (
+                  // eslint-disable-next-line jsx-a11y/media-has-caption
+                  <video src={item.video_url} controls className="w-full rounded-xl" />
+                )
+              )}
+              {item.image_url && (
+                <img
+                  src={item.image_url}
+                  alt={item.name ?? "Exercise"}
+                  className="max-h-40 w-full rounded-xl object-cover"
+                />
+              )}
+            </div>
+          );
+        })}
+        {items.length === 0 && (
+          <p className="px-1 py-2 text-sm text-stone-500">No exercises yet.</p>
+        )}
       </div>
-    </Field>
+    </div>
   );
 }
 
@@ -412,6 +355,8 @@ function ModuleItemsEditor({
 
 export default function TrainingModules() {
   const api = useApi();
+  const { user } = useAuth();
+  const canEdit = !!user?.is_admin || user?.role === "coach";
   const [modules, setModules] = useState<TrainingModule[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -513,7 +458,7 @@ export default function TrainingModules() {
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Training modules</h1>
-        <AddButton onClick={openCreate} />
+        {canEdit && <AddButton onClick={openCreate} />}
       </div>
 
       <input
@@ -545,47 +490,49 @@ export default function TrainingModules() {
         )}
       </div>
 
-      <Drawer
-        open={drawer === "create"}
-        onClose={() => setDrawer("closed")}
-        title="New training module"
-      >
-        <form onSubmit={createModule} className="flex flex-col gap-4">
-          <Field label="Title">
-            <input
-              required
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+      {canEdit && (
+        <Drawer
+          open={drawer === "create"}
+          onClose={() => setDrawer("closed")}
+          title="New training module"
+        >
+          <form onSubmit={createModule} className="flex flex-col gap-4">
+            <Field label="Title">
+              <input
+                required
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Explanation">
+              <textarea
+                value={form.explanation}
+                onChange={(e) => setForm({ ...form, explanation: e.target.value })}
+                className="rounded-xl border border-stone-300 px-3 py-2"
+              />
+            </Field>
+            <ModuleItemsEditor
+              items={formItems}
+              onChange={setFormItems}
+              onError={showToast}
             />
-          </Field>
-          <Field label="Explanation">
-            <textarea
-              value={form.explanation}
-              onChange={(e) => setForm({ ...form, explanation: e.target.value })}
-              className="rounded-xl border border-stone-300 px-3 py-2"
-            />
-          </Field>
-          <ModuleItemsEditor
-            items={formItems}
-            onChange={setFormItems}
-            onError={showToast}
-          />
-          <button
-            type="submit"
-            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
-          >
-            Create
-          </button>
-        </form>
-      </Drawer>
+            <button
+              type="submit"
+              className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
+            >
+              Create
+            </button>
+          </form>
+        </Drawer>
+      )}
 
       <Drawer
         open={editing !== null}
         onClose={() => setDrawer("closed")}
         title={editing?.title ?? ""}
       >
-        {editing && (
+        {editing && canEdit && (
           <div className="flex flex-col gap-4">
             <Field label="Title">
               <input
@@ -620,6 +567,14 @@ export default function TrainingModules() {
               onClick={() => deleteModule(editing.id)}
               itemLabel={editing.title}
             />
+          </div>
+        )}
+        {editing && !canEdit && (
+          <div className="flex flex-col gap-4">
+            {editing.explanation && (
+              <p className="text-stone-600">{editing.explanation}</p>
+            )}
+            <ModuleItemsReadOnly items={editing.items} />
           </div>
         )}
       </Drawer>
