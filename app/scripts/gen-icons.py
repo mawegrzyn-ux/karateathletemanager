@@ -1,110 +1,78 @@
 #!/usr/bin/env python3
-"""Generates the PWA app icons: a white silhouette of a woman in a
-high side-kick karate pose on a red-600 background. Original artwork
-(not traced from any reference image). Rerun after changing the design;
-outputs are committed to app/public/ since there's no build-time asset
-pipeline for them."""
+"""Generates the PWA app icons from the user-supplied source artwork
+(app/scripts/assets/logo-source.jpg): a white silhouette of a karate
+practitioner in a side-kick pose on a red background. Rerun after
+changing the source image; outputs are committed to app/public/ since
+there's no build-time asset pipeline for them.
+"""
 
 from PIL import Image, ImageDraw
 
-RED = (220, 38, 38)  # tailwind red-600
-WHITE = (255, 255, 255, 255)
-
-# Figure drawn in a 200x200 normalized space, then scaled/centered per icon.
-FIGURE_BOX = 200
+SOURCE = "scripts/assets/logo-source.jpg"
 
 
-def capsule(draw, p1, p2, width, fill):
-    draw.line([p1, p2], fill=fill, width=round(width))
-    r = width / 2
-    for p in (p1, p2):
-        draw.ellipse(
-            [p[0] - r, p[1] - r, p[0] + r, p[1] + r], fill=fill
-        )
+def dominant_border_color(im):
+    w, h = im.size
+    samples = [
+        im.getpixel((2, 2)),
+        im.getpixel((w - 3, 2)),
+        im.getpixel((2, h - 3)),
+        im.getpixel((w - 3, h - 3)),
+        im.getpixel((w // 2, 2)),
+    ]
+    r = round(sum(p[0] for p in samples) / len(samples))
+    g = round(sum(p[1] for p in samples) / len(samples))
+    b = round(sum(p[2] for p in samples) / len(samples))
+    return (r, g, b)
 
 
-def draw_figure(draw, scale, offset_x, offset_y, fill=WHITE):
-    def pt(x, y):
-        return (x * scale + offset_x, y * scale + offset_y)
-
-    # Head + ponytail
-    head_c = pt(95, 38)
-    head_r = 15 * scale
-    draw.ellipse(
-        [head_c[0] - head_r, head_c[1] - head_r, head_c[0] + head_r, head_c[1] + head_r],
-        fill=fill,
-    )
-    draw.polygon(
-        [pt(107, 26), pt(128, 14), pt(124, 34), pt(112, 40)],
-        fill=fill,
-    )
-
-    # Torso (neck to hip)
-    capsule(draw, pt(95, 55), pt(88, 108), 32 * scale, fill)
-
-    # Standing leg: hip -> knee -> foot
-    capsule(draw, pt(80, 106), pt(75, 148), 22 * scale, fill)
-    capsule(draw, pt(75, 148), pt(70, 189), 20 * scale, fill)
-
-    # Kicking leg raised high to the side: hip -> knee -> foot
-    capsule(draw, pt(99, 104), pt(138, 90), 22 * scale, fill)
-    capsule(draw, pt(138, 90), pt(184, 50), 20 * scale, fill)
-
-    # Front (guard) arm: shoulder -> elbow -> fist, chambered near chest
-    capsule(draw, pt(77, 64), pt(59, 84), 15 * scale, fill)
-    capsule(draw, pt(59, 84), pt(73, 99), 14 * scale, fill)
-
-    # Rear arm, tucked back close to the torso for balance
-    capsule(draw, pt(103, 64), pt(113, 78), 15 * scale, fill)
-    capsule(draw, pt(113, 78), pt(104, 92), 14 * scale, fill)
-
-    # Belt tails at the waist
-    draw.polygon(
-        [pt(83, 108), pt(76, 130), pt(87, 128), pt(90, 110)],
-        fill=fill,
-    )
+def make_square(im, bg):
+    w, h = im.size
+    side = max(w, h)
+    canvas = Image.new("RGB", (side, side), bg)
+    canvas.paste(im, ((side - w) // 2, (side - h) // 2))
+    return canvas
 
 
-def draw_icon(size, padding_ratio, out_path):
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-
-    corner_radius = round(size * 0.22)
-    draw.rounded_rectangle(
-        [(0, 0), (size - 1, size - 1)], radius=corner_radius, fill=RED
-    )
+def make_icon(square_img, bg, size, padding_ratio, out_path, rounded=True, corner_radius_ratio=0.22):
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+    if rounded:
+        radius = round(size * corner_radius_ratio)
+        draw.rounded_rectangle([(0, 0), (size - 1, size - 1)], radius=radius, fill=bg + (255,))
+    else:
+        draw.rectangle([(0, 0), (size - 1, size - 1)], fill=bg + (255,))
 
     usable = size * (1 - padding_ratio * 2)
-    scale = usable / FIGURE_BOX
-    offset_x = (size - FIGURE_BOX * scale) / 2
-    offset_y = (size - FIGURE_BOX * scale) / 2
-    draw_figure(draw, scale, offset_x, offset_y)
+    resized = square_img.resize((round(usable), round(usable)), Image.LANCZOS)
+    offset = (round((size - usable) / 2), round((size - usable) / 2))
+    canvas.paste(resized, offset)
+    canvas.save(out_path)
 
-    img.save(out_path)
 
+source = Image.open(SOURCE).convert("RGB")
+bg = dominant_border_color(source)
+square = make_square(source, bg)
 
 # Standard (any) icons - fill the full canvas
-draw_icon(192, 0.05, "public/icon-192.png")
-draw_icon(512, 0.05, "public/icon-512.png")
+make_icon(square, bg, 192, 0.05, "public/icon-192.png")
+make_icon(square, bg, 512, 0.05, "public/icon-512.png")
 
 # Maskable icons need extra safe-zone padding since the OS may crop to
-# a circle/squircle - keep the figure within the center ~80%.
-draw_icon(192, 0.15, "public/icon-maskable-192.png")
-draw_icon(512, 0.15, "public/icon-maskable-512.png")
+# a circle/squircle - keep the artwork within the center ~80%.
+make_icon(square, bg, 192, 0.15, "public/icon-maskable-192.png")
+make_icon(square, bg, 512, 0.15, "public/icon-maskable-512.png")
 
 # Apple touch icon: iOS ignores alpha and rounds the corners itself,
 # so render on an opaque square (no pre-rounded corners/transparency).
-size = 180
-img = Image.new("RGB", (size, size), RED)
-draw = ImageDraw.Draw(img)
-usable = size * 0.92
-scale = usable / FIGURE_BOX
-offset_x = (size - FIGURE_BOX * scale) / 2
-offset_y = (size - FIGURE_BOX * scale) / 2
-draw_figure(draw, scale, offset_x, offset_y, fill=(255, 255, 255))
-img.save("public/apple-touch-icon.png")
+apple = Image.new("RGB", (180, 180), bg)
+usable = 180 * 0.92
+resized = square.resize((round(usable), round(usable)), Image.LANCZOS)
+offset = (round((180 - usable) / 2), round((180 - usable) / 2))
+apple.paste(resized, offset)
+apple.save("public/apple-touch-icon.png")
 
 # Favicon
-draw_icon(32, 0.05, "public/favicon-32.png")
+make_icon(square, bg, 32, 0.05, "public/favicon-32.png")
 
 print("Icons generated.")
