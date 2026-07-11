@@ -29,6 +29,31 @@ test("uploads path reaches the API, not nginx's static-asset cache rule", async 
   expect(body.error?.message).toBeTruthy();
 });
 
+test("PWA manifest and service worker are served", async ({
+  request,
+  baseURL,
+}) => {
+  const manifestRes = await request.get(`${baseURL}/manifest.webmanifest`);
+  expect(manifestRes.status()).toBe(200);
+
+  // The plain Vite dev server (no production build) has no real manifest
+  // and serves the SPA's index.html for any unmatched path instead — skip
+  // rather than false-fail when running against a raw `npm run dev`
+  // server, since only a built+deployed site actually generates these.
+  const contentType = manifestRes.headers()["content-type"] ?? "";
+  test.skip(
+    !contentType.includes("json"),
+    "Not a production build (dev server has no real manifest/service worker) — skipping"
+  );
+
+  const manifest = await manifestRes.json();
+  expect(manifest.name).toBe("Nada Karate");
+  expect(Array.isArray(manifest.icons) && manifest.icons.length).toBeTruthy();
+
+  const swRes = await request.get(`${baseURL}/sw.js`);
+  expect(swRes.status()).toBe(200);
+});
+
 test("login page renders", async ({ page }) => {
   await page.goto("/login");
   await expect(page.locator('input[type="email"]')).toBeVisible();

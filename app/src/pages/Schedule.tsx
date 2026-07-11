@@ -26,6 +26,7 @@ interface Event {
   end_time: string | null;
   location: string | null;
   notes: string | null;
+  training_module_id: number | null;
 }
 
 interface EventItem {
@@ -39,6 +40,7 @@ interface EventItem {
   notes: string | null;
   training_module_id: number | null;
   kata_id: number | null;
+  completed: boolean;
 }
 
 interface Person {
@@ -107,6 +109,7 @@ const EMPTY_FORM = {
   end_time: "",
   location: "",
   notes: "",
+  training_module_id: null as number | null,
 };
 
 const EMPTY_ITEM_FORM = {
@@ -354,6 +357,8 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       ...form,
       start_time: form.start_time || null,
       end_time: form.end_time || null,
+      training_module_id:
+        form.event_type === "training" ? form.training_module_id : null,
       athlete_ids: canPickAthletes ? formAthleteIds : undefined,
     });
     setEvents((prev) => (prev ? [...prev, event] : [event]));
@@ -597,6 +602,16 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             />
           </Field>
 
+          {form.event_type === "training" && (
+            <SingleSelectPicker
+              label="Training module"
+              placeholder="Search training modules..."
+              options={modules.map((m) => ({ id: m.id, label: m.title }))}
+              selectedId={form.training_module_id}
+              onSelect={(id) => setForm({ ...form, training_module_id: id })}
+            />
+          )}
+
           {canPickAthletes && (
             <AthletePicker
               ids={formAthleteIds}
@@ -780,6 +795,16 @@ function EventDetail({
           className="rounded-xl border border-stone-300 px-3 py-2"
         />
       </Field>
+
+      {event.event_type === "training" && (
+        <SingleSelectPicker
+          label="Training module"
+          placeholder="Search training modules..."
+          options={modules.map((m) => ({ id: m.id, label: m.title }))}
+          selectedId={event.training_module_id}
+          onSelect={(id) => updateEvent({ training_module_id: id })}
+        />
+      )}
 
       {canPickAthletes && (
         <AthletePicker
@@ -1104,7 +1129,11 @@ function WeekView({
       <div className="flex max-h-[60vh] overflow-auto rounded-lg">
         <div className="sticky left-0 flex flex-col bg-stone-100 text-right text-[10px] text-stone-500" style={{ width: 36 }}>
           {GRID_HOURS.map((h) => (
-            <div key={h} style={{ height: HOUR_HEIGHT }} className="pr-1 -translate-y-2">
+            <div
+              key={h}
+              style={{ height: HOUR_HEIGHT }}
+              className="shrink-0 pr-1 -translate-y-2"
+            >
               {formatHour(h)}
             </div>
           ))}
@@ -1260,7 +1289,11 @@ function DayView({
           style={{ width: 44 }}
         >
           {GRID_HOURS.map((h) => (
-            <div key={h} style={{ height: HOUR_HEIGHT }} className="pr-1 -translate-y-2">
+            <div
+              key={h}
+              style={{ height: HOUR_HEIGHT }}
+              className="shrink-0 pr-1 -translate-y-2"
+            >
               {formatHour(h)}
             </div>
           ))}
@@ -1440,30 +1473,44 @@ function ItemsSection({
               key={item.id}
               className="rounded-xl border border-stone-200 bg-white"
             >
-              <button
-                type="button"
-                onClick={() => setExpandedId(expanded ? null : item.id)}
-                className="flex min-h-[44px] w-full flex-col items-start gap-1 px-3 py-2 text-left"
-              >
-                <div className="flex w-full items-center justify-between">
-                  <span>{item.title}</span>
-                  <div className="flex items-center gap-2">
-                    <Badge>{TYPE_LABELS[item.item_type] ?? item.item_type}</Badge>
-                    <span className="text-xs text-stone-500">
-                      {toDateInput(item.item_date)}
+              <div className="flex w-full items-start gap-2 px-3 py-2">
+                <input
+                  type="checkbox"
+                  aria-label={`Mark "${item.title}" as complete`}
+                  checked={item.completed}
+                  onChange={(e) =>
+                    updateItem(item.id, { completed: e.target.checked })
+                  }
+                  onClick={(e) => e.stopPropagation()}
+                  className="mt-1 h-5 w-5 shrink-0"
+                />
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(expanded ? null : item.id)}
+                  className="flex min-h-[44px] flex-1 flex-col items-start gap-1 text-left"
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <span className={item.completed ? "line-through text-stone-400" : ""}>
+                      {item.title}
                     </span>
+                    <div className="flex items-center gap-2">
+                      <Badge>{TYPE_LABELS[item.item_type] ?? item.item_type}</Badge>
+                      <span className="text-xs text-stone-500">
+                        {toDateInput(item.item_date)}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                {(item.training_module_id || item.kata_id) && (
-                  <span className="text-xs text-stone-500">
-                    {item.training_module_id &&
-                      modules.find((m) => m.id === item.training_module_id)
-                        ?.title}
-                    {item.kata_id &&
-                      katas.find((k) => k.id === item.kata_id)?.name}
-                  </span>
-                )}
-              </button>
+                  {(item.training_module_id || item.kata_id) && (
+                    <span className="text-xs text-stone-500">
+                      {item.training_module_id &&
+                        modules.find((m) => m.id === item.training_module_id)
+                          ?.title}
+                      {item.kata_id &&
+                        katas.find((k) => k.id === item.kata_id)?.name}
+                    </span>
+                  )}
+                </button>
+              </div>
               {expanded && (
                 <div className="flex flex-col gap-3 border-t border-stone-200 p-3">
                   <Field label="Title">
@@ -1539,6 +1586,16 @@ function ItemsSection({
                       className="rounded-xl border border-stone-300 px-3 py-2"
                     />
                   </Field>
+                  <label className="flex items-center gap-2 text-sm text-stone-600">
+                    <input
+                      type="checkbox"
+                      checked={item.completed}
+                      onChange={(e) =>
+                        updateItem(item.id, { completed: e.target.checked })
+                      }
+                    />
+                    Completed
+                  </label>
                   {item.item_type === "training" && (
                     <SingleSelectPicker
                       label="Training module"
