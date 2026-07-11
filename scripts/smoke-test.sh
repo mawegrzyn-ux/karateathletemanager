@@ -52,6 +52,9 @@ check "Login route serves the SPA (client-side routed)" "$BASE_URL/login" 200 '<
 check "Uploads path is proxied to the API, not caught by the static-asset cache rule" \
   "$BASE_URL/api/uploads/files/__smoke-test-missing__.png" "401|404" '"error"'
 
+check "PWA manifest is served" "$BASE_URL/manifest.webmanifest" 200 '"name":"Nada Karate"'
+check "Service worker is served" "$BASE_URL/sw.js" 200
+
 rm -f /tmp/smoke-body
 
 echo

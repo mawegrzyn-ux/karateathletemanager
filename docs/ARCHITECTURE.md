@@ -23,7 +23,7 @@ Domain: nadakarate.com
 ## Design Principles
 
 - **Mobile-first** — primary use is on phones at the dojo. All layouts must work on 375px+ screens. Touch-friendly tap targets (min 44px). Bottom navigation, not sidebar.
-- **Offline-aware** — athletes check schedules with patchy gym WiFi. Consider PWA service worker for caching schedules.
+- **Offline-aware** — athletes check schedules with patchy gym WiFi. The app is an installable PWA with a service worker caching schedules (see "PWA" below).
 - **Fast** — quick glance at today's schedule, tap to mark attendance. Minimal clicks for common actions.
 
 ## Folder Structure
@@ -656,6 +656,39 @@ const migrations = [
 - Build output: `app/dist/` → copied to `/var/www/nadakarate/frontend/` on deploy
 - Touch targets minimum 44px height
 - Use `safe-area-inset-*` for notch/home-bar padding on iOS
+
+## PWA
+
+The app is installable and works offline for previously-loaded data,
+via `vite-plugin-pwa` (`app/vite.config.ts`):
+
+- **Manifest** (`manifest.webmanifest`, generated at build time from the
+  `manifest` option in `vite.config.ts`): name, `theme_color` (`#dc2626`,
+  matching the red accent), `background_color` (`#f5f5f4`, matching the
+  stone-100 page background), `display: "standalone"`.
+- **Icons**: `app/public/icon-{192,512}.png` (full-bleed) and
+  `icon-maskable-{192,512}.png` (extra safe-zone padding, for Android's
+  adaptive-icon masking) plus `apple-touch-icon.png` (opaque, since iOS
+  ignores alpha/rounds corners itself) and `favicon-32.png`. All four are
+  a red-600 rounded square with a white "NK" monogram, regenerated via
+  `app/scripts/gen-icons.py` (Pillow) if the design ever needs to
+  change — rerun it and commit the resulting PNGs, there's no build-time
+  step that does this automatically. `index.html` also sets the
+  `apple-mobile-web-app-*` meta tags iOS needs for "Add to Home Screen"
+  that the manifest alone doesn't cover.
+- **Service worker**: `registerType: "autoUpdate"` (new deploys take
+  over silently on next load, no "update available" prompt — acceptable
+  here since the app has no user-entered draft state worth preserving
+  across an update) registered from `main.tsx` via
+  `virtual:pwa-register`. Workbox `runtimeCaching`: `/api/*` requests use
+  `NetworkFirst` (try the network, 5s timeout, fall back to the last
+  successful response when offline — this is the "check schedules with
+  patchy gym WiFi" case from the Design Principles above) and images use
+  `CacheFirst`. The app shell (JS/CSS/HTML) is precached, so the SPA
+  still boots offline even before any `/api` call has ever succeeded.
+- `navigateFallbackDenylist` excludes `/api/` paths from the SPA
+  navigation fallback (not that this matters much in practice — `/api`
+  calls are `fetch`, not page navigations — but keeps the rule explicit).
 
 ## Suggested Page Structure (Mobile)
 
