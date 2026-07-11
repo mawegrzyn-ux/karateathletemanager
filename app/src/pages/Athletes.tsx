@@ -220,8 +220,15 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
             className="flex min-h-[56px] items-stretch overflow-hidden rounded-2xl bg-white text-left font-medium shadow-card"
           >
             <AthleteThumb name={`${a.first_name} ${a.last_name}`} url={a.photo_url} />
-            <span className="flex flex-1 items-center py-3 pr-4">
-              {a.first_name} {a.last_name}
+            <span className="flex flex-1 flex-col justify-center gap-0.5 py-3 pl-4 pr-4">
+              <span>
+                {a.first_name} {a.last_name}
+              </span>
+              {a.belt && (
+                <span className="text-sm font-normal capitalize text-stone-500">
+                  {a.belt} belt
+                </span>
+              )}
             </span>
           </button>
         ))}
@@ -493,7 +500,7 @@ function AthleteThumb({ name, url }: { name: string; url?: string | null }) {
       <img
         src={url}
         alt={name}
-        className="w-[15%] min-w-[56px] shrink-0 object-cover"
+        className="w-[20%] min-w-[64px] shrink-0 object-cover"
       />
     );
   }
@@ -508,7 +515,7 @@ function AthleteThumb({ name, url }: { name: string; url?: string | null }) {
     .toUpperCase();
 
   return (
-    <div className="flex w-[15%] min-w-[56px] shrink-0 items-center justify-center bg-red-100 font-semibold text-red-700">
+    <div className="flex w-[20%] min-w-[64px] shrink-0 items-center justify-center bg-red-100 font-semibold text-red-700">
       {initials || "?"}
     </div>
   );
