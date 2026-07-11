@@ -17,6 +17,7 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [wantsAthlete, setWantsAthlete] = useState(false);
   const [wantsCoach, setWantsCoach] = useState(false);
+  const [wantsReferee, setWantsReferee] = useState(false);
   const [clubId, setClubId] = useState<number | null>(null);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +39,7 @@ export default function Register() {
       await register(email, password, {
         wants_athlete: wantsAthlete,
         wants_coach: wantsCoach,
+        wants_referee: wantsReferee,
         requested_club_id: clubId,
       });
       navigate("/");
@@ -91,6 +93,14 @@ export default function Register() {
               onChange={(e) => setWantsCoach(e.target.checked)}
             />
             A coach
+          </label>
+          <label className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-300 px-3">
+            <input
+              type="checkbox"
+              checked={wantsReferee}
+              onChange={(e) => setWantsReferee(e.target.checked)}
+            />
+            A referee
           </label>
         </div>
 

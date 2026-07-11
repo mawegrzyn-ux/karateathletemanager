@@ -535,6 +535,42 @@ const migrations = [
 
   `ALTER TABLE nk_coaches
      ADD COLUMN IF NOT EXISTS photo_url TEXT`,
+
+  // A third profile type, parallel to athletes/coaches: officiates
+  // competitions rather than competing or coaching. Kept intentionally
+  // minimal (no club/style scoping) to match how little of that applies.
+  `CREATE TABLE IF NOT EXISTS nk_referees (
+     id              SERIAL PRIMARY KEY,
+     first_name      VARCHAR(100) NOT NULL,
+     last_name       VARCHAR(100) NOT NULL,
+     email           VARCHAR(200),
+     phone           VARCHAR(50),
+     qualifications  TEXT,
+     photo_url       TEXT,
+     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  `ALTER TABLE nk_users
+     ADD COLUMN IF NOT EXISTS referee_id INTEGER REFERENCES nk_referees(id) ON DELETE SET NULL,
+     ADD COLUMN IF NOT EXISTS wants_referee BOOLEAN NOT NULL DEFAULT FALSE,
+     ADD COLUMN IF NOT EXISTS photo_url TEXT`,
+
+  `CREATE TABLE IF NOT EXISTS nk_user_referees (
+     user_id     INTEGER NOT NULL REFERENCES nk_users(id) ON DELETE CASCADE,
+     referee_id  INTEGER NOT NULL REFERENCES nk_referees(id) ON DELETE CASCADE,
+     PRIMARY KEY (user_id, referee_id)
+  )`,
+
+  `INSERT INTO nk_user_referees (user_id, referee_id)
+     SELECT id, referee_id FROM nk_users WHERE referee_id IS NOT NULL
+     ON CONFLICT DO NOTHING`,
+
+  // Safe to rerun every deploy: the DROP happens first each time.
+  `ALTER TABLE nk_users DROP CONSTRAINT IF EXISTS nk_users_role_check`,
+  `ALTER TABLE nk_users ADD CONSTRAINT nk_users_role_check
+     CHECK (role IN ('admin', 'coach', 'athlete', 'parent', 'referee'))`,
 ];
 
 async function migrate() {

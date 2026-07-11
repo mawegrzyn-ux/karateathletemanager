@@ -167,14 +167,21 @@ this way.
 - The "Athletes" bottom-nav tab shows the full manager UI to `admin`/`coach`
   roles. A user acting as `athlete` doesn't get this tab at all (see the
   Frontend Conventions bottom-nav note) — their own linked athlete record
-  is still reachable read-only at `/athletes` (`MyAthleteProfile` in
-  `Athletes.tsx`) — editing your own profile isn't supported yet.
+  is still reachable read-only at `/athletes` (`AthleteSelfProfile`,
+  `app/src/components/AthleteSelfProfile.tsx`, shared with `Profile.tsx`)
+  — athletes can't edit their own profile. Coaches and referees *can*
+  self-edit (see "Referee profiles" above) via `StaffSelfProfile`
+  (`app/src/components/StaffSelfProfile.tsx`), rendered on `Profile.tsx`.
   Everyone else (`parent`, no role) sees a placeholder ("ask your coach").
-- Both `nk_athletes` and `nk_coaches` carry a `photo_url`, editable via
-  the shared `MediaField` (`kind="image"`) in the create/edit drawer.
-  Anywhere a person's photo is displayed instead of edited (list rows,
-  `MyAthleteProfile`'s read-only header), use `Avatar` (`ui.tsx`) — it
-  renders the photo if set, otherwise a circle with the name's initials.
+- `nk_athletes`, `nk_coaches`, and `nk_referees` each carry a `photo_url`,
+  editable via the shared `MediaField` (`kind="image"`) in the create/
+  edit drawer (or the self-edit view, for coaches/referees). `nk_users`
+  also carries its own account-level `photo_url` (edited on `Profile.tsx`'s
+  generic "Account" section) — distinct from the active entity profile's
+  photo. Anywhere a person's photo is displayed instead of edited (list
+  rows, self-profile headers, the bottom nav), use `Avatar` (`ui.tsx`) —
+  it renders the photo if set, otherwise a circle with the name's
+  initials.
 
 ### Scheduling API
 
@@ -376,7 +383,7 @@ third-party OAuth.
 `role` and admin privilege are two **independent** columns on
 `nk_users`, on purpose:
 
-- **`role`** (`'coach' | 'athlete' | 'parent' | null`) means "which
+- **`role`** (`'coach' | 'athlete' | 'parent' | 'referee' | null`) means "which
   identity am I currently acting as" — it drives which nav links/pages
   are relevant and can be freely switched by the user (see
   `POST /api/auth/switch-role` below) between any profile they actually
@@ -487,6 +494,38 @@ athletes (GDPR — no directory of children's names is ever exposed):
   switcher shows a pill for each identity the account actually has
   whenever 2 or more of {athlete, coach, parent} apply.
 
+### Referee profiles
+
+`nk_referees` is a third self-service profile type, a deliberately
+minimal parallel to `nk_coaches`: `first_name`, `last_name`, `email`,
+`phone`, `qualifications`, `photo_url`, `is_active` — no club/
+association scoping and no karate-style linking, since neither applies
+to officiating. It follows the exact same plumbing as athlete/coach
+profiles throughout the stack:
+
+- `nk_users.referee_id` (active pointer) + `nk_user_referees` (user ↔
+  referee, many-to-many, for accounts with more than one referee
+  profile) + `wants_referee` (signup intent), mirroring the athlete/
+  coach columns.
+- `activateUser.js` auto-provisions a referee record the same way as
+  athlete/coach when `wants_referee` is set; `autoRole` prefers
+  `coach > athlete > referee` when a user qualifies for more than one on
+  first activation.
+- `POST /api/auth/switch-role` accepts `'referee'`; `GET /api/auth/
+  my-profiles` includes a `referees` array alongside `athletes`/
+  `coaches`.
+- `api/src/routes/referees.js` mirrors `coaches.js` (list/create/read/
+  update/delete under `/api/admin/referees`, admin-gated writes) but
+  without the styles sub-routes. Both `coaches.js` and `referees.js`
+  additionally allow **self-edit**: a coach/referee acting as themselves
+  can `PATCH` their own record, restricted to contact/profile fields
+  (name, email, phone, qualifications, photo) — `is_active` (and, for
+  coaches, `role`/`athlete_id`) stay admin-only.
+- Frontend: `/admin/referees` (admin-only, list+drawer, mirrors
+  `Coaches.tsx`). `Profile.tsx` renders a self-service editable view
+  (`StaffSelfProfile`, shared with the coach case) above the generic
+  account form when the active role is `referee`.
+
 ### Multiple athlete/coach profiles per account
 
 A single login can own more than one athlete profile and/or more than
@@ -500,12 +539,13 @@ unchanged.
 
 - `activateUser.js` inserts into the join table alongside setting the
   single-column pointer when it self-provisions a profile.
-- `PUT /api/admin/users/:id/athletes` / `/coaches` (`{athleteIds:
-  [...]}` / `{coachIds: [...]}`, replace-all, same shape as `PUT /api/
-  admin/clubs/:id/athletes`) let an admin link/unlink profiles from the
-  admin Users page (`MemberEditor` search-picker, same convention as
-  `Clubs.tsx`). If the currently-active pointer is no longer in the
-  saved set, it falls back to the first remaining profile (or `NULL`).
+- `PUT /api/admin/users/:id/athletes` / `/coaches` / `/referees`
+  (`{athleteIds: [...]}` / `{coachIds: [...]}` / `{refereeIds: [...]}`,
+  replace-all, same shape as `PUT /api/admin/clubs/:id/athletes`) let an
+  admin link/unlink profiles from the admin Users page (`MemberEditor`
+  search-picker, same convention as `Clubs.tsx`). If the currently-active
+  pointer is no longer in the saved set, it falls back to the first
+  remaining profile (or `NULL`).
 - `GET /api/auth/my-profiles` lists the calling user's own linked
   athlete/coach profiles by name. `POST /api/auth/switch-role` now
   accepts an optional `profile_id`, validated against that same set,

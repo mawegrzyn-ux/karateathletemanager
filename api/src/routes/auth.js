@@ -22,8 +22,14 @@ function setSessionCookie(res, userId) {
 router.post(
   "/register",
   asyncHandler(async (req, res) => {
-    const { email, password, wants_athlete, wants_coach, requested_club_id } =
-      req.body ?? {};
+    const {
+      email,
+      password,
+      wants_athlete,
+      wants_coach,
+      wants_referee,
+      requested_club_id,
+    } = req.body ?? {};
 
     if (typeof email !== "string" || !EMAIL_RE.test(email)) {
       return res.status(400).json({ error: { message: "Invalid email" } });
@@ -43,18 +49,23 @@ router.post(
         .status(400)
         .json({ error: { message: "wants_coach must be a boolean" } });
     }
+    if (wants_referee !== undefined && typeof wants_referee !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: { message: "wants_referee must be a boolean" } });
+    }
 
     const passwordHash = await bcrypt.hash(password, 12);
 
     try {
       const { rows } = await pool.query(
         `INSERT INTO nk_users
-           (email, password_hash, status, is_admin, wants_athlete, wants_coach, requested_club_id)
+           (email, password_hash, status, is_admin, wants_athlete, wants_coach, wants_referee, requested_club_id)
          VALUES (
            $1, $2,
            CASE WHEN (SELECT COUNT(*) FROM nk_users) = 0 THEN 'active' ELSE 'pending' END,
            CASE WHEN (SELECT COUNT(*) FROM nk_users) = 0 THEN TRUE ELSE FALSE END,
-           COALESCE($3, FALSE), COALESCE($4, FALSE), $5
+           COALESCE($3, FALSE), COALESCE($4, FALSE), COALESCE($5, FALSE), $6
          )
          RETURNING ${USER_SELECT_FIELDS}`,
         [
@@ -62,6 +73,7 @@ router.post(
           passwordHash,
           wants_athlete,
           wants_coach,
+          wants_referee,
           requested_club_id ?? null,
         ]
       );
@@ -132,12 +144,13 @@ router.patch(
       return res.status(401).json({ error: { message: "Not authenticated" } });
     }
 
-    const { first_name, last_name, phone } = req.body ?? {};
+    const { first_name, last_name, phone, photo_url } = req.body ?? {};
 
     for (const [field, value, maxLen] of [
       ["first_name", first_name, 100],
       ["last_name", last_name, 100],
       ["phone", phone, 50],
+      ["photo_url", photo_url, 500],
     ]) {
       if (
         value !== undefined &&
@@ -155,10 +168,11 @@ router.patch(
          first_name = COALESCE($1, first_name),
          last_name  = COALESCE($2, last_name),
          phone      = COALESCE($3, phone),
+         photo_url  = COALESCE($4, photo_url),
          updated_at = NOW()
-       WHERE id = $4
+       WHERE id = $5
        RETURNING ${USER_SELECT_FIELDS}`,
-      [first_name, last_name, phone, req.user.id]
+      [first_name, last_name, phone, photo_url, req.user.id]
     );
 
     res.json({ user: rows[0] });
@@ -173,14 +187,22 @@ router.post(
     }
 
     const { role, profile_id } = req.body ?? {};
-    if (role !== "athlete" && role !== "coach" && role !== "parent") {
+    if (
+      role !== "athlete" &&
+      role !== "coach" &&
+      role !== "parent" &&
+      role !== "referee"
+    ) {
       return res.status(400).json({
-        error: { message: "role must be 'athlete', 'coach', or 'parent'" },
+        error: {
+          message: "role must be 'athlete', 'coach', 'parent', or 'referee'",
+        },
       });
     }
 
     let athleteId = req.user.athlete_id;
     let coachId = req.user.coach_id;
+    let refereeId = req.user.referee_id;
 
     if (role === "athlete") {
       const { rows } = await pool.query(
@@ -228,6 +250,29 @@ router.post(
       }
     }
 
+    if (role === "referee") {
+      const { rows } = await pool.query(
+        `SELECT referee_id FROM nk_user_referees WHERE user_id = $1 ORDER BY referee_id`,
+        [req.user.id]
+      );
+      const ids = rows.map((r) => r.referee_id);
+      if (ids.length === 0) {
+        return res
+          .status(400)
+          .json({ error: { message: "You don't have a referee profile" } });
+      }
+      if (profile_id !== undefined && profile_id !== null) {
+        if (!ids.includes(Number(profile_id))) {
+          return res
+            .status(400)
+            .json({ error: { message: "Invalid referee profile" } });
+        }
+        refereeId = Number(profile_id);
+      } else if (!ids.includes(refereeId)) {
+        refereeId = ids[0];
+      }
+    }
+
     if (role === "parent" && !req.user.is_parent) {
       return res
         .status(400)
@@ -235,10 +280,10 @@ router.post(
     }
 
     const { rows } = await pool.query(
-      `UPDATE nk_users SET role = $1, athlete_id = $2, coach_id = $3, updated_at = NOW()
-       WHERE id = $4
+      `UPDATE nk_users SET role = $1, athlete_id = $2, coach_id = $3, referee_id = $4, updated_at = NOW()
+       WHERE id = $5
        RETURNING ${USER_SELECT_FIELDS}`,
-      [role, athleteId, coachId, req.user.id]
+      [role, athleteId, coachId, refereeId, req.user.id]
     );
 
     res.json({ user: rows[0] });
@@ -252,7 +297,7 @@ router.get(
       return res.status(401).json({ error: { message: "Not authenticated" } });
     }
 
-    const [athletes, coaches] = await Promise.all([
+    const [athletes, coaches, referees] = await Promise.all([
       pool.query(
         `SELECT a.id, a.first_name, a.last_name
          FROM nk_user_athletes ua
@@ -269,9 +314,21 @@ router.get(
          ORDER BY c.last_name, c.first_name`,
         [req.user.id]
       ),
+      pool.query(
+        `SELECT r.id, r.first_name, r.last_name
+         FROM nk_user_referees ur
+         JOIN nk_referees r ON r.id = ur.referee_id
+         WHERE ur.user_id = $1
+         ORDER BY r.last_name, r.first_name`,
+        [req.user.id]
+      ),
     ]);
 
-    res.json({ athletes: athletes.rows, coaches: coaches.rows });
+    res.json({
+      athletes: athletes.rows,
+      coaches: coaches.rows,
+      referees: referees.rows,
+    });
   })
 );
 

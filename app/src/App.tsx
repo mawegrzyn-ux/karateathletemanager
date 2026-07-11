@@ -12,6 +12,7 @@ import AdminUsers from "./pages/admin/Users";
 import AdminAssociations from "./pages/admin/Associations";
 import AdminClubs from "./pages/admin/Clubs";
 import AdminCoaches from "./pages/admin/Coaches";
+import AdminReferees from "./pages/admin/Referees";
 import AdminTrainingModules from "./pages/admin/TrainingModules";
 import AdminKatas from "./pages/admin/Katas";
 import AdminKarateStyles from "./pages/admin/KarateStyles";
@@ -40,6 +41,7 @@ const PROFILE_LABELS: Record<string, string> = {
   athlete: "Athlete",
   coach: "Coach",
   parent: "Parent",
+  referee: "Referee",
 };
 
 function Shell() {
@@ -50,7 +52,9 @@ function Shell() {
       ? user.athlete_name
       : user?.role === "coach"
         ? user.coach_name
-        : null;
+        : user?.role === "referee"
+          ? user.referee_name
+          : null;
   const profileName =
     activeProfileName ||
     [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
@@ -68,13 +72,13 @@ function Shell() {
         <NavLink
           to="/profile"
           className={({ isActive }) =>
-            `relative my-2 flex min-h-[44px] w-24 flex-col items-center justify-center gap-0.5 py-2 pl-2 pr-5 text-xs font-medium transition-colors ${
-              isActive ? "text-red-600" : "text-stone-600"
+            `relative flex min-h-[44px] w-24 flex-col items-center justify-center gap-0.5 pl-2 pr-5 text-xs font-medium transition-colors ${
+              isActive ? "text-red-600" : "text-stone-700"
             }`
           }
         >
           <span
-            className="absolute inset-y-0 left-0 right-0 -z-10 bg-red-50"
+            className="absolute inset-y-0 left-0 right-0 -z-10 bg-red-200"
             style={{ clipPath: "polygon(0 0, 100% 0, 70% 100%, 0 100%)" }}
           />
           <Avatar name={profileName} size={22} />
@@ -156,6 +160,14 @@ export default function App() {
           element={
             <RequireAuth adminOnly>
               <AdminCoaches />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/referees"
+          element={
+            <RequireAuth adminOnly>
+              <AdminReferees />
             </RequireAuth>
           }
         />

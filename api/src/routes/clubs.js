@@ -281,7 +281,7 @@ router.post(
       const { rows } = await client.query(
         `UPDATE nk_users SET status = 'active', updated_at = NOW()
          WHERE id = $1 AND requested_club_id = $2 AND status = 'pending'
-         RETURNING id, email, role, status, is_admin, athlete_id, coach_id,
+         RETURNING id, email, role, status, is_admin, athlete_id, coach_id, referee_id,
                    first_name, last_name, phone,
                    wants_athlete, wants_coach, requested_club_id`,
         [req.params.userId, req.params.id]
