@@ -1,4 +1,5 @@
 import { NavLink, Outlet, Route, Routes } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
 import Schedule from "./pages/Schedule";
 import Athletes from "./pages/Athletes";
 import Grades from "./pages/Grades";
@@ -25,8 +26,22 @@ const tabs = [
 ];
 
 function Shell() {
+  const { user } = useAuth();
+  const activeProfileName =
+    user?.role === "athlete"
+      ? user.athlete_name
+      : user?.role === "coach"
+        ? user.coach_name
+        : null;
+
   return (
     <div className="flex h-full flex-col bg-stone-100">
+      {activeProfileName && (
+        <div className="bg-red-600 px-4 py-1.5 text-center text-xs font-medium uppercase tracking-wide text-white">
+          Viewing as {activeProfileName} (
+          {user?.role === "athlete" ? "Athlete" : "Coach"})
+        </div>
+      )}
       <main className="flex-1 overflow-y-auto pb-24">
         <Outlet />
       </main>

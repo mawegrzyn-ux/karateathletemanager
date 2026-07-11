@@ -231,6 +231,16 @@ coach-run attendance) — this is personal athlete itinerary planning.
   - All three calendar views share date-math helpers (`startOfWeek`,
     `startOfMonth`, `eventOverlapsDate`, `timeToMinutes`/
     `minutesToTime`, etc.) defined once near the top of `Schedule.tsx`.
+  - **Frozen headers**: the page title/search/view-switcher block is
+    `sticky top-0` (negative-margin trick to bleed its background under
+    the parent's padding) in every view mode, so it never scrolls out of
+    view. In Week/Day specifically, `CalendarNav` + the weekday/date row
+    + the all-day strip sit in normal flow *above* a separately bounded
+    hour-grid box (`max-h-[60vh] overflow-auto`) — only that inner box
+    scrolls, so the nav and headers never need their own `sticky` offset
+    math. List-view date-section elements carry `scroll-mt-[190px]` so
+    `scrollToToday`'s `scrollIntoView` lands below the sticky bar instead
+    of underneath it.
 - **Training modules**: `nk_training_modules` (`title`, `explanation`) is
   a reusable library of session plans a coach or admin authors. Each
   plan is an ordered sequence of `nk_training_module_items`
@@ -452,6 +462,41 @@ athletes (GDPR — no directory of children's names is ever exposed):
   now also accepts `'parent'`, valid only when `is_parent` is true). The
   switcher shows a pill for each identity the account actually has
   whenever 2 or more of {athlete, coach, parent} apply.
+
+### Multiple athlete/coach profiles per account
+
+A single login can own more than one athlete profile and/or more than
+one coach profile (e.g. separate registrations at different clubs).
+`nk_user_athletes` / `nk_user_coaches` (user ↔ athlete/coach, many-to-
+many, mirroring `nk_parent_athletes`) hold the full set; `nk_users.
+athlete_id`/`coach_id` remain single columns that point at whichever
+profile in that set is *currently active* — every other permission
+check and query in the codebase keeps reading those two columns
+unchanged.
+
+- `activateUser.js` inserts into the join table alongside setting the
+  single-column pointer when it self-provisions a profile.
+- `PUT /api/admin/users/:id/athletes` / `/coaches` (`{athleteIds:
+  [...]}` / `{coachIds: [...]}`, replace-all, same shape as `PUT /api/
+  admin/clubs/:id/athletes`) let an admin link/unlink profiles from the
+  admin Users page (`MemberEditor` search-picker, same convention as
+  `Clubs.tsx`). If the currently-active pointer is no longer in the
+  saved set, it falls back to the first remaining profile (or `NULL`).
+- `GET /api/auth/my-profiles` lists the calling user's own linked
+  athlete/coach profiles by name. `POST /api/auth/switch-role` now
+  accepts an optional `profile_id`, validated against that same set,
+  and always re-sends `athlete_id`/`coach_id` on the response so the
+  active pointer updates atomically with the role.
+- In `More.tsx`, tapping "Athlete" or "Coach" in the role switcher goes
+  straight through if the user only has one profile of that kind;
+  with more than one, it opens a single-select search picker (same
+  pattern as `AssociationPicker`) instead.
+- `athlete_name`/`coach_name` (the active profile's full name) are
+  computed server-side and included on every user-returning auth
+  response (`USER_SELECT_FIELDS` in `api/src/utils/userFields.js`).
+  `Shell` in `App.tsx` renders them as a small red banner ("Viewing as
+  {name} (Athlete/Coach)") above every page whenever the active role is
+  athlete or coach.
 
 ## Database
 

@@ -15,7 +15,17 @@ router.get(
   asyncHandler(async (req, res) => {
     const { rows } = await pool.query(
       `SELECT id, email, role, status, is_admin, athlete_id, coach_id,
-              created_at, first_name, last_name, phone
+              created_at, first_name, last_name, phone,
+              COALESCE(
+                (SELECT array_agg(athlete_id ORDER BY athlete_id)
+                 FROM nk_user_athletes WHERE user_id = nk_users.id),
+                '{}'
+              ) AS athlete_ids,
+              COALESCE(
+                (SELECT array_agg(coach_id ORDER BY coach_id)
+                 FROM nk_user_coaches WHERE user_id = nk_users.id),
+                '{}'
+              ) AS coach_ids
        FROM nk_users ORDER BY created_at ASC`
     );
     res.json({ users: rows });
@@ -26,16 +36,7 @@ router.patch(
   "/:id",
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
-    const {
-      role,
-      status,
-      is_admin,
-      athlete_id,
-      coach_id,
-      first_name,
-      last_name,
-      phone,
-    } = body;
+    const { role, status, is_admin, first_name, last_name, phone } = body;
 
     if (role !== undefined && role !== null && !ROLES.includes(role)) {
       return res.status(400).json({ error: { message: "Invalid role" } });
@@ -57,8 +58,6 @@ router.patch(
       role,
       status,
       is_admin,
-      athlete_id,
-      coach_id,
       first_name,
       last_name,
       phone,
@@ -178,6 +177,99 @@ router.put(
         return res
           .status(400)
           .json({ error: { message: "One or more athlete IDs do not exist" } });
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  })
+);
+
+router.put(
+  "/:id/athletes",
+  asyncHandler(async (req, res) => {
+    const { athleteIds } = req.body ?? {};
+    if (!Array.isArray(athleteIds)) {
+      return res
+        .status(400)
+        .json({ error: { message: "athleteIds must be an array" } });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`DELETE FROM nk_user_athletes WHERE user_id = $1`, [
+        req.params.id,
+      ]);
+      for (const athleteId of athleteIds) {
+        await client.query(
+          `INSERT INTO nk_user_athletes (user_id, athlete_id) VALUES ($1, $2)`,
+          [req.params.id, athleteId]
+        );
+      }
+      // Keep the "currently active" athlete_id pointer valid: if it's no
+      // longer among the linked profiles, fall back to the first one
+      // (or NULL if none remain).
+      await client.query(
+        `UPDATE nk_users SET
+           athlete_id = CASE WHEN athlete_id = ANY($2::int[]) THEN athlete_id ELSE $3 END,
+           updated_at = NOW()
+         WHERE id = $1`,
+        [req.params.id, athleteIds, athleteIds[0] ?? null]
+      );
+      await client.query("COMMIT");
+      res.json({ athleteIds });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      if (err.code === "23503") {
+        return res
+          .status(400)
+          .json({ error: { message: "One or more athlete IDs do not exist" } });
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  })
+);
+
+router.put(
+  "/:id/coaches",
+  asyncHandler(async (req, res) => {
+    const { coachIds } = req.body ?? {};
+    if (!Array.isArray(coachIds)) {
+      return res
+        .status(400)
+        .json({ error: { message: "coachIds must be an array" } });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`DELETE FROM nk_user_coaches WHERE user_id = $1`, [
+        req.params.id,
+      ]);
+      for (const coachId of coachIds) {
+        await client.query(
+          `INSERT INTO nk_user_coaches (user_id, coach_id) VALUES ($1, $2)`,
+          [req.params.id, coachId]
+        );
+      }
+      await client.query(
+        `UPDATE nk_users SET
+           coach_id = CASE WHEN coach_id = ANY($2::int[]) THEN coach_id ELSE $3 END,
+           updated_at = NOW()
+         WHERE id = $1`,
+        [req.params.id, coachIds, coachIds[0] ?? null]
+      );
+      await client.query("COMMIT");
+      res.json({ coachIds });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      if (err.code === "23503") {
+        return res
+          .status(400)
+          .json({ error: { message: "One or more coach IDs do not exist" } });
       }
       throw err;
     } finally {

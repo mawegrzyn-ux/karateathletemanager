@@ -9,6 +9,11 @@ async function activateUser(client, user) {
       [user.first_name || "", user.last_name || "", user.email, user.phone]
     );
     athleteId = rows[0].id;
+    await client.query(
+      `INSERT INTO nk_user_athletes (user_id, athlete_id)
+       VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [user.id, athleteId]
+    );
     if (user.requested_club_id) {
       await client.query(
         `INSERT INTO nk_athlete_clubs (athlete_id, club_id)
@@ -25,6 +30,11 @@ async function activateUser(client, user) {
       [user.first_name || "", user.last_name || "", user.email, user.phone]
     );
     coachId = rows[0].id;
+    await client.query(
+      `INSERT INTO nk_user_coaches (user_id, coach_id)
+       VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [user.id, coachId]
+    );
     if (user.requested_club_id) {
       await client.query(
         `INSERT INTO nk_coach_clubs (coach_id, club_id)

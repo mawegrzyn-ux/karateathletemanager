@@ -1,5 +1,6 @@
 const pool = require("../db/pool");
 const { verifySession } = require("../utils/jwt");
+const { USER_SELECT_FIELDS } = require("../utils/userFields");
 
 // Attaches req.user from the session cookie (or null). Never blocks by
 // itself — routes that need a logged-in/authorized user use authorize().
@@ -14,12 +15,7 @@ async function auth(req, res, next) {
 
   try {
     const { rows } = await pool.query(
-      `SELECT id, email, role, status, is_admin, athlete_id, coach_id,
-              first_name, last_name, phone,
-              EXISTS(
-                SELECT 1 FROM nk_parent_athletes WHERE user_id = nk_users.id
-              ) AS is_parent
-       FROM nk_users WHERE id = $1`,
+      `SELECT ${USER_SELECT_FIELDS} FROM nk_users WHERE id = $1`,
       [payload.id]
     );
     req.user = rows[0] ?? null;
