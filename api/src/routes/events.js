@@ -19,8 +19,8 @@ const ITEM_TYPES = [...EVENT_TYPES, "rest", "other", "kata_performance"];
 const REPEAT_FREQS = ["daily", "weekly"];
 const MAX_REPEAT_OCCURRENCES = 60;
 
-const EVENT_FIELDS = `id, title, event_type, start_date, end_date, start_time, end_time, location, notes, created_at`;
-const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id`;
+const EVENT_FIELDS = `id, title, event_type, start_date, end_date, start_time, end_time, location, notes, training_module_id, created_at`;
+const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id, completed`;
 
 router.use(authorize());
 
@@ -159,6 +159,7 @@ router.post(
       end_time,
       location,
       notes,
+      training_module_id,
     } = req.body ?? {};
 
     if (typeof title !== "string" || title.trim().length === 0) {
@@ -188,8 +189,8 @@ router.post(
       await client.query("BEGIN");
       const { rows } = await client.query(
         `INSERT INTO nk_events
-           (title, event_type, start_date, end_date, start_time, end_time, location, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           (title, event_type, start_date, end_date, start_time, end_time, location, notes, training_module_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING ${EVENT_FIELDS}`,
         [
           title,
@@ -200,6 +201,7 @@ router.post(
           end_time ?? null,
           location,
           notes,
+          event_type === "training" ? training_module_id ?? null : null,
         ]
       );
       const event = rows[0];
@@ -279,6 +281,7 @@ router.patch(
       end_time,
       location,
       notes,
+      training_module_id,
     } = body;
 
     if (event_type !== undefined && !EVENT_TYPES.includes(event_type)) {
@@ -294,6 +297,7 @@ router.patch(
       end_time,
       location,
       notes,
+      training_module_id,
     };
     const setClauses = [];
     const values = [];
@@ -505,6 +509,7 @@ router.patch(
       notes,
       training_module_id,
       kata_id,
+      completed,
     } = body;
 
     if (item_type !== undefined && !ITEM_TYPES.includes(item_type)) {
@@ -516,6 +521,11 @@ router.patch(
     if ("end_time" in body && !end_time) {
       return res.status(400).json({ error: { message: "end_time is required" } });
     }
+    if (completed !== undefined && typeof completed !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: { message: "completed must be a boolean" } });
+    }
 
     const fields = {
       item_type,
@@ -526,6 +536,7 @@ router.patch(
       notes,
       training_module_id,
       kata_id,
+      completed,
     };
     const setClauses = [];
     const values = [];

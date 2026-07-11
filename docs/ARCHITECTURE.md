@@ -196,17 +196,26 @@ coach-run attendance) — this is personal athlete itinerary planning.
 
 - `nk_events` (`title`, `event_type`, `start_date`, `end_date`,
   `start_time`, `end_time` — both optional, unlike the required times
-  on `nk_event_items` — `location`, `notes`) — `event_type` is one of
-  `competition`,
+  on `nk_event_items` — `location`, `notes`, `training_module_id`) —
+  `event_type` is one of `competition`,
   `squad_session`, `training`, `travel`, `time_off`, `seminar`,
-  `training_camp`. `nk_event_athletes` (many-to-many) attaches one or
-  more athletes — personal events have one, squad-level events have
-  several. `nk_event_items` are the nested itinerary rows under an
-  event (`item_type`, `title`, `item_date`, `start_time`, `end_time`
-  — both required — `notes`, `training_module_id`, `kata_id`) —
-  `item_type` reuses the same vocabulary plus `rest`, `other`, and
-  `kata_performance` for things that don't fit the top-level list (e.g.
-  an "active rest day" or a single kata run-through).
+  `training_camp`. `training_module_id` is only meaningful (and only
+  editable in the UI) when `event_type === 'training'` — it lets a
+  simple single-session event link a module directly, without needing
+  to break it down into nested itinerary items first. `nk_event_athletes`
+  (many-to-many) attaches one or more athletes — personal events have
+  one, squad-level events have several. `nk_event_items` are the nested
+  itinerary rows under an event (`item_type`, `title`, `item_date`,
+  `start_time`, `end_time` — both required — `notes`, `training_module_id`,
+  `kata_id`, `completed`) — `item_type` reuses the same vocabulary plus
+  `rest`, `other`, and `kata_performance` for things that don't fit the
+  top-level list (e.g. an "active rest day" or a single kata
+  run-through). `completed` is a plain boolean any event editor
+  (athlete/coach/admin — same `isEventEditor` check as everything else
+  on the event) can toggle to mark an itinerary item done; surfaced as a
+  checkbox both inline on the collapsed itinerary row (quick-toggle,
+  strikes through the title when checked) and inside the expanded detail
+  view.
 - **Recurring items**: `POST /api/events/:id/items` accepts an optional
   `repeat: {freq: 'daily'|'weekly', until, weekdays?}`. The server
   expands this into one independent `nk_event_items` row per occurrence
@@ -241,6 +250,16 @@ coach-run attendance) — this is personal athlete itinerary planning.
     `PATCH /api/events/:id` updates `start_time`/`end_time` (duration
     preserved). A `justDraggedRef` flag suppresses the click-to-open
     that would otherwise fire immediately after a drag's pointerup.
+  - The hour-label ruler column (sticky, to the left of the hour grid in
+    both Day and Week view) renders each hour as its own flex-column
+    child with an explicit `height: HOUR_HEIGHT` — that child also needs
+    `shrink-0`, since without it the browser's flex layout compresses
+    the label rows to fit `max-h-[60vh]` (the ruler has no explicit
+    total height, unlike the event grid it sits next to, which does),
+    silently drifting the hour labels out of sync with the actual
+    gridlines/event blocks the longer the visible range runs past the
+    viewport height. If timed events ever look vertically misaligned
+    with their hour labels again, check this first.
   - All three calendar views share date-math helpers (`startOfWeek`,
     `startOfMonth`, `eventOverlapsDate`, `timeToMinutes`/
     `minutesToTime`, etc.) defined once near the top of `Schedule.tsx`.

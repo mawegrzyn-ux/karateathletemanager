@@ -571,6 +571,18 @@ const migrations = [
   `ALTER TABLE nk_users DROP CONSTRAINT IF EXISTS nk_users_role_check`,
   `ALTER TABLE nk_users ADD CONSTRAINT nk_users_role_check
      CHECK (role IN ('admin', 'coach', 'athlete', 'parent', 'referee'))`,
+
+  // A top-level event of type 'training' can link a module directly,
+  // for simple single-session events that don't need an itinerary
+  // breakdown into nested items.
+  `ALTER TABLE nk_events
+     ADD COLUMN IF NOT EXISTS training_module_id INTEGER
+       REFERENCES nk_training_modules(id) ON DELETE SET NULL`,
+
+  // Lets whoever the itinerary item belongs to (athlete/coach/admin) mark
+  // it done, same trust level as editing its notes.
+  `ALTER TABLE nk_event_items
+     ADD COLUMN IF NOT EXISTS completed BOOLEAN NOT NULL DEFAULT FALSE`,
 ];
 
 async function migrate() {
