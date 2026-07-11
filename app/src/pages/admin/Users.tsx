@@ -11,8 +11,10 @@ interface ManagedUser {
   is_admin: boolean;
   athlete_id: number | null;
   coach_id: number | null;
+  referee_id: number | null;
   athlete_ids: number[];
   coach_ids: number[];
+  referee_ids: number[];
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
@@ -24,7 +26,9 @@ interface Person {
   last_name: string;
 }
 
-const ROLES: Role[] = ["coach", "athlete", "parent"];
+type ProfileKind = "athlete" | "coach" | "referee";
+
+const ROLES: Role[] = ["coach", "athlete", "parent", "referee"];
 const STATUSES: Status[] = ["pending", "active", "disabled"];
 
 export default function AdminUsers() {
@@ -32,6 +36,7 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<ManagedUser[] | null>(null);
   const [athletes, setAthletes] = useState<Person[]>([]);
   const [coaches, setCoaches] = useState<Person[]>([]);
+  const [referees, setReferees] = useState<Person[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
@@ -41,11 +46,13 @@ export default function AdminUsers() {
       api.get<{ users: ManagedUser[] }>("/admin/users"),
       api.get<{ athletes: Person[] }>("/athletes"),
       api.get<{ coaches: Person[] }>("/admin/coaches"),
+      api.get<{ referees: Person[] }>("/admin/referees"),
     ])
-      .then(([usersRes, athletesRes, coachesRes]) => {
+      .then(([usersRes, athletesRes, coachesRes, refereesRes]) => {
         setUsers(usersRes.users);
         setAthletes(athletesRes.athletes);
         setCoaches(coachesRes.coaches);
+        setReferees(refereesRes.referees);
       })
       .catch(() => setError("Failed to load users"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,24 +74,30 @@ export default function AdminUsers() {
     setSelectedId(null);
   }
 
-  async function addLinkedProfile(
+  const PROFILE_KEYS: Record<ProfileKind, keyof ManagedUser> = {
+    athlete: "athlete_ids",
+    coach: "coach_ids",
+    referee: "referee_ids",
+  };
+  const PROFILE_PATHS: Record<ProfileKind, string> = {
+    athlete: "athletes",
+    coach: "coaches",
+    referee: "referees",
+  };
+  const PROFILE_BODY_KEYS: Record<ProfileKind, string> = {
+    athlete: "athleteIds",
+    coach: "coachIds",
+    referee: "refereeIds",
+  };
+
+  async function setLinkedProfiles(
     userId: number,
-    kind: "athlete" | "coach",
-    idValue: string
+    kind: ProfileKind,
+    nextIds: number[]
   ) {
-    const id = Number(idValue);
-    if (!Number.isInteger(id) || id <= 0) return;
-    const current = users?.find((u) => u.id === userId);
-    if (!current) return;
-    const key = kind === "athlete" ? "athlete_ids" : "coach_ids";
-    if (current[key].includes(id)) return;
-    const nextIds = [...current[key], id];
-    const path =
-      kind === "athlete"
-        ? `/admin/users/${userId}/athletes`
-        : `/admin/users/${userId}/coaches`;
-    const body =
-      kind === "athlete" ? { athleteIds: nextIds } : { coachIds: nextIds };
+    const key = PROFILE_KEYS[kind];
+    const path = `/admin/users/${userId}/${PROFILE_PATHS[kind]}`;
+    const body = { [PROFILE_BODY_KEYS[kind]]: nextIds };
     await api.put(path, body);
     setUsers((prev) =>
       prev
@@ -93,26 +106,32 @@ export default function AdminUsers() {
     );
   }
 
+  async function addLinkedProfile(
+    userId: number,
+    kind: ProfileKind,
+    idValue: string
+  ) {
+    const id = Number(idValue);
+    if (!Number.isInteger(id) || id <= 0) return;
+    const current = users?.find((u) => u.id === userId);
+    if (!current) return;
+    const ids = current[PROFILE_KEYS[kind]] as number[];
+    if (ids.includes(id)) return;
+    await setLinkedProfiles(userId, kind, [...ids, id]);
+  }
+
   async function removeLinkedProfile(
     userId: number,
-    kind: "athlete" | "coach",
+    kind: ProfileKind,
     id: number
   ) {
     const current = users?.find((u) => u.id === userId);
     if (!current) return;
-    const key = kind === "athlete" ? "athlete_ids" : "coach_ids";
-    const nextIds = current[key].filter((existing) => existing !== id);
-    const path =
-      kind === "athlete"
-        ? `/admin/users/${userId}/athletes`
-        : `/admin/users/${userId}/coaches`;
-    const body =
-      kind === "athlete" ? { athleteIds: nextIds } : { coachIds: nextIds };
-    await api.put(path, body);
-    setUsers((prev) =>
-      prev
-        ? prev.map((u) => (u.id === userId ? { ...u, [key]: nextIds } : u))
-        : prev
+    const ids = current[PROFILE_KEYS[kind]] as number[];
+    await setLinkedProfiles(
+      userId,
+      kind,
+      ids.filter((existing) => existing !== id)
     );
   }
 
@@ -258,6 +277,13 @@ export default function AdminUsers() {
               options={coaches}
               onAdd={(value) => addLinkedProfile(editing.id, "coach", value)}
               onRemove={(id) => removeLinkedProfile(editing.id, "coach", id)}
+            />
+            <MemberEditor
+              label="Linked referee profiles"
+              ids={editing.referee_ids}
+              options={referees}
+              onAdd={(value) => addLinkedProfile(editing.id, "referee", value)}
+              onRemove={(id) => removeLinkedProfile(editing.id, "referee", id)}
             />
 
             <DeleteButton
