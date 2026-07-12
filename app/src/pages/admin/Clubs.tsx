@@ -9,6 +9,7 @@ import {
   Field,
   Toast,
   BeltSwatch,
+  BELT_COLOR_OPTIONS,
 } from "../../components/ui";
 
 interface Association {
@@ -964,17 +965,6 @@ interface ClubGrade {
   belt_color: string;
 }
 
-const BELT_COLORS = [
-  "white",
-  "yellow",
-  "orange",
-  "green",
-  "blue",
-  "purple",
-  "brown",
-  "black",
-];
-
 const EMPTY_GRADE_FORM = {
   name: "",
   kind: "kyu",
@@ -1112,9 +1102,9 @@ function ClubGradesSection({ clubId }: { clubId: number }) {
                           }
                           className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                         >
-                          {BELT_COLORS.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
+                          {BELT_COLOR_OPTIONS.map((c) => (
+                            <option key={c.value} value={c.value}>
+                              {c.label}
                             </option>
                           ))}
                         </select>
@@ -1175,9 +1165,9 @@ function ClubGradesSection({ clubId }: { clubId: number }) {
                   }
                   className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                 >
-                  {BELT_COLORS.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
+                  {BELT_COLOR_OPTIONS.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
                     </option>
                   ))}
                 </select>
