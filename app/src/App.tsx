@@ -19,6 +19,7 @@ import AdminKarateStyles from "./pages/admin/KarateStyles";
 import AdminVenues from "./pages/admin/Venues";
 import AdminCoachRoles from "./pages/admin/CoachRoles";
 import AdminAppIcon from "./pages/admin/AppIcon";
+import Osu from "./pages/Osu";
 import RequireAuth from "./components/RequireAuth";
 import RequireLogin from "./components/RequireLogin";
 
@@ -218,6 +219,14 @@ export default function App() {
           element={
             <RequireAuth adminOnly>
               <AdminAppIcon />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/osu"
+          element={
+            <RequireAuth adminOnly>
+              <Osu />
             </RequireAuth>
           }
         />

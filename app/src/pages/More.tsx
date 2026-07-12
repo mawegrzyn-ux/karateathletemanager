@@ -63,6 +63,7 @@ export default function More() {
             <Tile to="/admin/karate-styles" icon="🥋" label="Karate styles" />
             <Tile to="/admin/venues" icon="📍" label="Venues" />
             <Tile to="/admin/app-icon" icon="🖼️" label="App icon" />
+            <Tile to="/osu" icon="🤖" label="Osu" />
           </TileGrid>
         </div>
       )}

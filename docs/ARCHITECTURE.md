@@ -1014,6 +1014,55 @@ unchanged.
   {name} (Athlete/Coach)") above every page whenever the active role is
   athlete or coach.
 
+### Osu — admin chatbot & MCP server
+
+"Osu" is a Claude-powered chat assistant for admins, plus a standalone MCP
+(Model Context Protocol) server exposing the same task-performing tools to
+any MCP client. Both surfaces share one set of tool definitions so they can
+never drift apart on what a tool does or what it's called:
+
+- `api/src/mcp/tools.js` is the single source of truth: an array of
+  `{name, description, input_schema, handler}` — plain JSON Schema (not a
+  Zod/validation-library shape), reusable as-is for both Claude's tool-use
+  API and MCP's `tools/list`. Handlers talk to the database directly
+  (`pool`/`activateUser`), the same way `activateUser.js` does, rather than
+  going through the HTTP routes. Current tools: `list_clubs`,
+  `create_club`, `list_athletes`, `list_pending_users`, `approve_user`
+  (wraps `activateUser`, same auto-provisioning as the admin Users page),
+  `list_events`, `create_event` (single, non-repeating, no athletes
+  assigned — a deliberately narrower slice of what `POST /api/events`
+  supports, kept simple for a first cut).
+- `api/src/mcp/server.js` is a standalone MCP server (stdio transport, the
+  low-level `@modelcontextprotocol/sdk` `Server` class — not the
+  Zod-based `McpServer` convenience wrapper, precisely so it can reuse the
+  same plain JSON Schema `tools.js` already defines) that any MCP client
+  (Claude Desktop, another Claude Code session, etc.) can connect to. Run
+  it directly with `npm run mcp` from `api/`. It carries the same
+  admin-equivalent trust as the chat route below — anyone who can run it
+  can call any tool — so it's meant for admins running it themselves, not
+  for exposing over a network.
+- `POST /api/osu/chat` (`osu.js`, gated by `authorize.requireAdmin` — the
+  chatbot is admin-only for now, per the initial ask) is the chat backend.
+  Stateless per request: the client resends the full conversation as
+  `{messages: [{role, content}, ...]}` (plain strings, no tool blocks —
+  a prior turn's tool calls don't need to be replayed for the model to
+  stay coherent, only its final text reply does), and the server runs a
+  manual Claude API tool-use loop in-process (model `claude-opus-4-8`,
+  adaptive thinking, capped at `MAX_TOOL_ITERATIONS` steps as a runaway
+  guard) directly against `tools.js`'s `callTool`, returning
+  `{reply, actions}` where `actions` is every tool call made this turn
+  (name/input/output or error) so the UI can show what Osu actually did,
+  not just what it said.
+- `Osu.tsx` (route `/osu`, `RequireAuth adminOnly`, tile in `More.tsx`'s
+  Admin section) is a plain chat UI — message bubbles plus small "🔧
+  tool_name" chips under each assistant reply for any tool calls made,
+  hovering a chip shows its input as a tooltip. It's a deliberate
+  exception to the list+drawer convention in `CLAUDE.md`: a conversation
+  isn't an entity list, so it doesn't try to force-fit that pattern.
+- Needs `ANTHROPIC_API_KEY` set in `api/.env` (see Environment Variables
+  below) — the Anthropic SDK's default client reads it directly from the
+  environment, no extra plumbing.
+
 ## Database
 
 - Engine: PostgreSQL 14+
@@ -1365,6 +1414,7 @@ DB_NAME=nadakarate
 DB_USER=nadakarate
 DB_PASSWORD=
 NODE_ENV=production
+ANTHROPIC_API_KEY=
 ```
 
 ## Git Conventions
