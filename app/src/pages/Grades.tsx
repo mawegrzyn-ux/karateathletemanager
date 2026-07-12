@@ -8,6 +8,7 @@ import {
   DeleteButton,
   Field,
   BeltSwatch,
+  BELT_COLOR_OPTIONS,
 } from "../components/ui";
 
 interface Grade {
@@ -19,17 +20,6 @@ interface Grade {
   club_id: number | null;
   club_name: string | null;
 }
-
-const BELT_COLORS = [
-  "white",
-  "yellow",
-  "orange",
-  "green",
-  "blue",
-  "purple",
-  "brown",
-  "black",
-];
 
 const EMPTY_FORM = {
   name: "",
@@ -207,9 +197,9 @@ export default function Grades() {
               onChange={(e) => setForm({ ...form, belt_color: e.target.value })}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             >
-              {BELT_COLORS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
+              {BELT_COLOR_OPTIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
                 </option>
               ))}
             </select>
@@ -272,9 +262,9 @@ export default function Grades() {
                 }
                 className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               >
-                {BELT_COLORS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {BELT_COLOR_OPTIONS.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
                   </option>
                 ))}
               </select>

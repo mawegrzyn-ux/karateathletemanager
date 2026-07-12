@@ -645,7 +645,15 @@ coach-run attendance) — this is personal athlete itinerary planning.
   belt from a plain `<select>` — `Athletes.tsx`'s create/edit forms and
   list rows use a `GradePicker` (search-box + single-select, matching
   `CLAUDE.md`'s picker convention, with a `BeltSwatch` per result) bound
-  to `grade_id`.
+  to `grade_id`. `belt_color` isn't a plain flat color for every grade —
+  a few (early beginner grades some federations insert between two main
+  colors, or brown-belt sub-ranks marked by stripe count) are a base
+  color plus a contrasting stripe. `ui.tsx`'s `BELT_STRIPES` map flags
+  those, and `BeltSwatch` renders them as band(s) across the circle
+  instead of a flat fill; `BELT_COLOR_OPTIONS` (also `ui.tsx`) is the one
+  shared `{value, label}` list every belt-color `<select>` in the app
+  (`Grades.tsx`, `admin/Clubs.tsx`'s `ClubGradesSection`) renders from,
+  so the option list and its display labels can't drift between pages.
 - **Grading records**: `nk_grades` (already existed, unused, since the
   original scaffold) is now the athlete grading-history table: one row
   per graded attempt, tying an `athlete_id` to the `grade_id` they were

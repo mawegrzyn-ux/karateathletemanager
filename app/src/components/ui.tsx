@@ -166,14 +166,74 @@ export const BELT_COLOR_HEX: Record<string, string> = {
   purple: "#a855f7",
   brown: "#78350f",
   black: "#1c1917",
+  red: "#dc2626",
 };
 
+// A handful of belt colors are a base color plus a contrasting stripe -
+// an early beginner grade some federations insert between two main
+// colors (white/red, white/yellow), a sub-rank between two main colors
+// (purple/white), or a brown-belt sub-rank marked by stripe count (one/
+// two stripes) - rendered as band(s) across the swatch instead of a flat
+// fill.
+export const BELT_STRIPES: Record<
+  string,
+  { base: string; stripe: string; count: number }
+> = {
+  "white-red-stripe": { base: "white", stripe: "red", count: 1 },
+  "white-yellow-stripe": { base: "white", stripe: "yellow", count: 1 },
+  "purple-white-stripe": { base: "purple", stripe: "white", count: 1 },
+  "brown-one-stripe": { base: "brown", stripe: "white", count: 1 },
+  "brown-two-stripes": { base: "brown", stripe: "white", count: 2 },
+};
+
+// Shared belt_color choices for every grade-editing `<select>` in the app
+// (Grades.tsx, admin/Clubs.tsx's ClubGradesSection) - keeps the option
+// list and its display labels in sync with BELT_COLOR_HEX/BELT_STRIPES
+// in one place instead of duplicating it per page.
+export const BELT_COLOR_OPTIONS: { value: string; label: string }[] = [
+  { value: "white", label: "White" },
+  { value: "white-red-stripe", label: "White / Red stripe" },
+  { value: "white-yellow-stripe", label: "White / Yellow stripe" },
+  { value: "yellow", label: "Yellow" },
+  { value: "orange", label: "Orange" },
+  { value: "green", label: "Green" },
+  { value: "blue", label: "Blue" },
+  { value: "purple", label: "Purple" },
+  { value: "purple-white-stripe", label: "Purple / White stripe" },
+  { value: "brown", label: "Brown" },
+  { value: "brown-one-stripe", label: "Brown, 1 stripe" },
+  { value: "brown-two-stripes", label: "Brown, 2 stripes" },
+  { value: "black", label: "Black" },
+];
+
 export function BeltSwatch({ color }: { color: string }) {
+  const stripe = BELT_STRIPES[color];
+  if (stripe) {
+    const base = BELT_COLOR_HEX[stripe.base] ?? "#d6d3d1";
+    const stripeColor = BELT_COLOR_HEX[stripe.stripe] ?? "#d6d3d1";
+    return (
+      <span
+        className="relative inline-block h-3.5 w-3.5 shrink-0 overflow-hidden rounded-full border border-stone-300"
+        style={{ backgroundColor: base }}
+        title={color.replace(/-/g, " ")}
+      >
+        <span className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col gap-px">
+          {Array.from({ length: stripe.count }).map((_, i) => (
+            <span
+              key={i}
+              className="block h-[2px] w-full"
+              style={{ backgroundColor: stripeColor }}
+            />
+          ))}
+        </span>
+      </span>
+    );
+  }
   return (
     <span
       className="inline-block h-3.5 w-3.5 shrink-0 rounded-full border border-stone-300"
       style={{ backgroundColor: BELT_COLOR_HEX[color] ?? "#d6d3d1" }}
-      title={`${color} belt`}
+      title={color}
     />
   );
 }
