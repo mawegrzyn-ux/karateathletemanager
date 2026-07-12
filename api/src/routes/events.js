@@ -369,6 +369,52 @@ router.post(
   })
 );
 
+// Flattened personal training history for the current athlete: every
+// itinerary item and every simple direct-linked event of type 'training'
+// they're assigned to, each with the linked module (if any), their own
+// status/notes, and enough of the schedule (date/time) for the UI to show
+// "time spent" as the scheduled duration. Registered before "/:id" so it
+// isn't swallowed by that wildcard route.
+router.get(
+  "/training-log",
+  asyncHandler(async (req, res) => {
+    if (req.user.role !== "athlete" || !req.user.athlete_id) {
+      return res.status(403).json({ error: { message: "Athletes only" } });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT 'item' AS source, i.id, i.event_id, i.title,
+              i.item_date AS date, i.start_time, i.end_time,
+              tm.title AS module_title,
+              COALESCE(s.status, 'pending') AS status, s.notes
+       FROM nk_event_items i
+       JOIN nk_event_athletes ea ON ea.event_id = i.event_id
+       LEFT JOIN nk_training_modules tm ON tm.id = i.training_module_id
+       LEFT JOIN nk_event_item_athlete_status s
+         ON s.item_id = i.id AND s.athlete_id = ea.athlete_id
+       WHERE i.item_type = 'training' AND ea.athlete_id = $1
+
+       UNION ALL
+
+       SELECT 'event' AS source, e.id, e.id AS event_id, e.title,
+              e.start_date AS date, e.start_time, e.end_time,
+              tm.title AS module_title,
+              COALESCE(s.status, 'pending') AS status, s.notes
+       FROM nk_events e
+       JOIN nk_event_athletes ea ON ea.event_id = e.id
+       LEFT JOIN nk_training_modules tm ON tm.id = e.training_module_id
+       LEFT JOIN nk_event_athlete_status s
+         ON s.event_id = e.id AND s.athlete_id = ea.athlete_id
+       WHERE e.event_type = 'training' AND ea.athlete_id = $1
+
+       ORDER BY date DESC, start_time DESC NULLS LAST`,
+      [req.user.athlete_id]
+    );
+
+    res.json({ entries: rows });
+  })
+);
+
 router.get(
   "/:id",
   asyncHandler(async (req, res) => {

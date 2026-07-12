@@ -306,8 +306,16 @@ coach-run attendance) — this is personal athlete itinerary planning.
     drag-and-drop, since that doesn't work on touch) — vertical drag
     moves the block, snapped to 15-minute increments; on release,
     `PATCH /api/events/:id` updates `start_time`/`end_time` (duration
-    preserved). A `justDraggedRef` flag suppresses the click-to-open
-    that would otherwise fire immediately after a drag's pointerup.
+    preserved). Drag only arms after a `LONG_PRESS_MS` (350ms) hold on
+    the card — a short press-and-swipe (e.g. scrolling past a card) never
+    moves it, since the card doesn't even start listening to
+    `pointermove` until the long-press timer fires; if the pointer moves
+    more than `MOVE_CANCEL_PX` before that, the pending timer is
+    cancelled (treated as a scroll/flick, not drag intent). A
+    `justDraggedRef` flag suppresses the click-to-open that would
+    otherwise fire immediately after a drag's pointerup; releasing
+    without ever moving (a genuine long-press with no drag) falls
+    through to the normal open-on-tap behavior.
   - The hour-label ruler column (sticky, to the left of the hour grid in
     both Day and Week view) renders each hour as its own flex-column
     child with an explicit `height: HOUR_HEIGHT` — that child also needs
@@ -365,18 +373,26 @@ coach-run attendance) — this is personal athlete itinerary planning.
   authenticated user (used by the Schedule item picker),
   `POST`/`PATCH`/`DELETE` require `authorize("coach")` (coach or admin).
   A `training` item can optionally link to one module via
-  `training_module_id`. `admin/TrainingModules.tsx` is reachable by the
-  `athlete` role too (route `roles={["coach", "athlete"]}` in
-  `App.tsx` — it's also the athlete bottom-nav's "Training" tab), but
-  renders read-only for anyone who isn't `admin`/`coach`
-  (`canEdit` check inside the page): no add button, no edit/delete
-  controls, just the title/explanation and each item's name/media
-  preview (`TrainingModuleView`, `app/src/components/TrainingModuleView.tsx`
-  — shared with the Schedule reading view below, so a linked module
-  looks identical whether you're viewing it from the module library or
-  from a training event/item). For editors, the page surfaces any
-  save failure (bad bounds, network error) via a `Toast`, since every
-  field edit auto-saves immediately and previously failed silently.
+  `training_module_id`. `admin/TrainingModules.tsx`'s default export
+  branches on role: `admin`/`coach` get `TrainingModulesManager` (library
+  management, `TrainingModuleView`,
+  `app/src/components/TrainingModuleView.tsx` — shared with the Schedule
+  reading view below, so a linked module looks identical whether you're
+  viewing it from the library or from a training event/item), while
+  `athlete` gets `AthleteTrainingLog` instead — the module *library*
+  isn't athlete-facing at all; an athlete's bottom-nav "Training" tab
+  (route `roles={["coach", "athlete"]}` in `App.tsx`, same URL for both)
+  shows their own scheduled training history: `GET /api/events/training-log`
+  (athlete-only, self-scoped) flattens every `training`-type itinerary
+  item and every simple direct-linked `training`-type event they're
+  assigned to into one list — exercise group (the linked module's title,
+  falling back to the item/event's own title if unlinked), their own
+  status (pending/completed/failed, reusing the per-athlete status model
+  above), date, and "time spent" (the scheduled `end_time - start_time`
+  duration, not actual tracked time — there's no stopwatch feature). For
+  editors of the module library, the page surfaces any save failure (bad
+  bounds, network error) via a `Toast`, since every field edit auto-saves
+  immediately and previously failed silently.
 - **Media uploads**: `video_url`/`image_url` on an exercise item accept
   either a pasted link or an uploaded file, via `MediaField` — a shared
   component in `components/ui.tsx` (also used for athlete/coach photos,

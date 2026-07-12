@@ -275,6 +275,14 @@ function ModuleItemsEditor({
 }
 
 export default function TrainingModules() {
+  const { user } = useAuth();
+  if (user?.role === "athlete") {
+    return <AthleteTrainingLog />;
+  }
+  return <TrainingModulesManager />;
+}
+
+function TrainingModulesManager() {
   const api = useApi();
   const { user } = useAuth();
   const canEdit = !!user?.is_admin || user?.role === "coach";
@@ -498,6 +506,127 @@ export default function TrainingModules() {
       </Drawer>
 
       {toast && <Toast message={toast} />}
+    </div>
+  );
+}
+
+interface TrainingLogEntry {
+  source: "item" | "event";
+  id: number;
+  event_id: number;
+  title: string;
+  date: string;
+  start_time: string | null;
+  end_time: string | null;
+  module_title: string | null;
+  status: "pending" | "completed" | "failed";
+  notes: string | null;
+}
+
+const STATUS_LABELS: Record<TrainingLogEntry["status"], string> = {
+  pending: "Pending",
+  completed: "Completed",
+  failed: "Failed",
+};
+
+const STATUS_CLASSES: Record<TrainingLogEntry["status"], string> = {
+  pending: "bg-stone-100 text-stone-600",
+  completed: "bg-green-100 text-green-700",
+  failed: "bg-red-100 text-red-700",
+};
+
+function timeSpentLabel(start: string | null, end: string | null) {
+  if (!start || !end) return "—";
+  const [sh, sm] = start.slice(0, 5).split(":").map(Number);
+  const [eh, em] = end.slice(0, 5).split(":").map(Number);
+  const mins = eh * 60 + em - (sh * 60 + sm);
+  if (mins <= 0) return "—";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function formatLogDate(date: string) {
+  const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function AthleteTrainingLog() {
+  const api = useApi();
+  const [entries, setEntries] = useState<TrainingLogEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    api
+      .get<{ entries: TrainingLogEntry[] }>("/events/training-log")
+      .then((res) => setEntries(res.entries))
+      .catch(() => setError("Failed to load training history"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (error) return <div className="p-4 text-red-700">{error}</div>;
+  if (!entries)
+    return (
+      <div className="flex justify-center p-8">
+        <Spinner />
+      </div>
+    );
+
+  const q = query.trim().toLowerCase();
+  const filtered = entries.filter((entry) =>
+    `${entry.module_title ?? entry.title}`.toLowerCase().includes(q)
+  );
+
+  return (
+    <div className="flex flex-col gap-3 p-4">
+      <h1 className="text-2xl font-bold tracking-tight">Training</h1>
+
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search by exercise group"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+      />
+
+      <div className="flex flex-col gap-2">
+        {filtered.map((entry) => (
+          <div
+            key={`${entry.source}-${entry.id}`}
+            className="flex flex-col gap-1 rounded-2xl bg-white px-4 py-3 shadow-card"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium">
+                {entry.module_title ?? entry.title}
+              </span>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASSES[entry.status]}`}
+              >
+                {STATUS_LABELS[entry.status]}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-stone-500">
+              <span>{formatLogDate(entry.date)}</span>
+              <span>·</span>
+              <span>{timeSpentLabel(entry.start_time, entry.end_time)}</span>
+            </div>
+            {entry.notes && (
+              <p className="text-sm text-stone-700">{entry.notes}</p>
+            )}
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <p className="px-1 py-2 text-sm text-stone-500">
+            No scheduled training sessions yet.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
