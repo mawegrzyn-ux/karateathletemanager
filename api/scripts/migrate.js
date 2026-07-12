@@ -617,6 +617,54 @@ const migrations = [
    END $$`,
 
   `ALTER TABLE nk_event_items DROP COLUMN IF EXISTS completed`,
+
+  // Simple single-block events (no itemized itinerary) still need their
+  // own per-athlete status/notes record, same shape as items above.
+  `CREATE TABLE IF NOT EXISTS nk_event_athlete_status (
+     event_id    INTEGER NOT NULL REFERENCES nk_events(id) ON DELETE CASCADE,
+     athlete_id  INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     status      VARCHAR(20) NOT NULL DEFAULT 'pending'
+                   CHECK (status IN ('pending', 'completed', 'failed')),
+     notes       TEXT,
+     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (event_id, athlete_id)
+  )`,
+
+  // Completion moves from a plain boolean to a three-way status so an
+  // athlete/coach can flag a task as failed, not just done-or-not.
+  //
+  // `completed` is intentionally never dropped: an already-shipped
+  // migration statement further up unconditionally re-adds
+  // nk_event_items.completed every deploy (its own ADD/DROP pair is
+  // self-contained) and, whenever that column exists, backfills into
+  // nk_event_item_athlete_status.completed as an INSERT target. Since
+  // that guard is satisfied on every future deploy, dropping this
+  // column here would break that INSERT permanently. The app itself
+  // never reads or writes `completed` after this point.
+  `ALTER TABLE nk_event_item_athlete_status
+     ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending'`,
+
+  // One-time backfill, gated on the status check constraint not existing
+  // yet (added at the end of this same migration, permanently, right
+  // after) rather than on `completed`'s existence, since `completed`
+  // itself is never removed and would otherwise re-run this every
+  // deploy, clobbering any status change made after the first deploy.
+  `DO $$
+   BEGIN
+     IF NOT EXISTS (
+       SELECT 1 FROM pg_constraint
+       WHERE conname = 'nk_event_item_athlete_status_status_check'
+     ) THEN
+       UPDATE nk_event_item_athlete_status SET status = 'completed' WHERE completed = TRUE;
+     END IF;
+   END $$`,
+
+  // Safe to rerun every deploy: the DROP happens first each time.
+  `ALTER TABLE nk_event_item_athlete_status
+     DROP CONSTRAINT IF EXISTS nk_event_item_athlete_status_status_check`,
+  `ALTER TABLE nk_event_item_athlete_status
+     ADD CONSTRAINT nk_event_item_athlete_status_status_check
+     CHECK (status IN ('pending', 'completed', 'failed'))`,
 ];
 
 async function migrate() {

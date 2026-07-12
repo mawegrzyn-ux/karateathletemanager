@@ -214,25 +214,66 @@ coach-run attendance) — this is personal athlete itinerary planning.
   itself (e.g. "bring your own equipment"), separate from the per-athlete
   progress notes below.
 - **Per-athlete completion/notes**: `nk_event_item_athlete_status`
-  (`item_id`, `athlete_id`, `completed`, `notes`, `updated_at`, PK on the
-  pair) tracks one completed flag + one notes field per (item, athlete)
-  — a squad-session item assigned to several athletes needs each of them
-  checked off and annotated independently, not one shared value for the
-  whole item. `GET /api/events/:id` and `/:id/items` attach an
-  `athlete_status` array to every item, scoped to what the requester is
-  allowed to see: an athlete only gets their own entry, an admin/coach
-  gets the full event roster (each entry also carries `can_edit`, true
-  for admins, for coaches sharing a club with that athlete, and for the
-  athlete on their own row). `PATCH /api/events/:id/items/:itemId/athletes/:athleteId`
-  (presence-based `{completed?, notes?}`) upserts a row, gated by the
-  same rule. In `Schedule.tsx`'s `ItemsSection`, the collapsed row's
-  leading control is the current user's own checkbox when they're one of
-  the event's athletes, or a read-only `done/total` fraction otherwise;
-  expanding a row always reveals a `Completion` section (`AthleteStatusList`)
-  listing every visible athlete with a checkbox + notes textarea,
-  disabled per-row when `can_edit` is false — this section is interactive
-  regardless of the item's edit/read-only mode, same as the old shared
-  checkbox was.
+  (`item_id`, `athlete_id`, `status`, `notes`, `updated_at`, PK on the
+  pair) tracks one three-way status (`pending`/`completed`/`failed`) +
+  one notes field per (item, athlete) — a squad-session item assigned to
+  several athletes needs each of them flagged and annotated
+  independently, not one shared value for the whole item, and a task
+  can be explicitly flagged failed, not just left unchecked.
+  `GET /api/events/:id` and `/:id/items` attach an `athlete_status` array
+  to every item, scoped to what the requester is allowed to see: an
+  athlete only gets their own entry, an admin/coach gets the full event
+  roster (each entry also carries `can_edit`, true for admins, for
+  coaches sharing a club with that athlete, and for the athlete on their
+  own row). `PATCH /api/events/:id/items/:itemId/athletes/:athleteId`
+  (presence-based `{status?, notes?}`) upserts a row, gated by the same
+  rule. In `Schedule.tsx`'s `ItemsSection`, the collapsed row's leading
+  control is the current user's own status button (tap toggles
+  pending/completed; ✓ green or ✗ red once set) when they're one of the
+  event's athletes, or a read-only `completed/total` fraction (red if
+  any failed) otherwise; expanding a row always reveals a `Completion`
+  section (`AthleteStatusList`) listing every visible athlete with ✓/✗
+  buttons + a notes textarea, disabled per-row when `can_edit` is false
+  — this section is interactive regardless of the item's edit/read-only
+  mode, same as before. The same model applies one level up, to the
+  **event itself** (`nk_event_athlete_status`, same `status` column,
+  `PATCH /api/events/:id/athletes/:athleteId`) — a simple single-block
+  event with no itemized itinerary (the common case for a personal
+  schedule entry, e.g. a "rest day") still needs its own per-athlete
+  status/notes; `EventDetail` renders the same `AthleteStatusList` for
+  `event.athlete_status`, always visible above the Itinerary section
+  regardless of edit mode.
+  `nk_event_item_athlete_status.completed` (the original boolean column)
+  is intentionally never dropped, even though the app no longer reads or
+  writes it — an already-shipped migration statement unconditionally
+  re-adds `nk_event_items.completed` every deploy and, whenever that
+  column exists (which is every deploy), backfills into
+  `nk_event_item_athlete_status.completed` as an INSERT target; dropping
+  that column would break that statement on every future deploy. If you
+  ever touch this migration, keep that column around.
+- **Swipe-to-flag gesture**: `SwipeableRow` (pointer events, same
+  approach as the Day view's drag-to-move) wraps a row and calls
+  `onSwipeComplete`/`onSwipeFailed` once the horizontal drag passes
+  `SWIPE_THRESHOLD`, with a colored hint (green ✓ / red ✗) fading in
+  behind the row as you drag. It's used in two places: itinerary item
+  rows (swipes that one item's status for the current athlete via the
+  existing per-item endpoint), and top-level event rows in the Schedule
+  List view (swipes ALL of that event's itinerary items — or the event's
+  own status if it has none — via the bulk `PATCH /api/events/:id/status`
+  endpoint, athlete-only, self only). Only enabled when the viewer is one
+  of the event's assigned athletes (`item.athlete_status`'s own entry, or
+  the list's `event.my_status` non-null) — coaches/admins get the
+  read-only fraction/badge instead, never a swipeable row, since a bulk
+  swipe on someone else's behalf isn't a supported gesture.
+  `GET /api/events` attaches `my_status` to each event for athlete
+  viewers only (`attachMyEventStatus`): rolled up from its items if any
+  exist (any `failed` item makes the whole event `failed`,
+  all-`completed` makes it `completed`, otherwise `pending`), or from the
+  event's own status if it has no items. `ScheduleManager`'s
+  `updateEventInList` merges (rather than replaces) incoming event
+  objects, since the event-detail endpoints don't recompute this
+  list-only rollup field and a plain replace would blank it out after
+  any unrelated edit made from the drawer.
 - **Recurring items**: `POST /api/events/:id/items` accepts an optional
   `repeat: {freq: 'daily'|'weekly', until, weekdays?}`. The server
   expands this into one independent `nk_event_items` row per occurrence

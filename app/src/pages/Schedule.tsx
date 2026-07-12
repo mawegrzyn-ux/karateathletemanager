@@ -4,6 +4,7 @@ import {
   useState,
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { useApi } from "../hooks/useApi";
 import { useAuth } from "../context/AuthContext";
@@ -17,6 +18,8 @@ import {
 } from "../components/ui";
 import { TrainingModuleView, type TrainingModule } from "../components/TrainingModuleView";
 
+type CompletionStatus = "pending" | "completed" | "failed";
+
 interface Event {
   id: number;
   title: string;
@@ -28,11 +31,13 @@ interface Event {
   location: string | null;
   notes: string | null;
   training_module_id: number | null;
+  athlete_status: AthleteStatus[];
+  my_status: CompletionStatus | null;
 }
 
 interface AthleteStatus {
   athlete_id: number;
-  completed: boolean;
+  status: CompletionStatus;
   notes: string | null;
   can_edit: boolean;
 }
@@ -375,8 +380,17 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   }
 
   function updateEventInList(updated: Event) {
+    // Merge (not replace): the event-detail endpoints don't recompute the
+    // list-only `my_status` rollup, so keep whatever the list already has.
     setEvents((prev) =>
-      prev ? prev.map((e) => (e.id === updated.id ? updated : e)) : prev
+      prev ? prev.map((e) => (e.id === updated.id ? { ...e, ...updated } : e)) : prev
+    );
+  }
+
+  async function swipeEventStatus(event: Event, status: CompletionStatus) {
+    await api.patch(`/events/${event.id}/status`, { status });
+    setEvents((prev) =>
+      prev ? prev.map((e) => (e.id === event.id ? { ...e, my_status: status } : e)) : prev
     );
   }
 
@@ -455,26 +469,48 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                 {dateLabel(date)}
               </h2>
               {dayEvents.map((e) => (
-                <button
+                <SwipeableRow
                   key={e.id}
-                  onClick={() => setDrawer(e)}
-                  className="flex min-h-[44px] flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 text-left shadow-card"
+                  disabled={e.my_status == null}
+                  onSwipeComplete={() => swipeEventStatus(e, "completed")}
+                  onSwipeFailed={() => swipeEventStatus(e, "failed")}
                 >
-                  <span className="font-medium">
-                    {TYPE_ICONS[e.event_type] ?? ""} {e.title}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Badge>{TYPE_LABELS[e.event_type] ?? e.event_type}</Badge>
-                    <span className="text-xs text-stone-500">
-                      {toDateInput(e.start_date)}
-                      {e.end_date !== e.start_date
-                        ? ` – ${toDateInput(e.end_date)}`
-                        : ""}
-                      {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
-                      {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
-                    </span>
-                  </div>
-                </button>
+                  <button
+                    onClick={() => setDrawer(e)}
+                    className="flex min-h-[44px] w-full flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 text-left shadow-card"
+                  >
+                    <div className="flex w-full items-center justify-between gap-2">
+                      <span
+                        className={`font-medium ${
+                          e.my_status === "completed"
+                            ? "line-through text-stone-400"
+                            : e.my_status === "failed"
+                            ? "text-red-700"
+                            : ""
+                        }`}
+                      >
+                        {TYPE_ICONS[e.event_type] ?? ""} {e.title}
+                      </span>
+                      {e.my_status === "completed" && (
+                        <span className="shrink-0 text-green-600">✓</span>
+                      )}
+                      {e.my_status === "failed" && (
+                        <span className="shrink-0 text-red-600">✗</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge>{TYPE_LABELS[e.event_type] ?? e.event_type}</Badge>
+                      <span className="text-xs text-stone-500">
+                        {toDateInput(e.start_date)}
+                        {e.end_date !== e.start_date
+                          ? ` – ${toDateInput(e.end_date)}`
+                          : ""}
+                        {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
+                        {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
+                      </span>
+                    </div>
+                  </button>
+                </SwipeableRow>
               ))}
             </div>
           ))}
@@ -709,6 +745,26 @@ function EventDetail({
     setAthleteIds(ids);
   }
 
+  async function updateEventAthleteStatus(
+    athleteId: number,
+    patch: Record<string, unknown>
+  ) {
+    const { status } = await api.patch<{ status: AthleteStatus }>(
+      `/events/${eventId}/athletes/${athleteId}`,
+      patch
+    );
+    setEvent((prev) =>
+      prev
+        ? {
+            ...prev,
+            athlete_status: prev.athlete_status.map((s) =>
+              s.athlete_id === athleteId ? status : s
+            ),
+          }
+        : prev
+    );
+  }
+
   if (error) return <div className="text-red-700">{error}</div>;
   if (!event || !items)
     return (
@@ -875,6 +931,12 @@ function EventDetail({
           )}
         </>
       )}
+
+      <AthleteStatusList
+        statuses={event.athlete_status}
+        athletes={athleteNames}
+        onUpdate={updateEventAthleteStatus}
+      />
 
       <ItemsSection
         eventId={eventId}
@@ -1438,6 +1500,90 @@ function kataLabel(k: Kata) {
   return k.style ? `${label} (${k.style})` : label;
 }
 
+const SWIPE_THRESHOLD = 64;
+
+// Wraps a row with horizontal swipe-to-flag: swipe left calls onSwipeComplete,
+// swipe right calls onSwipeFailed. Pointer events (not HTML5 drag-and-drop)
+// so it works on touch, same approach as the Day view's drag-to-move.
+function SwipeableRow({
+  children,
+  onSwipeComplete,
+  onSwipeFailed,
+  disabled,
+  className,
+}: {
+  children: ReactNode;
+  onSwipeComplete: () => void;
+  onSwipeFailed: () => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const [dragX, setDragX] = useState(0);
+  const startXRef = useRef<number | null>(null);
+  const draggedRef = useRef(false);
+
+  function onPointerDown(e: ReactPointerEvent) {
+    if (disabled) return;
+    startXRef.current = e.clientX;
+    draggedRef.current = false;
+    (e.target as Element).setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e: ReactPointerEvent) {
+    if (startXRef.current == null) return;
+    const delta = e.clientX - startXRef.current;
+    if (Math.abs(delta) > 8) draggedRef.current = true;
+    setDragX(delta);
+  }
+
+  function onPointerUp() {
+    if (startXRef.current == null) return;
+    if (dragX <= -SWIPE_THRESHOLD) onSwipeComplete();
+    else if (dragX >= SWIPE_THRESHOLD) onSwipeFailed();
+    setDragX(0);
+    startXRef.current = null;
+  }
+
+  const hintOpacity = Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD);
+
+  return (
+    <div className={`relative overflow-hidden rounded-2xl ${className ?? ""}`}>
+      <div
+        className="pointer-events-none absolute inset-y-0 left-0 flex w-16 items-center justify-center bg-green-100 text-green-700"
+        style={{ opacity: dragX < 0 ? hintOpacity : 0 }}
+      >
+        ✓
+      </div>
+      <div
+        className="pointer-events-none absolute inset-y-0 right-0 flex w-16 items-center justify-center bg-red-100 text-red-700"
+        style={{ opacity: dragX > 0 ? hintOpacity : 0 }}
+      >
+        ✗
+      </div>
+      <div
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onClickCapture={(e) => {
+          if (draggedRef.current) {
+            e.stopPropagation();
+            e.preventDefault();
+            draggedRef.current = false;
+          }
+        }}
+        style={{
+          transform: `translateX(${dragX}px)`,
+          touchAction: "pan-y",
+          transition: dragX === 0 ? "transform 150ms ease-out" : "none",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function AthleteStatusList({
   statuses,
   athletes,
@@ -1457,20 +1603,57 @@ function AthleteStatusList({
         return (
           <div
             key={s.athlete_id}
-            className="flex flex-col gap-1 rounded-lg bg-stone-50 p-2"
+            className="flex flex-col gap-2 rounded-lg bg-stone-50 p-2"
           >
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={s.completed}
-                disabled={!s.can_edit}
-                onChange={(e) => onUpdate(s.athlete_id, { completed: e.target.checked })}
-                className="h-5 w-5"
-              />
-              <span className={s.completed ? "line-through text-stone-400" : ""}>
+            <div className="flex items-center justify-between gap-2">
+              <span
+                className={
+                  s.status === "completed"
+                    ? "line-through text-stone-400"
+                    : s.status === "failed"
+                    ? "text-red-700"
+                    : ""
+                }
+              >
                 {athlete ? `${athlete.first_name} ${athlete.last_name}` : "Athlete"}
               </span>
-            </label>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  disabled={!s.can_edit}
+                  onClick={() =>
+                    onUpdate(s.athlete_id, {
+                      status: s.status === "completed" ? "pending" : "completed",
+                    })
+                  }
+                  aria-label="Mark complete"
+                  className={`min-h-[36px] min-w-[36px] rounded-full text-sm font-medium disabled:opacity-50 ${
+                    s.status === "completed"
+                      ? "bg-green-600 text-white"
+                      : "border border-stone-300 text-stone-600"
+                  }`}
+                >
+                  ✓
+                </button>
+                <button
+                  type="button"
+                  disabled={!s.can_edit}
+                  onClick={() =>
+                    onUpdate(s.athlete_id, {
+                      status: s.status === "failed" ? "pending" : "failed",
+                    })
+                  }
+                  aria-label="Mark failed"
+                  className={`min-h-[36px] min-w-[36px] rounded-full text-sm font-medium disabled:opacity-50 ${
+                    s.status === "failed"
+                      ? "bg-red-600 text-white"
+                      : "border border-stone-300 text-stone-600"
+                  }`}
+                >
+                  ✗
+                </button>
+              </div>
+            </div>
             <textarea
               defaultValue={s.notes ?? ""}
               placeholder="Notes..."
@@ -1612,62 +1795,110 @@ function ItemsSection({
             user?.role === "athlete" && user.athlete_id
               ? item.athlete_status.find((s) => s.athlete_id === user.athlete_id)
               : undefined;
-          const doneCount = item.athlete_status.filter((s) => s.completed).length;
+          const completedCount = item.athlete_status.filter(
+            (s) => s.status === "completed"
+          ).length;
+          const failedCount = item.athlete_status.filter(
+            (s) => s.status === "failed"
+          ).length;
           const totalCount = item.athlete_status.length;
-          const isDone = myStatus ? myStatus.completed : totalCount > 0 && doneCount === totalCount;
+          const myEffectiveStatus: CompletionStatus =
+            myStatus?.status ??
+            (failedCount > 0
+              ? "failed"
+              : totalCount > 0 && completedCount === totalCount
+              ? "completed"
+              : "pending");
+
           return (
-            <div
+            <SwipeableRow
               key={item.id}
-              className="rounded-xl border border-stone-200 bg-white"
+              disabled={!myStatus}
+              onSwipeComplete={() =>
+                myStatus &&
+                updateAthleteStatus(item.id, myStatus.athlete_id, {
+                  status: "completed",
+                })
+              }
+              onSwipeFailed={() =>
+                myStatus &&
+                updateAthleteStatus(item.id, myStatus.athlete_id, {
+                  status: "failed",
+                })
+              }
             >
-              <div className="flex w-full items-start gap-2 px-3 py-2">
-                {myStatus ? (
-                  <input
-                    type="checkbox"
-                    aria-label={`Mark "${item.title}" as complete`}
-                    checked={myStatus.completed}
-                    onChange={(e) =>
-                      updateAthleteStatus(item.id, myStatus.athlete_id, {
-                        completed: e.target.checked,
-                      })
-                    }
-                    onClick={(e) => e.stopPropagation()}
-                    className="mt-1 h-5 w-5 shrink-0"
-                  />
-                ) : totalCount > 0 ? (
-                  <span className="mt-1.5 shrink-0 text-xs font-medium text-stone-500">
-                    {doneCount}/{totalCount}
-                  </span>
-                ) : (
-                  <span className="mt-1.5 w-5 shrink-0" />
-                )}
-                <button
-                  type="button"
-                  onClick={() => setExpandedId(expanded ? null : item.id)}
-                  className="flex min-h-[44px] flex-1 flex-col items-start gap-1 text-left"
-                >
-                  <div className="flex w-full items-center justify-between">
-                    <span className={isDone ? "line-through text-stone-400" : ""}>
-                      {item.title}
+              <div className="rounded-xl border border-stone-200 bg-white">
+                <div className="flex w-full items-start gap-2 px-3 py-2">
+                  {myStatus ? (
+                    <button
+                      type="button"
+                      aria-label={`Mark "${item.title}" complete or failed`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateAthleteStatus(item.id, myStatus.athlete_id, {
+                          status: myStatus.status === "completed" ? "pending" : "completed",
+                        });
+                      }}
+                      className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm ${
+                        myStatus.status === "completed"
+                          ? "bg-green-600 text-white"
+                          : myStatus.status === "failed"
+                          ? "bg-red-600 text-white"
+                          : "border border-stone-300"
+                      }`}
+                    >
+                      {myStatus.status === "completed"
+                        ? "✓"
+                        : myStatus.status === "failed"
+                        ? "✗"
+                        : ""}
+                    </button>
+                  ) : totalCount > 0 ? (
+                    <span
+                      className={`mt-1.5 shrink-0 text-xs font-medium ${
+                        failedCount > 0 ? "text-red-600" : "text-stone-500"
+                      }`}
+                    >
+                      {completedCount}/{totalCount}
                     </span>
-                    <div className="flex items-center gap-2">
-                      <Badge>{TYPE_LABELS[item.item_type] ?? item.item_type}</Badge>
-                      <span className="text-xs text-stone-500">
-                        {toDateInput(item.item_date)}
-                      </span>
-                    </div>
-                  </div>
-                  {(item.training_module_id || item.kata_id) && (
-                    <span className="text-xs text-stone-500">
-                      {item.training_module_id &&
-                        modules.find((m) => m.id === item.training_module_id)
-                          ?.title}
-                      {item.kata_id &&
-                        katas.find((k) => k.id === item.kata_id)?.name}
-                    </span>
+                  ) : (
+                    <span className="mt-1.5 w-5 shrink-0" />
                   )}
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(expanded ? null : item.id)}
+                    className="flex min-h-[44px] flex-1 flex-col items-start gap-1 text-left"
+                  >
+                    <div className="flex w-full items-center justify-between">
+                      <span
+                        className={
+                          myEffectiveStatus === "completed"
+                            ? "line-through text-stone-400"
+                            : myEffectiveStatus === "failed"
+                            ? "text-red-700"
+                            : ""
+                        }
+                      >
+                        {item.title}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Badge>{TYPE_LABELS[item.item_type] ?? item.item_type}</Badge>
+                        <span className="text-xs text-stone-500">
+                          {toDateInput(item.item_date)}
+                        </span>
+                      </div>
+                    </div>
+                    {(item.training_module_id || item.kata_id) && (
+                      <span className="text-xs text-stone-500">
+                        {item.training_module_id &&
+                          modules.find((m) => m.id === item.training_module_id)
+                            ?.title}
+                        {item.kata_id &&
+                          katas.find((k) => k.id === item.kata_id)?.name}
+                      </span>
+                    )}
+                  </button>
+                </div>
               {expanded && !editable && (
                 <div className="flex flex-col gap-3 border-t border-stone-200 p-3">
                   <div className="flex items-center gap-2 text-sm text-stone-500">
@@ -1811,7 +2042,8 @@ function ItemsSection({
                   }
                 />
               )}
-            </div>
+              </div>
+            </SwipeableRow>
           );
         })}
         {sorted.length === 0 && !adding && (
