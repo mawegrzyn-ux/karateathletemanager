@@ -820,13 +820,22 @@ one upload, all slots, no rebuild required.
   are what changes, updating the admin-uploaded image takes effect
   immediately across app icon, favicon, and social preview — no new
   frontend deploy needed.
-- **v1 simplification**: the exact same raw uploaded image is served at
-  all 7 slots — there's no server-side resizing/padding (no `sharp` or
-  similar added), so the maskable icons' safe-zone padding and the
-  apple-touch-icon's "no transparency" preference aren't actually
-  enforced; the browser/OS scales the one image as needed. Fully
-  functional, just not pixel-ideal for every slot — revisit with real
-  per-size image processing if that ever matters.
+- Each of the 7 slots is rendered from the one configured source image
+  on request via `sharp`, not served as raw passthrough bytes — this
+  matters because Chrome/Android's PWA-installability check requires
+  icons that are actually the declared pixel size and a real decodable
+  `image/png`; serving arbitrary source dimensions/format at those URLs
+  silently downgrades "Install app" to a plain bookmark-style "Add to
+  Home Screen" instead of a real install. `favicon`/`icon-*`/
+  `apple-touch-icon` use `fit: "cover"` (crop to fill); the two
+  `icon-maskable-*` slots shrink the source to its inner ~80% ("safe
+  zone") and pad the rest with the brand red (`#dc2626`) so Android's
+  adaptive-icon mask can't clip anything important; `apple-touch-icon`
+  is flattened onto the same brand red since iOS renders alpha as
+  black; `social-image` is cropped to the OG-recommended 1200×630.
+  Rendered per-request rather than precomputed at upload time, since
+  traffic to these URLs is low — the `Cache-Control` header above keeps
+  repeat fetches cheap.
 
 ## Suggested Page Structure (Mobile)
 
