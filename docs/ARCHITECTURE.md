@@ -255,16 +255,37 @@ coach-run attendance) — this is personal athlete itinerary planning.
   approach as the Day view's drag-to-move) wraps a row and calls
   `onSwipeComplete`/`onSwipeFailed` once the horizontal drag passes
   `SWIPE_THRESHOLD`, with a colored hint (green ✓ / red ✗) fading in
-  behind the row as you drag. It's used in two places: itinerary item
-  rows (swipes that one item's status for the current athlete via the
-  existing per-item endpoint), and top-level event rows in the Schedule
-  List view (swipes ALL of that event's itinerary items — or the event's
-  own status if it has none — via the bulk `PATCH /api/events/:id/status`
-  endpoint, athlete-only, self only). Only enabled when the viewer is one
-  of the event's assigned athletes (`item.athlete_status`'s own entry, or
-  the list's `event.my_status` non-null) — coaches/admins get the
-  read-only fraction/badge instead, never a swipeable row, since a bulk
-  swipe on someone else's behalf isn't a supported gesture.
+  behind the row as you drag — the hint divs are positioned on the side
+  the drag actually uncovers (dragging left slides the row's content
+  left, exposing its *right* edge, so the green ✓/complete hint lives at
+  `right-0`; dragging right exposes the *left* edge, so red ✗/failed
+  lives at `left-0`) — swapped this way after finding the hints
+  rendered on the wrong, permanently-covered side otherwise. It's used
+  in two places: itinerary item rows (swipes that one item's status for
+  the current athlete via the existing per-item endpoint), and top-level
+  event rows in the Schedule List view (swipes ALL of that event's
+  itinerary items — or the event's own status if it has none — via the
+  bulk `PATCH /api/events/:id/status` endpoint, athlete-only, self
+  only). Only enabled when the viewer is one of the event's assigned
+  athletes (`item.athlete_status`'s own entry, or the list's
+  `event.my_status` non-null) — coaches/admins get the read-only
+  fraction/badge instead, never a swipeable row, since a bulk swipe on
+  someone else's behalf isn't a supported gesture; dragging still
+  tracks for them (`disabled` no longer blocks `onPointerDown`), growing
+  a neutral "Only athletes can swipe" message behind the row instead of
+  the ✓/✗ hint (`DISABLED_SWIPE_MAX`, wider and un-thresholded since
+  there's no action to trigger), and releasing never calls
+  `onSwipeComplete`/`onSwipeFailed`.
+- **Completed/failed background tint**: an itinerary item's row
+  (`myEffectiveStatus` — the viewer's own status if they're the
+  assigned athlete, else the same failed/completed/pending rollup used
+  for the title's strikethrough/red-text styling) gets `bg-green-50
+  border-green-200` when completed or `bg-red-50 border-red-200` when
+  failed, on top of (not instead of) the existing corner indicator (the
+  ✓/✗ circle for the assigned athlete, or the completed/total fraction
+  for everyone else) — the tint applies for every viewer, not just the
+  assigned athlete, since it's read from the same rollup value the title
+  styling already used.
   `GET /api/events` attaches `my_status` to each event for athlete
   viewers only (`attachMyEventStatus`): rolled up from its items if any
   exist (any `failed` item makes the whole event `failed`,
