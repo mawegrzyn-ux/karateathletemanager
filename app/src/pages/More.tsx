@@ -41,12 +41,23 @@ export default function More() {
       {user?.is_admin && (
         <div className="flex flex-col gap-2">
           <span className="text-xs font-medium uppercase tracking-wide text-stone-500">
+            People
+          </span>
+          <TileGrid>
+            <Tile to="/athletes" icon="👥" label="Athletes" />
+            <Tile to="/admin/coaches" icon="🧑‍🏫" label="Coaches" />
+            <Tile to="/admin/referees" icon="🚩" label="Referees" />
+          </TileGrid>
+        </div>
+      )}
+
+      {user?.is_admin && (
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-stone-500">
             Admin
           </span>
           <TileGrid>
             <Tile to="/admin/users" icon="🔐" label="Users" />
-            <Tile to="/admin/coaches" icon="🧑‍🏫" label="Coaches" />
-            <Tile to="/admin/referees" icon="🚩" label="Referees" />
             <Tile to="/admin/coach-roles" icon="🏷️" label="Coach roles" />
             <Tile to="/admin/katas" icon="📜" label="Katas" />
             <Tile to="/admin/karate-styles" icon="🥋" label="Karate styles" />
