@@ -823,6 +823,21 @@ const migrations = [
    ALTER TABLE nk_event_items ADD CONSTRAINT nk_event_items_item_type_check
      CHECK (item_type IN ('competition','squad_session','training','travel',
        'time_off','seminar','training_camp','rest','other','kata_performance','grading'))`,
+
+  // Events and itinerary items now share the exact same type set (a lone
+  // event can be a rest day, a one-off note, or a kata performance just
+  // like an itinerary item can) - supersedes the grading-only constraint
+  // above with the full unified list. Events also gain their own
+  // `kata_id` (mirrors `training_module_id`, used when event_type is
+  // 'kata_performance') and `recurrence_id` (mirrors
+  // nk_event_items.recurrence_id - a whole event can now be generated as
+  // part of a repeating series the same way an itinerary item can).
+  `ALTER TABLE nk_events DROP CONSTRAINT IF EXISTS nk_events_event_type_check;
+   ALTER TABLE nk_events ADD CONSTRAINT nk_events_event_type_check
+     CHECK (event_type IN ('competition','squad_session','training','travel',
+       'time_off','seminar','training_camp','grading','rest','other','kata_performance'))`,
+  `ALTER TABLE nk_events ADD COLUMN IF NOT EXISTS kata_id INTEGER REFERENCES nk_katas(id) ON DELETE SET NULL`,
+  `ALTER TABLE nk_events ADD COLUMN IF NOT EXISTS recurrence_id UUID`,
 ];
 
 async function migrate() {

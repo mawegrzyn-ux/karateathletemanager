@@ -671,10 +671,67 @@ coach-run attendance) — this is personal athlete itinerary planning.
   same history read-only (no recording action) alongside the athlete's
   current grade.
 - **Grading event type**: `"grading"` was added to `EVENT_TYPES` in both
-  `events.js` and `Schedule.tsx` (and so, via the `[...EVENT_TYPES, ...]`
-  spread, to `ITEM_TYPES` too) — a plain event/item type like any other,
+  `events.js` and `Schedule.tsx` — a plain event/item type like any other,
   no dedicated fields of its own; the actual grading result is recorded
   separately via the athlete's Grading history, not on the event.
+- **Events and itinerary items share one type set**: `EVENT_TYPES` and
+  `ITEM_TYPES` are literally the same array (`const ITEM_TYPES =
+  EVENT_TYPES`) in both `events.js` and `Schedule.tsx`, covering every
+  type either could need (`rest`/`other`/`kata_performance` used to be
+  item-only; a lone event can now be any of them too). A `kata_performance`
+  event gets the same treatment a `kata_performance` item already had:
+  `nk_events.kata_id` (mirrors `training_module_id`) plus a Kata
+  `SingleSelectPicker` in both the create form and `EventDetail` edit
+  mode that auto-fills the (still-editable) title.
+- **Events can recur, the same way itinerary items already did**:
+  `nk_events.recurrence_id` (mirrors `nk_event_items.recurrence_id`) plus
+  a `repeat` object accepted by `POST /api/events`, reusing the exact
+  same `resolveOccurrenceDates` helper items use (daily/weekly/monthly,
+  interval, weekday/day-of-month selection, until-date or occurrence-
+  count end condition, capped at 60 occurrences). Since an event is a
+  date *range* rather than an item's single date, each generated
+  occurrence keeps the original's day-span (a 2-day event repeating
+  weekly produces a new 2-day event every week, anchored to
+  `start_date`). `POST /api/events` returns `{ events: [...] }` (array)
+  when `repeat` is present, `{ event }` otherwise — same response-shape
+  split `POST /api/events/:id/items` already used. The "New event" form
+  in `Schedule.tsx` grew the identical "Repeats" control the itinerary
+  add-item form has.
+- **Copy and delete, for both events and itinerary items**: "copy" is
+  client-side only (no dedicated endpoint) — a "Duplicate / repeat"
+  button in `EventDetail`'s edit mode (matching the itinerary item one
+  that already existed) pre-fills the "New event" form with the source
+  event's fields *and* its athlete roster, reusing the ordinary create
+  flow once the user reviews and submits. Deleting a single occurrence
+  already worked (`DELETE /api/events/:id`); events gained the
+  itinerary-item-style series delete too — `DELETE /api/events/:id/series`
+  removes every event sharing that `recurrence_id` — surfaced as a
+  "Delete series" button in `EventDetail`, shown only when the currently-
+  loaded event list has more than one event with the same
+  `recurrence_id`.
+- **Itinerary items are bound by their event's date range**: `POST
+  /api/events/:id/items` and `PATCH /api/events/:id/items/:itemId`
+  reject (400) an `item_date` — or, for a repeat, any generated
+  occurrence date — outside the parent event's `start_date`/`end_date`
+  (`getEventDateRange`/`datesWithinRange` helpers in `events.js`).
+  `Schedule.tsx`'s item date inputs (add form, edit form, and the
+  "repeat until" date) get matching `min`/`max` attributes bound to the
+  event's dates, so the common case is caught by the browser before it
+  ever reaches the server-side check.
+- **Fixed: completing an item in the detail view left the Schedule list
+  stale.** Marking an itinerary item (or a no-items event) complete/failed
+  from `EventDetail` only ever updated `EventDetail`'s own local state —
+  the list view's `my_status` badge/checkbox lives on `ScheduleManager`'s
+  separate `events` array, computed once server-side at initial load
+  (`attachMyEventStatus`) and never recomputed after a status edit made
+  in the detail view. `EventDetail` now mirrors that same rollup logic
+  client-side (`syncMyStatus`: any failed item → failed, all items
+  completed → completed, no items → the event's own direct status) and
+  pushes the recomputed status up through the existing `onUpdated`
+  callback after every relevant change — both the item-level path
+  (`setItemsAndSync`, wrapping the `setItems` passed to `ItemsSection`)
+  and the event-level one (`updateEventAthleteStatus`, for events with no
+  itemized itinerary).
 
 ## Auth & RBAC
 
