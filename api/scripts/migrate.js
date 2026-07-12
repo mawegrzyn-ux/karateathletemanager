@@ -818,7 +818,7 @@ const migrations = [
   `ALTER TABLE nk_events DROP CONSTRAINT IF EXISTS nk_events_event_type_check;
    ALTER TABLE nk_events ADD CONSTRAINT nk_events_event_type_check
      CHECK (event_type IN ('competition','squad_session','training','travel',
-       'time_off','seminar','training_camp','grading'))`,
+       'time_off','seminar','training_camp','grading','rest','other','kata_performance'))`,
   `ALTER TABLE nk_event_items DROP CONSTRAINT IF EXISTS nk_event_items_item_type_check;
    ALTER TABLE nk_event_items ADD CONSTRAINT nk_event_items_item_type_check
      CHECK (item_type IN ('competition','squad_session','training','travel',
@@ -838,6 +838,14 @@ const migrations = [
        'time_off','seminar','training_camp','grading','rest','other','kata_performance'))`,
   `ALTER TABLE nk_events ADD COLUMN IF NOT EXISTS kata_id INTEGER REFERENCES nk_katas(id) ON DELETE SET NULL`,
   `ALTER TABLE nk_events ADD COLUMN IF NOT EXISTS recurrence_id UUID`,
+
+  // A join-link registrant (self-service athlete signup) has no
+  // nk_athletes row yet while their account is still 'pending' - this
+  // stages their date of birth on nk_users itself, the same way
+  // first_name/last_name/phone already do (see activateUser.js), so it
+  // can be collected before approval and copied onto the real athlete
+  // record once one is created.
+  `ALTER TABLE nk_users ADD COLUMN IF NOT EXISTS date_of_birth DATE`,
 ];
 
 async function migrate() {

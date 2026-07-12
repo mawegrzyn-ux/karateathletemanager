@@ -5,9 +5,16 @@ async function activateUser(client, user) {
 
   if (user.wants_athlete && !athleteId) {
     const { rows } = await client.query(
-      `INSERT INTO nk_athletes (first_name, last_name, email, phone)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [user.first_name || "", user.last_name || "", user.email, user.phone]
+      `INSERT INTO nk_athletes (first_name, last_name, email, phone, photo_url, date_of_birth)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [
+        user.first_name || "",
+        user.last_name || "",
+        user.email,
+        user.phone,
+        user.photo_url,
+        user.date_of_birth,
+      ]
     );
     athleteId = rows[0].id;
     await client.query(

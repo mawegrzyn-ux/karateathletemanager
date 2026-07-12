@@ -905,6 +905,40 @@ link over time rather than one parent redeeming one code:
   on approval as any other registration; a join link only changes how
   the intent fields get set, not what happens with them afterward.
 
+Since a join-link registrant has no `nk_athletes` row until an admin/
+club-admin approves them (`activateUser` is what creates it), completing
+their profile — avatar, date of birth — has to happen while `status` is
+still `'pending'`, staged on `nk_users` itself the same way
+`first_name`/`last_name`/`phone` already were:
+
+- `nk_users.date_of_birth` mirrors `nk_athletes.date_of_birth` as a
+  pre-activation staging field, editable via the existing self-service
+  `PATCH /api/auth/me` (which has never gated on `status`/role — only
+  `req.user` needs to exist). `activateUser` now also copies
+  `user.photo_url`/`user.date_of_birth` onto the newly-created
+  `nk_athletes` row, alongside the name/email/phone it already copied —
+  this was a pre-existing gap (those two columns just weren't copied)
+  rather than something new to the join-link flow.
+- `Profile.tsx`'s "Account" form (rendered unconditionally regardless of
+  `status`) gained a "Date of birth" field next to the existing avatar
+  `MediaField`, both writing to `nk_users` via the same `updateProfile`/
+  `PATCH /me` call as first/last name.
+- The avatar upload itself was blocked for a pending user before this
+  fix: `POST /api/uploads` sat behind `authorize("coach")`, and the
+  router-level `authorize()` on top of it 403s anyone whose `status !==
+  'active'` regardless of role. `authorize.js` gained a third gate,
+  `authorize.authenticated` (session required, no status/role check),
+  used for the whole `uploads.js` router in place of `authorize()` —
+  uploading your own avatar/video is safe regardless of approval state
+  or role, unlike every other coach-gated write in the app.
+- `wants_athlete` is now included in `USER_SELECT_FIELDS` (previously
+  write-only — set at registration, never read back), so the client can
+  tell a still-pending user registered with athlete intent before
+  `role`/`athlete_id` exist to confirm it. `Profile.tsx` uses this (plus
+  `role === 'athlete'` once active) to hide the "Link a child" section —
+  someone registering as an athlete via a join link is the athlete, not
+  a parent, so the child-PIN UI doesn't apply to them.
+
 ### Referee profiles
 
 `nk_referees` is a third self-service profile type, a deliberately

@@ -28,6 +28,8 @@ export interface User {
   last_name: string | null;
   phone: string | null;
   photo_url: string | null;
+  date_of_birth: string | null;
+  wants_athlete: boolean;
 }
 
 export interface ProfileUpdate {
@@ -35,6 +37,7 @@ export interface ProfileUpdate {
   last_name?: string;
   phone?: string;
   photo_url?: string;
+  date_of_birth?: string;
 }
 
 export interface RegisterOptions {

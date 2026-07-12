@@ -34,13 +34,16 @@ const upload = multer({
   },
 });
 
-router.use(authorize());
+// A pending, not-yet-approved user (e.g. a fresh club join-link
+// registrant) must still be able to upload their own avatar before a
+// coach/admin has processed them, so this router uses the lenient
+// authenticated-only gate rather than authorize()'s active-status check.
+router.use(authorize.authenticated);
 
 router.use("/files", express.static(UPLOADS_DIR));
 
 router.post(
   "/",
-  authorize("coach"),
   (req, res, next) => {
     upload.single("file")(req, res, (err) => {
       if (err) {
