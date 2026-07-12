@@ -280,6 +280,26 @@ coach-run attendance) — this is personal athlete itinerary planning.
   date (capped at 60) at creation time — there's no ongoing
   series/recurrence-rule link, so each generated item is thereafter
   edited/deleted on its own, same as a manually-created one.
+- **Duplicating/repeating an existing item**: an already-created
+  itinerary item's expanded edit view has a "Duplicate / repeat" button
+  (`duplicateItem` in `ItemsSection`, `Schedule.tsx`) that copies its
+  current fields (title, type, date, times, notes, training module/kata)
+  into the same inline add-item form used for brand-new items, with
+  `repeat` reset to "Does not repeat" — collapsing the original item and
+  opening the primed form. Submitting as-is creates a single independent
+  copy (a plain duplicate); setting the form's existing Repeats picker
+  before submitting reuses the same `repeat` expansion as new items,
+  which is how an already-created item is turned into a recurring
+  series after the fact — there's no separate "make recurring" endpoint,
+  since duplicate + repeat covers both asks with the add-item form's
+  existing machinery.
+- **Date/time field layout**: on both event and itinerary-item forms,
+  a date field and its associated time field are always placed in a
+  `grid grid-cols-2` row together (Start date next to Start time, End
+  date next to End time; an item's single Date next to its Start time,
+  with End time on its own row below) rather than grouping all dates
+  together and all times together — so the two fields describing one
+  moment are visually paired.
 - **Schedule.tsx view modes**: a `List`/`Day`/`Week`/`Month` segmented
   control (all client-side, no new endpoints) sits above the event list
   in `ScheduleManager`. All four operate on the same `events` array —
