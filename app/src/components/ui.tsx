@@ -238,9 +238,11 @@ export function AddButton({ onClick }: { onClick: () => void }) {
 export function DeleteButton({
   onClick,
   itemLabel,
+  label = "Delete",
 }: {
   onClick: () => void;
   itemLabel?: string;
+  label?: string;
 }) {
   const [confirming, setConfirming] = useState(false);
 
@@ -248,10 +250,10 @@ export function DeleteButton({
     <>
       <button
         onClick={() => setConfirming(true)}
-        aria-label="Delete"
+        aria-label={label}
         className="flex min-h-[44px] items-center gap-2 rounded-xl border border-red-200 px-4 text-red-700"
       >
-        🗑 Delete
+        🗑 {label}
       </button>
       <Modal open={confirming} onClose={() => setConfirming(false)}>
         <div className="flex flex-col gap-4 p-2">

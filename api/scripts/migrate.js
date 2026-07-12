@@ -665,6 +665,11 @@ const migrations = [
   `ALTER TABLE nk_event_item_athlete_status
      ADD CONSTRAINT nk_event_item_athlete_status_status_check
      CHECK (status IN ('pending', 'completed', 'failed'))`,
+
+  // Shared by every occurrence generated from one repeat request, so a
+  // "delete whole series" action can find its siblings. Null for
+  // manually-created (non-repeating) items.
+  `ALTER TABLE nk_event_items ADD COLUMN IF NOT EXISTS recurrence_id UUID`,
 ];
 
 async function migrate() {
