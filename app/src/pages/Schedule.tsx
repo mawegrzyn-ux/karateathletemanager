@@ -53,6 +53,7 @@ interface EventItem {
   notes: string | null;
   training_module_id: number | null;
   kata_id: number | null;
+  recurrence_id: string | null;
   athlete_status: AthleteStatus[];
 }
 
@@ -130,8 +131,12 @@ const EMPTY_ITEM_FORM = {
   training_module_id: null as number | null,
   kata_id: null as number | null,
   repeat_freq: "none",
-  repeat_until: "",
+  repeat_interval: 1,
   repeat_weekdays: [] as number[],
+  repeat_day_of_month: null as number | null,
+  repeat_end_type: "until",
+  repeat_until: "",
+  repeat_count: 4,
 };
 
 function toDateInput(value: string) {
@@ -1545,6 +1550,10 @@ function weekdayOf(dateStr: string) {
   return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
 }
 
+function dayOfMonthOf(dateStr: string) {
+  return new Date(`${dateStr}T00:00:00Z`).getUTCDate();
+}
+
 function kataLabel(k: Kata) {
   const label = k.wkf_number != null ? `${k.wkf_number}. ${k.name}` : k.name;
   return k.style ? `${label} (${k.style})` : label;
@@ -1776,13 +1785,21 @@ function ItemsSection({
     if (addForm.repeat_freq !== "none") {
       payload.repeat = {
         freq: addForm.repeat_freq,
-        until: addForm.repeat_until,
+        interval: addForm.repeat_interval || 1,
         weekdays:
           addForm.repeat_freq === "weekly"
             ? addForm.repeat_weekdays.length > 0
               ? addForm.repeat_weekdays
               : [weekdayOf(addForm.item_date)]
             : undefined,
+        day_of_month:
+          addForm.repeat_freq === "monthly"
+            ? addForm.repeat_day_of_month || dayOfMonthOf(addForm.item_date)
+            : undefined,
+        end:
+          addForm.repeat_end_type === "count"
+            ? { type: "count", count: addForm.repeat_count || 1 }
+            : { type: "until", date: addForm.repeat_until },
       };
     }
 
@@ -1832,6 +1849,15 @@ function ItemsSection({
     setExpandedId(null);
   }
 
+  async function deleteSeries(item: EventItem) {
+    const { deleted_ids } = await api.del<{ deleted_ids: number[] }>(
+      `/events/${eventId}/items/${item.id}/series`
+    );
+    const deletedSet = new Set(deleted_ids);
+    setItems(items.filter((i) => !deletedSet.has(i.id)));
+    setExpandedId(null);
+  }
+
   function duplicateItem(item: EventItem) {
     setAddForm({
       item_type: item.item_type,
@@ -1843,8 +1869,12 @@ function ItemsSection({
       training_module_id: item.training_module_id,
       kata_id: item.kata_id,
       repeat_freq: "none",
-      repeat_until: "",
+      repeat_interval: 1,
       repeat_weekdays: [],
+      repeat_day_of_month: null,
+      repeat_end_type: "until",
+      repeat_until: "",
+      repeat_count: 4,
     });
     setExpandedId(null);
     setAdding(true);
@@ -2106,9 +2136,27 @@ function ItemsSection({
                       Duplicate / repeat
                     </button>
                   </div>
+                  {item.recurrence_id &&
+                    items.filter((i) => i.recurrence_id === item.recurrence_id)
+                      .length > 1 && (
+                      <DeleteButton
+                        onClick={() => deleteSeries(item)}
+                        label="Delete series"
+                        itemLabel={`the whole "${item.title}" series (${
+                          items.filter(
+                            (i) => i.recurrence_id === item.recurrence_id
+                          ).length
+                        } items)`}
+                      />
+                    )}
                   <DeleteButton
                     onClick={() => deleteItem(item.id)}
-                    itemLabel={item.title}
+                    label={item.recurrence_id ? "Delete this occurrence" : "Delete"}
+                    itemLabel={
+                      item.recurrence_id
+                        ? `this occurrence of "${item.title}"`
+                        : item.title
+                    }
                   />
                 </div>
               )}
@@ -2238,6 +2286,7 @@ function ItemsSection({
                   ...addForm,
                   repeat_freq: e.target.value,
                   repeat_weekdays: [],
+                  repeat_day_of_month: null,
                 })
               }
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
@@ -2245,60 +2294,141 @@ function ItemsSection({
               <option value="none">Does not repeat</option>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
             </select>
           </Field>
-          {addForm.repeat_freq !== "none" && (
-            <Field label="Repeat until">
+
+          {addForm.repeat_freq === "weekly" && (
+            <>
+              <Field label="Every">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={52}
+                    value={addForm.repeat_interval}
+                    onChange={(e) =>
+                      setAddForm({
+                        ...addForm,
+                        repeat_interval: Number(e.target.value) || 1,
+                      })
+                    }
+                    className="min-h-[44px] w-20 rounded-xl border border-stone-300 px-3"
+                  />
+                  <span className="text-sm text-stone-600">week(s)</span>
+                </div>
+              </Field>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-stone-600">
+                  Repeat on
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {WEEKDAY_LABELS.map((label, day) => {
+                    const active =
+                      addForm.repeat_weekdays.length > 0
+                        ? addForm.repeat_weekdays.includes(day)
+                        : addForm.item_date && weekdayOf(addForm.item_date) === day;
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          const base =
+                            addForm.repeat_weekdays.length > 0
+                              ? addForm.repeat_weekdays
+                              : addForm.item_date
+                                ? [weekdayOf(addForm.item_date)]
+                                : [];
+                          const next = base.includes(day)
+                            ? base.filter((d) => d !== day)
+                            : [...base, day];
+                          setAddForm({ ...addForm, repeat_weekdays: next });
+                        }}
+                        className={`min-h-[36px] min-w-[44px] rounded-xl border px-2 text-sm ${
+                          active
+                            ? "border-green-200 bg-green-50 text-green-800"
+                            : "border-stone-300"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {addForm.repeat_freq === "monthly" && (
+            <Field label="On day of month">
               <input
-                required
-                type="date"
-                value={addForm.repeat_until}
-                onChange={(e) =>
-                  setAddForm({ ...addForm, repeat_until: e.target.value })
+                type="number"
+                min={1}
+                max={31}
+                placeholder={
+                  addForm.item_date
+                    ? String(dayOfMonthOf(addForm.item_date))
+                    : "1"
                 }
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                value={addForm.repeat_day_of_month ?? ""}
+                onChange={(e) =>
+                  setAddForm({
+                    ...addForm,
+                    repeat_day_of_month: e.target.value
+                      ? Number(e.target.value)
+                      : null,
+                  })
+                }
+                className="min-h-[44px] w-20 rounded-xl border border-stone-300 px-3"
               />
             </Field>
           )}
-          {addForm.repeat_freq === "weekly" && (
-            <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-stone-600">
-                Repeat on
-              </span>
-              <div className="flex flex-wrap gap-1">
-                {WEEKDAY_LABELS.map((label, day) => {
-                  const active =
-                    addForm.repeat_weekdays.length > 0
-                      ? addForm.repeat_weekdays.includes(day)
-                      : addForm.item_date && weekdayOf(addForm.item_date) === day;
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => {
-                        const base =
-                          addForm.repeat_weekdays.length > 0
-                            ? addForm.repeat_weekdays
-                            : addForm.item_date
-                              ? [weekdayOf(addForm.item_date)]
-                              : [];
-                        const next = base.includes(day)
-                          ? base.filter((d) => d !== day)
-                          : [...base, day];
-                        setAddForm({ ...addForm, repeat_weekdays: next });
-                      }}
-                      className={`min-h-[36px] min-w-[44px] rounded-xl border px-2 text-sm ${
-                        active
-                          ? "border-green-200 bg-green-50 text-green-800"
-                          : "border-stone-300"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+
+          {addForm.repeat_freq !== "none" && (
+            <>
+              <Field label="Ends">
+                <select
+                  value={addForm.repeat_end_type}
+                  onChange={(e) =>
+                    setAddForm({ ...addForm, repeat_end_type: e.target.value })
+                  }
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                >
+                  <option value="until">On a date</option>
+                  <option value="count">After a number of times</option>
+                </select>
+              </Field>
+              {addForm.repeat_end_type === "until" ? (
+                <Field label="Repeat until">
+                  <input
+                    required
+                    type="date"
+                    value={addForm.repeat_until}
+                    onChange={(e) =>
+                      setAddForm({ ...addForm, repeat_until: e.target.value })
+                    }
+                    className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                  />
+                </Field>
+              ) : (
+                <Field label="Number of occurrences">
+                  <input
+                    required
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={addForm.repeat_count}
+                    onChange={(e) =>
+                      setAddForm({
+                        ...addForm,
+                        repeat_count: Number(e.target.value) || 1,
+                      })
+                    }
+                    className="min-h-[44px] w-20 rounded-xl border border-stone-300 px-3"
+                  />
+                </Field>
+              )}
+            </>
           )}
 
           <div className="flex gap-2">

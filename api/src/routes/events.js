@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const { Router } = require("express");
 const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
@@ -16,56 +17,175 @@ const EVENT_TYPES = [
   "training_camp",
 ];
 const ITEM_TYPES = [...EVENT_TYPES, "rest", "other", "kata_performance"];
-const REPEAT_FREQS = ["daily", "weekly"];
+const REPEAT_FREQS = ["daily", "weekly", "monthly"];
 const MAX_REPEAT_OCCURRENCES = 60;
 const STATUS_VALUES = ["pending", "completed", "failed"];
 
 const EVENT_FIELDS = `id, title, event_type, start_date, end_date, start_time, end_time, location, notes, training_module_id, created_at`;
-const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id`;
+const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id, recurrence_id`;
 
 router.use(authorize());
 
-// Expands a `repeat` request ({freq, until, weekdays?}) starting from
-// item_date into the list of occurrence dates ('YYYY-MM-DD' strings),
-// or throws a {status, message} error. Caps at MAX_REPEAT_OCCURRENCES.
+function addUTCDays(date, days) {
+  const d = new Date(date);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+function addUTCMonths(date, months) {
+  const d = new Date(date);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d;
+}
+
+function toDateStr(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+// Expands a `repeat` request into the list of occurrence dates
+// ('YYYY-MM-DD' strings) starting from item_date, or throws a
+// {status, message} error. Caps at MAX_REPEAT_OCCURRENCES.
+//
+// repeat shape: {
+//   freq: 'daily' | 'weekly' | 'monthly',
+//   interval?: number (>=1, default 1 - "every N days/weeks/months"),
+//   weekdays?: number[] (0-6, weekly only; defaults to item_date's weekday),
+//   day_of_month?: number (1-31, monthly only; defaults to item_date's day
+//     - months too short for that day are skipped, e.g. day 31 in April),
+//   end: { type: 'until', date: 'YYYY-MM-DD' } | { type: 'count', count: number },
+// }
 function resolveOccurrenceDates(itemDate, repeat) {
-  const { freq, until, weekdays } = repeat ?? {};
+  const { freq, interval, weekdays, day_of_month, end } = repeat ?? {};
 
   if (!REPEAT_FREQS.includes(freq)) {
     throw { status: 400, message: "Invalid repeat.freq" };
   }
-  if (!until) {
-    throw { status: 400, message: "repeat.until is required" };
+  const step = Number.isInteger(interval) && interval > 0 ? interval : 1;
+  if (step > 52) {
+    throw { status: 400, message: "repeat.interval is too large" };
   }
 
   const start = new Date(`${itemDate}T00:00:00Z`);
-  const end = new Date(`${until}T00:00:00Z`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
-    throw { status: 400, message: "Invalid repeat.until" };
+  if (Number.isNaN(start.getTime())) {
+    throw { status: 400, message: "Invalid item_date" };
   }
 
-  let allowedWeekdays = null;
-  if (freq === "weekly") {
-    allowedWeekdays =
-      Array.isArray(weekdays) && weekdays.length > 0
-        ? new Set(weekdays)
-        : new Set([start.getUTCDay()]);
+  let untilDate = null;
+  let count = null;
+  if (end?.type === "until") {
+    untilDate = new Date(`${end.date}T00:00:00Z`);
+    if (Number.isNaN(untilDate.getTime()) || untilDate < start) {
+      throw { status: 400, message: "Invalid repeat.end.date" };
+    }
+  } else if (end?.type === "count") {
+    count = Number.isInteger(end.count) ? end.count : NaN;
+    if (!(count > 0) || count > MAX_REPEAT_OCCURRENCES) {
+      throw {
+        status: 400,
+        message: `repeat.end.count must be between 1 and ${MAX_REPEAT_OCCURRENCES}`,
+      };
+    }
+  } else {
+    throw { status: 400, message: "repeat.end is required" };
+  }
+
+  if (freq === "weekly" && weekdays !== undefined) {
+    if (
+      !Array.isArray(weekdays) ||
+      weekdays.some((d) => !Number.isInteger(d) || d < 0 || d > 6)
+    ) {
+      throw { status: 400, message: "Invalid repeat.weekdays" };
+    }
+  }
+  if (freq === "monthly" && day_of_month !== undefined) {
+    if (!Number.isInteger(day_of_month) || day_of_month < 1 || day_of_month > 31) {
+      throw { status: 400, message: "Invalid repeat.day_of_month" };
+    }
   }
 
   const dates = [];
-  const cursor = new Date(start);
-  while (cursor <= end) {
-    if (!allowedWeekdays || allowedWeekdays.has(cursor.getUTCDay())) {
-      dates.push(cursor.toISOString().slice(0, 10));
+
+  if (freq === "daily") {
+    let cursor = start;
+    while (untilDate ? cursor <= untilDate : dates.length < count) {
+      dates.push(toDateStr(cursor));
       if (dates.length > MAX_REPEAT_OCCURRENCES) {
         throw {
           status: 400,
           message: `Too many occurrences (max ${MAX_REPEAT_OCCURRENCES})`,
         };
       }
+      cursor = addUTCDays(cursor, step);
     }
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  } else if (freq === "weekly") {
+    const allowedWeekdays =
+      Array.isArray(weekdays) && weekdays.length > 0
+        ? new Set(weekdays)
+        : new Set([start.getUTCDay()]);
+    // Anchor the every-N-weeks cadence to the Sunday on/before `start`.
+    const weekAnchor = addUTCDays(start, -start.getUTCDay());
+    const scanLimit = addUTCDays(start, 366 * 5);
+    let cursor = start;
+    while (untilDate ? cursor <= untilDate : dates.length < count) {
+      if (cursor > scanLimit) {
+        throw { status: 400, message: "repeat.end is unreachable" };
+      }
+      const weeksSinceAnchor = Math.floor(
+        (cursor.getTime() - weekAnchor.getTime()) / (7 * 86400000)
+      );
+      if (allowedWeekdays.has(cursor.getUTCDay()) && weeksSinceAnchor % step === 0) {
+        dates.push(toDateStr(cursor));
+        if (dates.length > MAX_REPEAT_OCCURRENCES) {
+          throw {
+            status: 400,
+            message: `Too many occurrences (max ${MAX_REPEAT_OCCURRENCES})`,
+          };
+        }
+        if (count !== null && dates.length >= count) break;
+      }
+      cursor = addUTCDays(cursor, 1);
+    }
+  } else if (freq === "monthly") {
+    const dom =
+      Number.isInteger(day_of_month) && day_of_month >= 1 && day_of_month <= 31
+        ? day_of_month
+        : start.getUTCDate();
+    let monthCursor = new Date(
+      Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1)
+    );
+    const scanLimitMonths = 12 * 10;
+    let monthsScanned = 0;
+    while (true) {
+      if (monthsScanned++ > scanLimitMonths) {
+        throw { status: 400, message: "repeat.end is unreachable" };
+      }
+      const daysInMonth = new Date(
+        Date.UTC(monthCursor.getUTCFullYear(), monthCursor.getUTCMonth() + 1, 0)
+      ).getUTCDate();
+      if (dom <= daysInMonth) {
+        const candidate = new Date(
+          Date.UTC(monthCursor.getUTCFullYear(), monthCursor.getUTCMonth(), dom)
+        );
+        if (candidate >= start) {
+          if (untilDate && candidate > untilDate) break;
+          dates.push(toDateStr(candidate));
+          if (dates.length > MAX_REPEAT_OCCURRENCES) {
+            throw {
+              status: 400,
+              message: `Too many occurrences (max ${MAX_REPEAT_OCCURRENCES})`,
+            };
+          }
+          if (count !== null && dates.length >= count) break;
+        }
+      }
+      monthCursor = addUTCMonths(monthCursor, step);
+    }
   }
+
+  if (dates.length === 0) {
+    throw { status: 400, message: "repeat produced no occurrences" };
+  }
+
   return dates;
 }
 
@@ -716,6 +836,7 @@ router.post(
     }
 
     let dates = [item_date];
+    let recurrenceId = null;
     if (repeat) {
       try {
         dates = resolveOccurrenceDates(item_date, repeat);
@@ -725,6 +846,7 @@ router.post(
         }
         throw err;
       }
+      recurrenceId = crypto.randomUUID();
     }
 
     const client = await pool.connect();
@@ -735,8 +857,8 @@ router.post(
         const { rows } = await client.query(
           `INSERT INTO nk_event_items
              (event_id, item_type, title, item_date, start_time, end_time, notes,
-              training_module_id, kata_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              training_module_id, kata_id, recurrence_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            RETURNING ${ITEM_FIELDS}`,
           [
             req.params.id,
@@ -748,6 +870,7 @@ router.post(
             notes,
             training_module_id ?? null,
             kata_id ?? null,
+            recurrenceId,
           ]
         );
         items.push(rows[0]);
@@ -990,6 +1113,39 @@ router.patch(
     }
 
     res.json({ status });
+  })
+);
+
+// Deletes every item sharing this item's recurrence_id (i.e. the whole
+// series it was generated as part of), not just this one occurrence.
+// Registered ahead of the plain single-item delete below since it's a
+// more specific path (an extra "series" segment) - no route-shadowing risk.
+router.delete(
+  "/:id/items/:itemId/series",
+  asyncHandler(async (req, res) => {
+    if (!(await isEventEditor(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT recurrence_id FROM nk_event_items WHERE id = $1 AND event_id = $2`,
+      [req.params.itemId, req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: { message: "Item not found" } });
+    }
+    const recurrenceId = rows[0].recurrence_id;
+    if (!recurrenceId) {
+      return res
+        .status(400)
+        .json({ error: { message: "This item is not part of a recurring series" } });
+    }
+
+    const { rows: deleted } = await pool.query(
+      `DELETE FROM nk_event_items WHERE event_id = $1 AND recurrence_id = $2 RETURNING id`,
+      [req.params.id, recurrenceId]
+    );
+    res.json({ deleted_ids: deleted.map((r) => r.id) });
   })
 );
 

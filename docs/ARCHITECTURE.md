@@ -274,12 +274,35 @@ coach-run attendance) — this is personal athlete itinerary planning.
   objects, since the event-detail endpoints don't recompute this
   list-only rollup field and a plain replace would blank it out after
   any unrelated edit made from the drawer.
-- **Recurring items**: `POST /api/events/:id/items` accepts an optional
-  `repeat: {freq: 'daily'|'weekly', until, weekdays?}`. The server
-  expands this into one independent `nk_event_items` row per occurrence
-  date (capped at 60) at creation time — there's no ongoing
-  series/recurrence-rule link, so each generated item is thereafter
-  edited/deleted on its own, same as a manually-created one.
+- **Recurring items**: available on every item type (training,
+  competition, kata_performance, rest, etc — the form and endpoint never
+  special-case `item_type`). `POST /api/events/:id/items` accepts an
+  optional `repeat`:
+  ```
+  {
+    freq: 'daily' | 'weekly' | 'monthly',
+    interval?: number,       // "every N days/weeks/months", default 1
+    weekdays?: number[],     // 0-6, weekly only; defaults to item_date's weekday
+    day_of_month?: number,   // 1-31, monthly only; defaults to item_date's day
+    end: { type: 'until', date } | { type: 'count', count },
+  }
+  ```
+  `resolveOccurrenceDates` (`events.js`) expands this into one
+  independent `nk_event_items` row per occurrence date (capped at 60).
+  Weekly walks day-by-day, filtering to the selected weekdays and to
+  weeks that are a multiple of `interval` weeks from the start date (so
+  "every 2 weeks on Mon/Wed" lands correctly). Monthly walks month-by-
+  month at `day_of_month`, silently skipping months too short for that
+  day (e.g. day 31 in April) rather than erroring or shifting the date.
+  The end condition is either a hard `until` date or a fixed `count` of
+  occurrences — exactly one of the two, not both. Every item generated
+  from one `repeat` request shares a server-generated `recurrence_id`
+  (UUID, `nk_event_items.recurrence_id`, null for manually-created
+  items) so they can later be identified/deleted as a series — there's
+  otherwise no ongoing series/recurrence-rule link, so each occurrence
+  is independently edited or deleted like a manually-created item (this
+  is how "move this one occurrence" and "delete just this occurrence"
+  work with no special-casing).
 - **Duplicating/repeating an existing item**: an already-created
   itinerary item's expanded edit view has a "Duplicate / repeat" button
   (`duplicateItem` in `ItemsSection`, `Schedule.tsx`) that copies its
@@ -293,6 +316,16 @@ coach-run attendance) — this is personal athlete itinerary planning.
   series after the fact — there's no separate "make recurring" endpoint,
   since duplicate + repeat covers both asks with the add-item form's
   existing machinery.
+- **Deleting a series**: `DELETE /api/events/:id/items/:itemId/series`
+  looks up that item's `recurrence_id` and deletes every item sharing
+  it (400 if the item isn't part of a series). In the item's expanded
+  edit view, a "Delete series" button (`DeleteButton` with
+  `label="Delete series"`, alongside the ordinary per-item delete
+  relabeled `label="Delete this occurrence"` when the item has a
+  `recurrence_id`) only renders when 2+ items still share that id —
+  `DeleteButton` (`ui.tsx`) grew an optional `label` prop for this, so
+  the two adjacent delete buttons read distinctly instead of both
+  showing the default "🗑 Delete".
 - **Date/time field layout**: on both event and itinerary-item forms,
   a date field and its associated time field are always placed in a
   `grid grid-cols-2` row together (Start date next to Start time, End
