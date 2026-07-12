@@ -252,6 +252,8 @@ function minutesToTime(mins: number) {
 const DAY_START_HOUR = 6;
 const DAY_END_HOUR = 22;
 const HOUR_HEIGHT = 56;
+const LONG_PRESS_MS = 350;
+const MOVE_CANCEL_PX = 10;
 const GRID_HOURS = Array.from(
   { length: DAY_END_HOUR - DAY_START_HOUR + 1 },
   (_, i) => DAY_START_HOUR + i
@@ -1314,6 +1316,8 @@ function DayView({
 }) {
   const gridRef = useRef<HTMLDivElement>(null);
   const justDraggedRef = useRef(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressStartRef = useRef<{ x: number; y: number } | null>(null);
   const [drag, setDrag] = useState<{
     id: number;
     pointerId: number;
@@ -1344,28 +1348,59 @@ function DayView({
   const gridHeight = (DAY_END_HOUR - DAY_START_HOUR + 1) * HOUR_HEIGHT;
   const minutesPerPixel = 60 / HOUR_HEIGHT;
 
+  function clearLongPressTimer() {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
+  // Dragging only arms after a long press, so a short press-and-swipe (e.g.
+  // scrolling past a card) never moves it — matches the mobile "long-press
+  // to reorder" pattern instead of activating drag on any touch.
   function handlePointerDown(e: ReactPointerEvent, event: Event) {
-    const startMin = timeToMinutes(event.start_time)!;
-    const endMin = timeToMinutes(event.end_time)!;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    setDrag({
-      id: event.id,
-      pointerId: e.pointerId,
-      startY: e.clientY,
-      origStartMin: startMin,
-      origEndMin: endMin,
-      offsetMin: 0,
-    });
+    pressStartRef.current = { x: e.clientX, y: e.clientY };
+    const pointerId = e.pointerId;
+    const clientY = e.clientY;
+    clearLongPressTimer();
+    longPressTimerRef.current = setTimeout(() => {
+      const startMin = timeToMinutes(event.start_time)!;
+      const endMin = timeToMinutes(event.end_time)!;
+      setDrag({
+        id: event.id,
+        pointerId,
+        startY: clientY,
+        origStartMin: startMin,
+        origEndMin: endMin,
+        offsetMin: 0,
+      });
+    }, LONG_PRESS_MS);
   }
 
   function handlePointerMove(e: ReactPointerEvent) {
-    if (!drag || e.pointerId !== drag.pointerId) return;
+    if (!drag) {
+      // Not armed yet: moving too far before the long-press fires means
+      // this is a scroll/flick, not a drag intent - cancel the pending arm.
+      if (pressStartRef.current) {
+        const dx = e.clientX - pressStartRef.current.x;
+        const dy = e.clientY - pressStartRef.current.y;
+        if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) {
+          clearLongPressTimer();
+          pressStartRef.current = null;
+        }
+      }
+      return;
+    }
+    if (e.pointerId !== drag.pointerId) return;
     const deltaY = e.clientY - drag.startY;
     const rawOffset = Math.round((deltaY * minutesPerPixel) / 15) * 15;
     setDrag({ ...drag, offsetMin: rawOffset });
   }
 
   function handlePointerUp(e: ReactPointerEvent, event: Event) {
+    clearLongPressTimer();
+    pressStartRef.current = null;
     if (!drag || e.pointerId !== drag.pointerId) return;
     const duration = drag.origEndMin - drag.origStartMin;
     let newStart = drag.origStartMin + drag.offsetMin;
@@ -1403,7 +1438,7 @@ function DayView({
       )}
 
       <p className="text-xs text-stone-500">
-        Drag a timed event up or down to reschedule it.
+        Press and hold a timed event, then drag it up or down to reschedule.
       </p>
 
       <div className="flex max-h-[60vh] overflow-auto rounded-lg">
@@ -1447,6 +1482,7 @@ function DayView({
                 onPointerDown={(ev) => handlePointerDown(ev, e)}
                 onPointerMove={handlePointerMove}
                 onPointerUp={(ev) => handlePointerUp(ev, e)}
+                onPointerCancel={(ev) => handlePointerUp(ev, e)}
                 onClick={() => {
                   if (justDraggedRef.current) {
                     justDraggedRef.current = false;
