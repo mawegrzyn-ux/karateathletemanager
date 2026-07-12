@@ -18,6 +18,7 @@ const EVENT_TYPES = [
 const ITEM_TYPES = [...EVENT_TYPES, "rest", "other", "kata_performance"];
 const REPEAT_FREQS = ["daily", "weekly"];
 const MAX_REPEAT_OCCURRENCES = 60;
+const STATUS_VALUES = ["pending", "completed", "failed"];
 
 const EVENT_FIELDS = `id, title, event_type, start_date, end_date, start_time, end_time, location, notes, training_module_id, created_at`;
 const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id`;
@@ -104,14 +105,14 @@ async function athleteVisibility(user, eventAthletes) {
   return { visible, editableIds };
 }
 
-// Attaches each item's per-athlete completed/notes to it, scoped to what
+// Attaches each item's per-athlete status/notes to it, scoped to what
 // `user` is allowed to see (see `athleteVisibility`).
 async function attachAthleteStatus(user, items, eventAthletes) {
   const itemIds = items.map((i) => i.id);
   const statusByItem = new Map();
   if (itemIds.length > 0) {
     const { rows } = await pool.query(
-      `SELECT item_id, athlete_id, completed, notes
+      `SELECT item_id, athlete_id, status, notes
        FROM nk_event_item_athlete_status
        WHERE item_id = ANY($1::int[])`,
       [itemIds]
@@ -132,7 +133,7 @@ async function attachAthleteStatus(user, items, eventAthletes) {
         const row = byAthlete?.get(a.id);
         return {
           athlete_id: a.id,
-          completed: row?.completed ?? false,
+          status: row?.status ?? "pending",
           notes: row?.notes ?? null,
           can_edit: editableIds.has(a.id),
         };
@@ -143,10 +144,10 @@ async function attachAthleteStatus(user, items, eventAthletes) {
 
 // Same idea as `attachAthleteStatus` but for the event itself, since a
 // simple single-block event (no itemized itinerary) still needs a
-// per-athlete completed/notes record of its own.
+// per-athlete status/notes record of its own.
 async function attachEventAthleteStatus(user, event, eventAthletes) {
   const { rows } = await pool.query(
-    `SELECT athlete_id, completed, notes
+    `SELECT athlete_id, status, notes
      FROM nk_event_athlete_status
      WHERE event_id = $1`,
     [event.id]
@@ -161,12 +162,60 @@ async function attachEventAthleteStatus(user, event, eventAthletes) {
       const row = byAthlete.get(a.id);
       return {
         athlete_id: a.id,
-        completed: row?.completed ?? false,
+        status: row?.status ?? "pending",
         notes: row?.notes ?? null,
         can_edit: editableIds.has(a.id),
       };
     }),
   };
+}
+
+// Computes, for an athlete viewer only, a single rolled-up status per event
+// in a list: if the event has itemized itinerary items, any failed item
+// makes the whole event "failed", all-completed makes it "completed",
+// otherwise "pending"; with no items, the event's own status is used
+// directly. Used to drive the swipe-to-complete/fail gesture and status
+// badge on the Schedule List view's event rows. Returns `my_status: null`
+// for non-athlete viewers (coach/admin), since a bulk swipe on someone
+// else's behalf isn't a supported gesture.
+async function attachMyEventStatus(user, events) {
+  if (user.role !== "athlete" || !user.athlete_id || events.length === 0) {
+    return events.map((e) => ({ ...e, my_status: null }));
+  }
+
+  const eventIds = events.map((e) => e.id);
+  const { rows: itemAgg } = await pool.query(
+    `SELECT i.event_id,
+            COUNT(*)::int AS item_count,
+            COUNT(*) FILTER (WHERE COALESCE(s.status, 'pending') = 'completed')::int AS completed_count,
+            COUNT(*) FILTER (WHERE COALESCE(s.status, 'pending') = 'failed')::int AS failed_count
+     FROM nk_event_items i
+     LEFT JOIN nk_event_item_athlete_status s
+       ON s.item_id = i.id AND s.athlete_id = $1
+     WHERE i.event_id = ANY($2::int[])
+     GROUP BY i.event_id`,
+    [user.athlete_id, eventIds]
+  );
+  const itemAggByEvent = new Map(itemAgg.map((r) => [r.event_id, r]));
+
+  const { rows: eventStatusRows } = await pool.query(
+    `SELECT event_id, status FROM nk_event_athlete_status
+     WHERE athlete_id = $1 AND event_id = ANY($2::int[])`,
+    [user.athlete_id, eventIds]
+  );
+  const eventStatusByEvent = new Map(eventStatusRows.map((r) => [r.event_id, r.status]));
+
+  return events.map((e) => {
+    const agg = itemAggByEvent.get(e.id);
+    let my_status = "pending";
+    if (agg && agg.item_count > 0) {
+      if (agg.failed_count > 0) my_status = "failed";
+      else if (agg.completed_count === agg.item_count) my_status = "completed";
+    } else {
+      my_status = eventStatusByEvent.get(e.id) ?? "pending";
+    }
+    return { ...e, my_status };
+  });
 }
 
 // Resolves which athlete_ids the caller is allowed to attach, or throws a
@@ -233,7 +282,8 @@ router.get(
     }
 
     const { rows } = await pool.query(query, params);
-    res.json({ events: rows });
+    const events = await attachMyEventStatus(req.user, rows);
+    res.json({ events });
   })
 );
 
@@ -415,7 +465,16 @@ router.patch(
     if (rows.length === 0) {
       return res.status(404).json({ error: { message: "Event not found" } });
     }
-    res.json({ event: rows[0] });
+
+    const { rows: athletes } = await pool.query(
+      `SELECT a.id, a.first_name, a.last_name
+       FROM nk_event_athletes ea
+       JOIN nk_athletes a ON a.id = ea.athlete_id
+       WHERE ea.event_id = $1`,
+      [req.params.id]
+    );
+    const event = await attachEventAthleteStatus(req.user, rows[0], athletes);
+    res.json({ event });
   })
 );
 
@@ -513,14 +572,12 @@ router.patch(
     }
 
     const body = req.body ?? {};
-    const { completed, notes } = body;
-    if (completed !== undefined && typeof completed !== "boolean") {
-      return res
-        .status(400)
-        .json({ error: { message: "completed must be a boolean" } });
+    const { status, notes } = body;
+    if (status !== undefined && !STATUS_VALUES.includes(status)) {
+      return res.status(400).json({ error: { message: "Invalid status" } });
     }
 
-    const fields = { completed, notes };
+    const fields = { status, notes };
     const setClauses = [];
     const values = [];
     for (const [key, value] of Object.entries(fields)) {
@@ -544,7 +601,7 @@ router.patch(
       `UPDATE nk_event_athlete_status
        SET ${setClauses.join(", ")}, updated_at = NOW()
        WHERE event_id = $${values.length - 1} AND athlete_id = $${values.length}
-       RETURNING event_id, athlete_id, completed, notes`,
+       RETURNING event_id, athlete_id, status, notes`,
       values
     );
 
@@ -790,14 +847,12 @@ router.patch(
     }
 
     const body = req.body ?? {};
-    const { completed, notes } = body;
-    if (completed !== undefined && typeof completed !== "boolean") {
-      return res
-        .status(400)
-        .json({ error: { message: "completed must be a boolean" } });
+    const { status, notes } = body;
+    if (status !== undefined && !STATUS_VALUES.includes(status)) {
+      return res.status(400).json({ error: { message: "Invalid status" } });
     }
 
-    const fields = { completed, notes };
+    const fields = { status, notes };
     const setClauses = [];
     const values = [];
     for (const [key, value] of Object.entries(fields)) {
@@ -821,11 +876,74 @@ router.patch(
       `UPDATE nk_event_item_athlete_status
        SET ${setClauses.join(", ")}, updated_at = NOW()
        WHERE item_id = $${values.length - 1} AND athlete_id = $${values.length}
-       RETURNING item_id, athlete_id, completed, notes`,
+       RETURNING item_id, athlete_id, status, notes`,
       values
     );
 
     res.json({ status: { ...rows[0], can_edit: true } });
+  })
+);
+
+router.patch(
+  "/:id/status",
+  asyncHandler(async (req, res) => {
+    if (!(await isEventEditor(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+    if (req.user.role !== "athlete" || !req.user.athlete_id) {
+      return res.status(403).json({
+        error: { message: "Only an assigned athlete can bulk-update their own status" },
+      });
+    }
+
+    const { status } = req.body ?? {};
+    if (!STATUS_VALUES.includes(status)) {
+      return res.status(400).json({ error: { message: "Invalid status" } });
+    }
+
+    const athleteId = req.user.athlete_id;
+    const { rows: items } = await pool.query(
+      `SELECT id FROM nk_event_items WHERE event_id = $1`,
+      [req.params.id]
+    );
+
+    if (items.length === 0) {
+      await pool.query(
+        `INSERT INTO nk_event_athlete_status (event_id, athlete_id)
+         VALUES ($1, $2) ON CONFLICT (event_id, athlete_id) DO NOTHING`,
+        [req.params.id, athleteId]
+      );
+      await pool.query(
+        `UPDATE nk_event_athlete_status SET status = $1, updated_at = NOW()
+         WHERE event_id = $2 AND athlete_id = $3`,
+        [status, req.params.id, athleteId]
+      );
+    } else {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        for (const item of items) {
+          await client.query(
+            `INSERT INTO nk_event_item_athlete_status (item_id, athlete_id)
+             VALUES ($1, $2) ON CONFLICT (item_id, athlete_id) DO NOTHING`,
+            [item.id, athleteId]
+          );
+          await client.query(
+            `UPDATE nk_event_item_athlete_status SET status = $1, updated_at = NOW()
+             WHERE item_id = $2 AND athlete_id = $3`,
+            [status, item.id, athleteId]
+          );
+        }
+        await client.query("COMMIT");
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
+    res.json({ status });
   })
 );
 
