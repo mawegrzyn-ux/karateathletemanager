@@ -594,40 +594,48 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               ))}
             </select>
           </Field>
-          <Field label="Start date">
-            <input
-              required
-              type="date"
-              value={form.start_date}
-              onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          <Field label="End date">
-            <input
-              required
-              type="date"
-              value={form.end_date}
-              onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          <Field label="Start time">
-            <input
-              type="time"
-              value={form.start_time}
-              onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          <Field label="End time">
-            <input
-              type="time"
-              value={form.end_time}
-              onChange={(e) => setForm({ ...form, end_time: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Start date">
+              <input
+                required
+                type="date"
+                value={form.start_date}
+                onChange={(e) =>
+                  setForm({ ...form, start_date: e.target.value })
+                }
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Start time">
+              <input
+                type="time"
+                value={form.start_time}
+                onChange={(e) =>
+                  setForm({ ...form, start_time: e.target.value })
+                }
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="End date">
+              <input
+                required
+                type="date"
+                value={form.end_date}
+                onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="End time">
+              <input
+                type="time"
+                value={form.end_time}
+                onChange={(e) => setForm({ ...form, end_time: e.target.value })}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+          </div>
           <Field label="Location">
             <input
               value={form.location}
@@ -819,40 +827,46 @@ function EventDetail({
               ))}
             </select>
           </Field>
-          <Field label="Start date">
-            <input
-              type="date"
-              defaultValue={toDateInput(event.start_date)}
-              onChange={(e) => updateEvent({ start_date: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          <Field label="End date">
-            <input
-              type="date"
-              defaultValue={toDateInput(event.end_date)}
-              onChange={(e) => updateEvent({ end_date: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          <Field label="Start time">
-            <input
-              type="time"
-              defaultValue={toTimeInput(event.start_time)}
-              onChange={(e) =>
-                updateEvent({ start_time: e.target.value || null })
-              }
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          <Field label="End time">
-            <input
-              type="time"
-              defaultValue={toTimeInput(event.end_time)}
-              onChange={(e) => updateEvent({ end_time: e.target.value || null })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Start date">
+              <input
+                type="date"
+                defaultValue={toDateInput(event.start_date)}
+                onChange={(e) => updateEvent({ start_date: e.target.value })}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Start time">
+              <input
+                type="time"
+                defaultValue={toTimeInput(event.start_time)}
+                onChange={(e) =>
+                  updateEvent({ start_time: e.target.value || null })
+                }
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="End date">
+              <input
+                type="date"
+                defaultValue={toDateInput(event.end_date)}
+                onChange={(e) => updateEvent({ end_date: e.target.value })}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="End time">
+              <input
+                type="time"
+                defaultValue={toTimeInput(event.end_time)}
+                onChange={(e) =>
+                  updateEvent({ end_time: e.target.value || null })
+                }
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+          </div>
           <Field label="Location">
             <input
               defaultValue={event.location ?? ""}
@@ -1818,6 +1832,24 @@ function ItemsSection({
     setExpandedId(null);
   }
 
+  function duplicateItem(item: EventItem) {
+    setAddForm({
+      item_type: item.item_type,
+      title: item.title,
+      item_date: toDateInput(item.item_date),
+      start_time: toTimeInput(item.start_time),
+      end_time: toTimeInput(item.end_time),
+      notes: item.notes ?? "",
+      training_module_id: item.training_module_id,
+      kata_id: item.kata_id,
+      repeat_freq: "none",
+      repeat_until: "",
+      repeat_weekdays: [],
+    });
+    setExpandedId(null);
+    setAdding(true);
+  }
+
   return (
     <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
       <span className="text-xs font-medium text-stone-600">
@@ -1989,29 +2021,31 @@ function ItemsSection({
                       ))}
                     </select>
                   </Field>
-                  <Field label="Date">
-                    <input
-                      type="date"
-                      defaultValue={toDateInput(item.item_date)}
-                      onChange={(e) =>
-                        updateItem(item.id, { item_date: e.target.value })
-                      }
-                      className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                    />
-                  </Field>
-                  <Field label="Start time">
-                    <input
-                      required
-                      type="time"
-                      defaultValue={toTimeInput(item.start_time)}
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          updateItem(item.id, { start_time: e.target.value });
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Date">
+                      <input
+                        type="date"
+                        defaultValue={toDateInput(item.item_date)}
+                        onChange={(e) =>
+                          updateItem(item.id, { item_date: e.target.value })
                         }
-                      }}
-                      className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                    />
-                  </Field>
+                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                      />
+                    </Field>
+                    <Field label="Start time">
+                      <input
+                        required
+                        type="time"
+                        defaultValue={toTimeInput(item.start_time)}
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            updateItem(item.id, { start_time: e.target.value });
+                          }
+                        }}
+                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                      />
+                    </Field>
+                  </div>
                   <Field label="End time">
                     <input
                       required
@@ -2063,6 +2097,15 @@ function ItemsSection({
                       }
                     />
                   )}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => duplicateItem(item)}
+                      className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
+                    >
+                      Duplicate / repeat
+                    </button>
+                  </div>
                   <DeleteButton
                     onClick={() => deleteItem(item.id)}
                     itemLabel={item.title}
@@ -2117,28 +2160,30 @@ function ItemsSection({
               ))}
             </select>
           </Field>
-          <Field label="Date">
-            <input
-              required
-              type="date"
-              value={addForm.item_date}
-              onChange={(e) =>
-                setAddForm({ ...addForm, item_date: e.target.value })
-              }
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          <Field label="Start time">
-            <input
-              required
-              type="time"
-              value={addForm.start_time}
-              onChange={(e) =>
-                setAddForm({ ...addForm, start_time: e.target.value })
-              }
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Date">
+              <input
+                required
+                type="date"
+                value={addForm.item_date}
+                onChange={(e) =>
+                  setAddForm({ ...addForm, item_date: e.target.value })
+                }
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Start time">
+              <input
+                required
+                type="time"
+                value={addForm.start_time}
+                onChange={(e) =>
+                  setAddForm({ ...addForm, start_time: e.target.value })
+                }
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+          </div>
           <Field label="End time">
             <input
               required
