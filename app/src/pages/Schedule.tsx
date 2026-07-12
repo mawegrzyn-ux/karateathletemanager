@@ -29,8 +29,11 @@ interface Event {
   start_time: string | null;
   end_time: string | null;
   location: string | null;
+  venue_id: number | null;
+  kata_id: number | null;
   notes: string | null;
   training_module_id: number | null;
+  recurrence_id: string | null;
   athlete_status: AthleteStatus[];
   my_status: CompletionStatus | null;
 }
@@ -70,8 +73,27 @@ interface Kata {
   wkf_number: number | null;
 }
 
+interface Venue {
+  id: number;
+  name: string;
+  address: string | null;
+  club_id: number | null;
+  club_name: string | null;
+}
+
+interface AthleteGroup {
+  id: number;
+  name: string;
+  club_id: number;
+  club_name: string;
+  athlete_ids: number[];
+}
+
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+// Events and itinerary items share the exact same type set - a lone event
+// can be a rest day, a one-off note, or a kata performance just like an
+// itinerary item can, and vice versa.
 const EVENT_TYPES = [
   "competition",
   "squad_session",
@@ -80,8 +102,12 @@ const EVENT_TYPES = [
   "time_off",
   "seminar",
   "training_camp",
+  "grading",
+  "rest",
+  "other",
+  "kata_performance",
 ];
-const ITEM_TYPES = [...EVENT_TYPES, "rest", "other", "kata_performance"];
+const ITEM_TYPES = EVENT_TYPES;
 
 const TYPE_LABELS: Record<string, string> = {
   competition: "Competition",
@@ -91,6 +117,7 @@ const TYPE_LABELS: Record<string, string> = {
   time_off: "Time off",
   seminar: "Seminar",
   training_camp: "Training camp",
+  grading: "Grading",
   rest: "Rest",
   other: "Other",
   kata_performance: "Kata performance",
@@ -104,6 +131,7 @@ const TYPE_ICONS: Record<string, string> = {
   time_off: "🌴",
   seminar: "🎓",
   training_camp: "⛺",
+  grading: "🎖️",
   rest: "😴",
   other: "📌",
   kata_performance: "🥋",
@@ -117,8 +145,17 @@ const EMPTY_FORM = {
   start_time: "",
   end_time: "",
   location: "",
+  venue_id: null as number | null,
   notes: "",
   training_module_id: null as number | null,
+  kata_id: null as number | null,
+  repeat_freq: "none",
+  repeat_interval: 1,
+  repeat_weekdays: [] as number[],
+  repeat_day_of_month: null as number | null,
+  repeat_end_type: "until",
+  repeat_until: "",
+  repeat_count: 4,
 };
 
 const EMPTY_ITEM_FORM = {
@@ -296,6 +333,9 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [athletes, setAthletes] = useState<Person[]>([]);
   const [modules, setModules] = useState<TrainingModule[]>([]);
   const [katas, setKatas] = useState<Kata[]>([]);
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [squads, setSquads] = useState<AthleteGroup[]>([]);
+  const [groups, setGroups] = useState<AthleteGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [drawer, setDrawer] = useState<"closed" | "create" | Event>("closed");
@@ -356,6 +396,22 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       .get<{ katas: Kata[] }>("/katas")
       .then((res) => setKatas(res.katas))
       .catch(() => setKatas([]));
+
+    api
+      .get<{ venues: Venue[] }>("/venues")
+      .then((res) => setVenues(res.venues))
+      .catch(() => setVenues([]));
+
+    if (canPickAthletes) {
+      api
+        .get<{ squads: AthleteGroup[] }>("/squads")
+        .then((res) => setSquads(res.squads))
+        .catch(() => setSquads([]));
+      api
+        .get<{ groups: AthleteGroup[] }>("/groups")
+        .then((res) => setGroups(res.groups))
+        .catch(() => setGroups([]));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }
 
@@ -368,21 +424,83 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   async function createEvent(e: FormEvent) {
     e.preventDefault();
     if (!form.title.trim() || !form.start_date || !form.end_date) return;
-    const { event } = await api.post<{ event: Event }>("/events", {
+
+    const payload: Record<string, unknown> = {
       ...form,
       start_time: form.start_time || null,
       end_time: form.end_time || null,
       training_module_id:
         form.event_type === "training" ? form.training_module_id : null,
+      kata_id: form.event_type === "kata_performance" ? form.kata_id : null,
       athlete_ids: canPickAthletes ? formAthleteIds : undefined,
-    });
-    setEvents((prev) => (prev ? [...prev, event] : [event]));
+    };
+    if (form.repeat_freq !== "none") {
+      payload.repeat = {
+        freq: form.repeat_freq,
+        interval: form.repeat_interval || 1,
+        weekdays:
+          form.repeat_freq === "weekly"
+            ? form.repeat_weekdays.length > 0
+              ? form.repeat_weekdays
+              : [weekdayOf(form.start_date)]
+            : undefined,
+        day_of_month:
+          form.repeat_freq === "monthly"
+            ? form.repeat_day_of_month || dayOfMonthOf(form.start_date)
+            : undefined,
+        end:
+          form.repeat_end_type === "count"
+            ? { type: "count", count: form.repeat_count || 1 }
+            : { type: "until", date: form.repeat_until },
+      };
+    }
+
+    const res = await api.post<{ event?: Event; events?: Event[] }>(
+      "/events",
+      payload
+    );
+    const created = res.events ?? (res.event ? [res.event] : []);
+    setEvents((prev) => (prev ? [...prev, ...created] : created));
     setDrawer("closed");
+  }
+
+  function duplicateEvent(event: Event, athleteIds: number[]) {
+    setForm({
+      title: event.title,
+      event_type: event.event_type,
+      start_date: toDateInput(event.start_date),
+      end_date: toDateInput(event.end_date),
+      start_time: toTimeInput(event.start_time),
+      end_time: toTimeInput(event.end_time),
+      location: event.location ?? "",
+      venue_id: event.venue_id,
+      notes: event.notes ?? "",
+      training_module_id: event.training_module_id,
+      kata_id: event.kata_id,
+      repeat_freq: "none",
+      repeat_interval: 1,
+      repeat_weekdays: [],
+      repeat_day_of_month: null,
+      repeat_end_type: "until",
+      repeat_until: "",
+      repeat_count: 4,
+    });
+    setFormAthleteIds(athleteIds);
+    setDrawer("create");
   }
 
   async function deleteEvent(id: number) {
     await api.del(`/events/${id}`);
     setEvents((prev) => (prev ? prev.filter((e) => e.id !== id) : prev));
+    setDrawer("closed");
+  }
+
+  async function deleteEventSeries(event: Event) {
+    const { deleted_ids } = await api.del<{ deleted_ids: number[] }>(
+      `/events/${event.id}/series`
+    );
+    const deletedSet = new Set(deleted_ids);
+    setEvents((prev) => (prev ? prev.filter((e) => !deletedSet.has(e.id)) : prev));
     setDrawer("closed");
   }
 
@@ -648,6 +766,13 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
+          <SingleSelectPicker
+            label="Venue"
+            placeholder="Search venues..."
+            options={venues.map((v) => ({ id: v.id, label: venueLabel(v) }))}
+            selectedId={form.venue_id}
+            onSelect={(id) => setForm({ ...form, venue_id: id })}
+          />
           <Field label="Notes">
             <textarea
               value={form.notes}
@@ -665,16 +790,194 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               onSelect={(id) => setForm({ ...form, training_module_id: id })}
             />
           )}
-
-          {canPickAthletes && (
-            <AthletePicker
-              ids={formAthleteIds}
-              options={athletes}
-              onAdd={(id) => setFormAthleteIds((prev) => [...prev, id])}
-              onRemove={(id) =>
-                setFormAthleteIds((prev) => prev.filter((i) => i !== id))
+          {form.event_type === "kata_performance" && (
+            <SingleSelectPicker
+              label="Kata"
+              placeholder="Search katas..."
+              options={katas.map((k) => ({ id: k.id, label: kataLabel(k) }))}
+              selectedId={form.kata_id}
+              onSelect={(id) =>
+                setForm({
+                  ...form,
+                  kata_id: id,
+                  title: id ? katas.find((k) => k.id === id)?.name ?? form.title : form.title,
+                })
               }
             />
+          )}
+
+          <Field label="Repeats">
+            <select
+              value={form.repeat_freq}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  repeat_freq: e.target.value,
+                  repeat_weekdays: [],
+                  repeat_day_of_month: null,
+                })
+              }
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            >
+              <option value="none">Does not repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </Field>
+
+          {form.repeat_freq === "weekly" && (
+            <>
+              <Field label="Every">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={52}
+                    value={form.repeat_interval}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        repeat_interval: Number(e.target.value) || 1,
+                      })
+                    }
+                    className="min-h-[44px] w-20 rounded-xl border border-stone-300 px-3"
+                  />
+                  <span className="text-sm text-stone-600">week(s)</span>
+                </div>
+              </Field>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-stone-600">
+                  Repeat on
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {WEEKDAY_LABELS.map((label, day) => {
+                    const active =
+                      form.repeat_weekdays.length > 0
+                        ? form.repeat_weekdays.includes(day)
+                        : form.start_date && weekdayOf(form.start_date) === day;
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          const base =
+                            form.repeat_weekdays.length > 0
+                              ? form.repeat_weekdays
+                              : form.start_date
+                                ? [weekdayOf(form.start_date)]
+                                : [];
+                          const next = base.includes(day)
+                            ? base.filter((d) => d !== day)
+                            : [...base, day];
+                          setForm({ ...form, repeat_weekdays: next });
+                        }}
+                        className={`min-h-[36px] min-w-[44px] rounded-xl border px-2 text-sm ${
+                          active
+                            ? "border-green-200 bg-green-50 text-green-800"
+                            : "border-stone-300"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {form.repeat_freq === "monthly" && (
+            <Field label="On day of month">
+              <input
+                type="number"
+                min={1}
+                max={31}
+                placeholder={
+                  form.start_date ? String(dayOfMonthOf(form.start_date)) : "1"
+                }
+                value={form.repeat_day_of_month ?? ""}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    repeat_day_of_month: e.target.value
+                      ? Number(e.target.value)
+                      : null,
+                  })
+                }
+                className="min-h-[44px] w-20 rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+          )}
+
+          {form.repeat_freq !== "none" && (
+            <>
+              <Field label="Ends">
+                <select
+                  value={form.repeat_end_type}
+                  onChange={(e) =>
+                    setForm({ ...form, repeat_end_type: e.target.value })
+                  }
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                >
+                  <option value="until">On a date</option>
+                  <option value="count">After a number of times</option>
+                </select>
+              </Field>
+              {form.repeat_end_type === "until" ? (
+                <Field label="Repeat until">
+                  <input
+                    required
+                    type="date"
+                    value={form.repeat_until}
+                    onChange={(e) =>
+                      setForm({ ...form, repeat_until: e.target.value })
+                    }
+                    className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                  />
+                </Field>
+              ) : (
+                <Field label="Number of occurrences">
+                  <input
+                    required
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={form.repeat_count}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        repeat_count: Number(e.target.value) || 1,
+                      })
+                    }
+                    className="min-h-[44px] w-20 rounded-xl border border-stone-300 px-3"
+                  />
+                </Field>
+              )}
+            </>
+          )}
+
+          {canPickAthletes && (
+            <>
+              <GroupQuickAdd
+                squads={squads}
+                groups={groups}
+                onAddAthletes={(ids) =>
+                  setFormAthleteIds((prev) => [
+                    ...prev,
+                    ...ids.filter((id) => !prev.includes(id)),
+                  ])
+                }
+              />
+              <AthletePicker
+                ids={formAthleteIds}
+                options={athletes}
+                onAdd={(id) => setFormAthleteIds((prev) => [...prev, id])}
+                onRemove={(id) =>
+                  setFormAthleteIds((prev) => prev.filter((i) => i !== id))
+                }
+              />
+            </>
           )}
 
           <button
@@ -699,8 +1002,18 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             allAthletes={athletes}
             modules={modules}
             katas={katas}
+            venues={venues}
+            squads={squads}
+            groups={groups}
+            hasSeries={
+              editing.recurrence_id != null &&
+              events.filter((e) => e.recurrence_id === editing.recurrence_id)
+                .length > 1
+            }
             onUpdated={updateEventInList}
             onDeleted={() => deleteEvent(editing.id)}
+            onDeletedSeries={() => deleteEventSeries(editing)}
+            onDuplicate={(event, athleteIds) => duplicateEvent(event, athleteIds)}
           />
         )}
       </Drawer>
@@ -714,18 +1027,31 @@ function EventDetail({
   allAthletes,
   modules,
   katas,
+  venues,
+  squads,
+  groups,
+  hasSeries,
   onUpdated,
   onDeleted,
+  onDeletedSeries,
+  onDuplicate,
 }: {
   eventId: number;
   canPickAthletes: boolean;
   allAthletes: Person[];
   modules: TrainingModule[];
   katas: Kata[];
+  venues: Venue[];
+  squads: AthleteGroup[];
+  groups: AthleteGroup[];
+  hasSeries: boolean;
   onUpdated: (event: Event) => void;
   onDeleted: () => void;
+  onDeletedSeries: () => void;
+  onDuplicate: (event: Event, athleteIds: number[]) => void;
 }) {
   const api = useApi();
+  const { user } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [athleteIds, setAthleteIds] = useState<number[]>([]);
   const [items, setItems] = useState<EventItem[] | null>(null);
@@ -760,6 +1086,36 @@ function EventDetail({
     setAthleteIds(ids);
   }
 
+  // Recomputes the athlete-facing rollup status the same way the server's
+  // attachMyEventStatus does (any failed item -> failed; all items
+  // completed -> completed; no items -> the event's own direct status) and
+  // pushes it up via onUpdated, so the outer Schedule list's checkbox/badge
+  // for this event doesn't go stale after an item- or event-level status
+  // edit made here in the detail view.
+  function syncMyStatus(currentItems: EventItem[], currentEvent: Event) {
+    if (!user || user.role !== "athlete" || !user.athlete_id) return;
+    let my_status: CompletionStatus = "pending";
+    if (currentItems.length > 0) {
+      const statuses = currentItems.map(
+        (i) =>
+          i.athlete_status.find((s) => s.athlete_id === user.athlete_id)
+            ?.status ?? "pending"
+      );
+      if (statuses.some((s) => s === "failed")) my_status = "failed";
+      else if (statuses.every((s) => s === "completed")) my_status = "completed";
+    } else {
+      my_status =
+        currentEvent.athlete_status.find((s) => s.athlete_id === user.athlete_id)
+          ?.status ?? "pending";
+    }
+    onUpdated({ ...currentEvent, my_status });
+  }
+
+  function setItemsAndSync(nextItems: EventItem[]) {
+    setItems(nextItems);
+    if (event) syncMyStatus(nextItems, event);
+  }
+
   async function updateEventAthleteStatus(
     athleteId: number,
     patch: Record<string, unknown>
@@ -768,16 +1124,17 @@ function EventDetail({
       `/events/${eventId}/athletes/${athleteId}`,
       patch
     );
-    setEvent((prev) =>
-      prev
-        ? {
-            ...prev,
-            athlete_status: prev.athlete_status.map((s) =>
-              s.athlete_id === athleteId ? status : s
-            ),
-          }
-        : prev
-    );
+    setEvent((prev) => {
+      if (!prev) return prev;
+      const next = {
+        ...prev,
+        athlete_status: prev.athlete_status.map((s) =>
+          s.athlete_id === athleteId ? status : s
+        ),
+      };
+      syncMyStatus(items ?? [], next);
+      return next;
+    });
   }
 
   if (error) return <div className="text-red-700">{error}</div>;
@@ -791,6 +1148,10 @@ function EventDetail({
   const linkedModule =
     event.event_type === "training" && event.training_module_id
       ? modules.find((m) => m.id === event.training_module_id)
+      : undefined;
+  const linkedKata =
+    event.event_type === "kata_performance" && event.kata_id
+      ? katas.find((k) => k.id === event.kata_id)
       : undefined;
   const athleteNames = allAthletes.filter((a) => athleteIds.includes(a.id));
 
@@ -883,6 +1244,13 @@ function EventDetail({
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
+          <SingleSelectPicker
+            label="Venue"
+            placeholder="Search venues..."
+            options={venues.map((v) => ({ id: v.id, label: venueLabel(v) }))}
+            selectedId={event.venue_id}
+            onSelect={(id) => updateEvent({ venue_id: id })}
+          />
           <Field label="Notes">
             <textarea
               defaultValue={event.notes ?? ""}
@@ -904,17 +1272,64 @@ function EventDetail({
               onSelect={(id) => updateEvent({ training_module_id: id })}
             />
           )}
-
-          {canPickAthletes && (
-            <AthletePicker
-              ids={athleteIds}
-              options={allAthletes}
-              onAdd={(id) => setAthletes([...athleteIds, id])}
-              onRemove={(id) => setAthletes(athleteIds.filter((i) => i !== id))}
+          {event.event_type === "kata_performance" && (
+            <SingleSelectPicker
+              label="Kata"
+              placeholder="Search katas..."
+              options={katas.map((k) => ({ id: k.id, label: kataLabel(k) }))}
+              selectedId={event.kata_id}
+              onSelect={(id) =>
+                updateEvent({
+                  kata_id: id,
+                  ...(id ? { title: katas.find((k) => k.id === id)?.name } : {}),
+                })
+              }
             />
           )}
 
-          <DeleteButton onClick={onDeleted} itemLabel={event.title} />
+          {canPickAthletes && (
+            <>
+              <GroupQuickAdd
+                squads={squads}
+                groups={groups}
+                onAddAthletes={(ids) =>
+                  setAthletes([
+                    ...athleteIds,
+                    ...ids.filter((id) => !athleteIds.includes(id)),
+                  ])
+                }
+              />
+              <AthletePicker
+                ids={athleteIds}
+                options={allAthletes}
+                onAdd={(id) => setAthletes([...athleteIds, id])}
+                onRemove={(id) => setAthletes(athleteIds.filter((i) => i !== id))}
+              />
+            </>
+          )}
+
+          <button
+            type="button"
+            onClick={() => onDuplicate(event, athleteIds)}
+            className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700"
+          >
+            Duplicate / repeat
+          </button>
+
+          {hasSeries && (
+            <DeleteButton
+              onClick={onDeletedSeries}
+              label="Delete series"
+              itemLabel={`the whole "${event.title}" series`}
+            />
+          )}
+          <DeleteButton
+            onClick={onDeleted}
+            label={event.recurrence_id ? "Delete this occurrence" : "Delete"}
+            itemLabel={
+              event.recurrence_id ? `this occurrence of "${event.title}"` : event.title
+            }
+          />
         </>
       ) : (
         <>
@@ -929,12 +1344,28 @@ function EventDetail({
               {event.end_time ? `–${toTimeInput(event.end_time)}` : ""}
             </span>
           </div>
+          {event.venue_id != null &&
+            (() => {
+              const venue = venues.find((v) => v.id === event.venue_id);
+              return venue ? (
+                <p className="text-sm text-stone-600">
+                  📍 {venue.name}
+                  {venue.address ? ` – ${venue.address}` : ""}
+                </p>
+              ) : null;
+            })()}
           {event.location && (
-            <p className="text-sm text-stone-600">📍 {event.location}</p>
+            <p className="text-sm text-stone-600">
+              {event.venue_id != null ? "" : "📍 "}
+              {event.location}
+            </p>
           )}
           {event.notes && <p className="text-stone-700">{event.notes}</p>}
 
           {linkedModule && <TrainingModuleView module={linkedModule} />}
+          {linkedKata && (
+            <p className="text-sm text-stone-600">{kataLabel(linkedKata)}</p>
+          )}
 
           {athleteNames.length > 0 && (
             <div className="flex flex-col gap-1">
@@ -962,11 +1393,13 @@ function EventDetail({
       <ItemsSection
         eventId={eventId}
         items={items}
-        setItems={setItems}
+        setItems={setItemsAndSync}
         modules={modules}
         katas={katas}
         editable={isEditing}
         eventAthletes={athleteNames}
+        eventStartDate={toDateInput(event.start_date)}
+        eventEndDate={toDateInput(event.end_date)}
       />
     </div>
   );
@@ -1024,6 +1457,41 @@ function AthletePicker({
         {results.length === 0 && (
           <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
+      </div>
+    </div>
+  );
+}
+
+// A quick shortcut above the plain athlete search picker: tapping a squad
+// or group chip bulk-adds every athlete in it (never removes - the
+// AthletePicker below still handles individual add/remove/undo).
+function GroupQuickAdd({
+  squads,
+  groups,
+  onAddAthletes,
+}: {
+  squads: AthleteGroup[];
+  groups: AthleteGroup[];
+  onAddAthletes: (athleteIds: number[]) => void;
+}) {
+  if (squads.length === 0 && groups.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
+        Add a whole squad or group
+      </span>
+      <div className="flex flex-wrap gap-2">
+        {[...squads, ...groups].map((g) => (
+          <button
+            key={g.id}
+            type="button"
+            onClick={() => onAddAthletes(g.athlete_ids)}
+            className="min-h-[36px] rounded-full border border-stone-300 px-3 text-sm font-medium text-stone-700"
+          >
+            + {g.name} ({g.club_name})
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -1559,6 +2027,10 @@ function kataLabel(k: Kata) {
   return k.style ? `${label} (${k.style})` : label;
 }
 
+function venueLabel(v: Venue) {
+  return v.club_name ? `${v.name} (${v.club_name})` : v.name;
+}
+
 const SWIPE_THRESHOLD = 64;
 const DISABLED_SWIPE_MAX = 180;
 
@@ -1762,6 +2234,8 @@ function ItemsSection({
   katas,
   editable,
   eventAthletes,
+  eventStartDate,
+  eventEndDate,
 }: {
   eventId: number;
   items: EventItem[];
@@ -1770,6 +2244,8 @@ function ItemsSection({
   katas: Kata[];
   editable: boolean;
   eventAthletes: Person[];
+  eventStartDate: string;
+  eventEndDate: string;
 }) {
   const api = useApi();
   const { user } = useAuth();
@@ -2086,6 +2562,8 @@ function ItemsSection({
                     <Field label="Date">
                       <input
                         type="date"
+                        min={eventStartDate}
+                        max={eventEndDate}
                         defaultValue={toDateInput(item.item_date)}
                         onChange={(e) =>
                           updateItem(item.id, { item_date: e.target.value })
@@ -2244,6 +2722,8 @@ function ItemsSection({
               <input
                 required
                 type="date"
+                min={eventStartDate}
+                max={eventEndDate}
                 value={addForm.item_date}
                 onChange={(e) =>
                   setAddForm({ ...addForm, item_date: e.target.value })
@@ -2434,6 +2914,8 @@ function ItemsSection({
                   <input
                     required
                     type="date"
+                    min={eventStartDate}
+                    max={eventEndDate}
                     value={addForm.repeat_until}
                     onChange={(e) =>
                       setAddForm({ ...addForm, repeat_until: e.target.value })

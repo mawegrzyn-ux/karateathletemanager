@@ -9,6 +9,7 @@ import {
   Field,
   MediaField,
   Toast,
+  BeltSwatch,
 } from "../components/ui";
 import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
 
@@ -21,7 +22,7 @@ interface Athlete {
   phone: string | null;
   emergency_name: string | null;
   emergency_phone: string | null;
-  belt: string;
+  grade_id: number | null;
   join_date: string;
   photo_url: string | null;
   medical_notes: string | null;
@@ -33,16 +34,29 @@ interface KarateStyle {
   name: string;
 }
 
-const BELTS = [
-  "white",
-  "yellow",
-  "orange",
-  "green",
-  "blue",
-  "purple",
-  "brown",
-  "black",
-];
+interface Grade {
+  id: number;
+  kind: string;
+  rank_order: number;
+  name: string;
+  belt_color: string;
+  club_id: number | null;
+  club_name: string | null;
+}
+
+interface Grading {
+  id: number;
+  athlete_id: number;
+  grade_id: number;
+  event_id: number | null;
+  recorded_by_coach_id: number | null;
+  graded_at: string;
+  grading_body: string | null;
+  examiner: string | null;
+  passed: boolean;
+  next_grade_due: string | null;
+  created_at: string;
+}
 
 const EMPTY_FORM = {
   first_name: "",
@@ -52,7 +66,7 @@ const EMPTY_FORM = {
   phone: "",
   emergency_name: "",
   emergency_phone: "",
-  belt: "white",
+  grade_id: null as number | null,
   medical_notes: "",
 };
 
@@ -85,6 +99,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
   const api = useApi();
   const [athletes, setAthletes] = useState<Athlete[] | null>(null);
   const [styles, setStyles] = useState<KarateStyle[]>([]);
+  const [grades, setGrades] = useState<Grade[]>([]);
   const [editingStyleIds, setEditingStyleIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -106,6 +121,10 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
       .get<{ styles: KarateStyle[] }>("/karate-styles")
       .then((res) => setStyles(res.styles))
       .catch(() => setStyles([]));
+    api
+      .get<{ grades: Grade[] }>("/grades")
+      .then((res) => setGrades(res.grades))
+      .catch(() => setGrades([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -224,11 +243,16 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               <span>
                 {a.first_name} {a.last_name}
               </span>
-              {a.belt && (
-                <span className="text-sm font-normal capitalize text-stone-500">
-                  {a.belt} belt
-                </span>
-              )}
+              {a.grade_id != null &&
+                (() => {
+                  const grade = grades.find((g) => g.id === a.grade_id);
+                  return grade ? (
+                    <span className="flex items-center gap-1.5 text-sm font-normal text-stone-500">
+                      <BeltSwatch color={grade.belt_color} />
+                      {grade.name}
+                    </span>
+                  ) : null;
+                })()}
             </span>
           </button>
         ))}
@@ -263,19 +287,11 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
-          <Field label="Belt">
-            <select
-              value={form.belt}
-              onChange={(e) => setForm({ ...form, belt: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            >
-              {BELTS.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <GradePicker
+            selectedId={form.grade_id}
+            options={grades}
+            onSelect={(id) => setForm({ ...form, grade_id: id })}
+          />
           <Field label="Date of birth">
             <input
               type="date"
@@ -375,21 +391,11 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
                 className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
-            <Field label="Belt">
-              <select
-                value={editing.belt}
-                onChange={(e) =>
-                  updateAthlete(editing.id, { belt: e.target.value })
-                }
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              >
-                {BELTS.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <GradePicker
+              selectedId={editing.grade_id}
+              options={grades}
+              onSelect={(id) => updateAthlete(editing.id, { grade_id: id })}
+            />
             <Field label="Date of birth">
               <input
                 type="date"
@@ -469,6 +475,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               onAdd={(id) => addStyle(editing.id, id)}
               onRemove={(id) => removeStyle(editing.id, id)}
             />
+            <GradingHistorySection athleteId={editing.id} grades={grades} />
             <label className="flex items-center gap-2 text-sm text-stone-600">
               <input
                 type="checkbox"
@@ -570,6 +577,260 @@ function StylePicker({
           <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+function GradePicker({
+  selectedId,
+  options,
+  onSelect,
+}: {
+  selectedId: number | null;
+  options: Grade[];
+  onSelect: (id: number | null) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const results = options.filter((o) => o.name.toLowerCase().includes(q));
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">Grade</span>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search grades..."
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+      />
+      <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+        {results.map((o) => {
+          const selected = selectedId === o.id;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => onSelect(selected ? null : o.id)}
+              className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
+                selected
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : "border-stone-200"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <BeltSwatch color={o.belt_color} />
+                {o.name}
+                {o.club_name ? ` (${o.club_name})` : ""}
+              </span>
+              <span className="text-sm">
+                {selected ? "✓ Selected" : "Select"}
+              </span>
+            </button>
+          );
+        })}
+        {results.length === 0 && (
+          <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const EMPTY_GRADING_FORM = {
+  grade_id: null as number | null,
+  graded_at: "",
+  grading_body: "",
+  examiner: "",
+  passed: true,
+  next_grade_due: "",
+};
+
+function GradingHistorySection({
+  athleteId,
+  grades,
+}: {
+  athleteId: number;
+  grades: Grade[];
+}) {
+  const api = useApi();
+  const [gradings, setGradings] = useState<Grading[] | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState(EMPTY_GRADING_FORM);
+
+  useEffect(() => {
+    setGradings(null);
+    setExpandedId(null);
+    setAdding(false);
+    setForm(EMPTY_GRADING_FORM);
+    api
+      .get<{ gradings: Grading[] }>(`/athletes/${athleteId}/gradings`)
+      .then((res) => setGradings(res.gradings))
+      .catch(() => setGradings([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [athleteId]);
+
+  async function record() {
+    if (!form.grade_id) return;
+    const { grading } = await api.post<{ grading: Grading }>(
+      `/athletes/${athleteId}/gradings`,
+      {
+        grade_id: form.grade_id,
+        graded_at: form.graded_at || null,
+        grading_body: form.grading_body || null,
+        examiner: form.examiner || null,
+        passed: form.passed,
+        next_grade_due: form.next_grade_due || null,
+      }
+    );
+    setGradings((prev) => (prev ? [grading, ...prev] : [grading]));
+    setForm(EMPTY_GRADING_FORM);
+    setAdding(false);
+  }
+
+  async function remove(id: number) {
+    await api.del(`/athletes/${athleteId}/gradings/${id}`);
+    setGradings((prev) => (prev ? prev.filter((g) => g.id !== id) : prev));
+    setExpandedId((prev) => (prev === id ? null : prev));
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
+        Grading history ({gradings?.length ?? 0})
+      </span>
+      {gradings === null ? (
+        <Spinner />
+      ) : (
+        <div className="flex flex-col gap-1">
+          {gradings.map((g) => {
+            const grade = grades.find((gr) => gr.id === g.grade_id);
+            const expanded = expandedId === g.id;
+            return (
+              <div
+                key={g.id}
+                className="rounded-xl border border-stone-200 bg-white"
+              >
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(expanded ? null : g.id)}
+                  className="flex min-h-[44px] w-full items-center justify-between px-3 text-left"
+                >
+                  <span className="flex items-center gap-2">
+                    {grade && <BeltSwatch color={grade.belt_color} />}
+                    <span className={g.passed ? "" : "text-red-700"}>
+                      {grade?.name ?? "Unknown grade"}
+                      {!g.passed && " (not passed)"}
+                    </span>
+                  </span>
+                  <span className="text-sm text-stone-500">
+                    {g.graded_at.slice(0, 10)}
+                  </span>
+                </button>
+                {expanded && (
+                  <div className="flex flex-col gap-2 border-t border-stone-100 p-3 text-sm text-stone-600">
+                    {g.grading_body && <p>Grading body: {g.grading_body}</p>}
+                    {g.examiner && <p>Examiner: {g.examiner}</p>}
+                    {g.next_grade_due && (
+                      <p>Next grade due: {g.next_grade_due.slice(0, 10)}</p>
+                    )}
+                    <DeleteButton
+                      onClick={() => remove(g.id)}
+                      itemLabel={`this grading (${grade?.name ?? "grade"})`}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {gradings.length === 0 && !adding && (
+            <p className="px-1 py-2 text-sm text-stone-500">
+              No gradings recorded yet.
+            </p>
+          )}
+          {adding ? (
+            <div className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-3">
+              <GradePicker
+                selectedId={form.grade_id}
+                options={grades}
+                onSelect={(id) => setForm({ ...form, grade_id: id })}
+              />
+              <Field label="Date">
+                <input
+                  type="date"
+                  value={form.graded_at}
+                  onChange={(e) =>
+                    setForm({ ...form, graded_at: e.target.value })
+                  }
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                />
+              </Field>
+              <Field label="Grading body">
+                <input
+                  value={form.grading_body}
+                  onChange={(e) =>
+                    setForm({ ...form, grading_body: e.target.value })
+                  }
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                />
+              </Field>
+              <Field label="Examiner">
+                <input
+                  value={form.examiner}
+                  onChange={(e) =>
+                    setForm({ ...form, examiner: e.target.value })
+                  }
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                />
+              </Field>
+              <label className="flex items-center gap-2 text-sm text-stone-600">
+                <input
+                  type="checkbox"
+                  checked={form.passed}
+                  onChange={(e) =>
+                    setForm({ ...form, passed: e.target.checked })
+                  }
+                />
+                Passed
+              </label>
+              <Field label="Next grade due">
+                <input
+                  type="date"
+                  value={form.next_grade_due}
+                  onChange={(e) =>
+                    setForm({ ...form, next_grade_due: e.target.value })
+                  }
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                />
+              </Field>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAdding(false)}
+                  className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={record}
+                  className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white"
+                >
+                  Record
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="min-h-[44px] rounded-xl border border-dashed border-stone-300 text-sm font-medium text-stone-600"
+            >
+              + Record grading
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

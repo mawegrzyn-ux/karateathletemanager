@@ -7,6 +7,10 @@ const { isEventEditor } = require("../utils/permissions");
 
 const router = Router();
 
+// Events and itinerary items share the exact same type set - a lone event
+// can be a rest day, a one-off note, or a kata performance just like an
+// itinerary item can, and vice versa. Same array reference for both names
+// so there's no risk of the two drifting apart again.
 const EVENT_TYPES = [
   "competition",
   "squad_session",
@@ -15,13 +19,17 @@ const EVENT_TYPES = [
   "time_off",
   "seminar",
   "training_camp",
+  "grading",
+  "rest",
+  "other",
+  "kata_performance",
 ];
-const ITEM_TYPES = [...EVENT_TYPES, "rest", "other", "kata_performance"];
+const ITEM_TYPES = EVENT_TYPES;
 const REPEAT_FREQS = ["daily", "weekly", "monthly"];
 const MAX_REPEAT_OCCURRENCES = 60;
 const STATUS_VALUES = ["pending", "completed", "failed"];
 
-const EVENT_FIELDS = `id, title, event_type, start_date, end_date, start_time, end_time, location, notes, training_module_id, created_at`;
+const EVENT_FIELDS = `id, title, event_type, start_date, end_date, start_time, end_time, location, venue_id, kata_id, notes, training_module_id, recurrence_id, created_at`;
 const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id, recurrence_id`;
 
 router.use(authorize());
@@ -40,6 +48,12 @@ function addUTCMonths(date, months) {
 
 function toDateStr(d) {
   return d.toISOString().slice(0, 10);
+}
+
+function daysBetween(startDateStr, endDateStr) {
+  const start = new Date(`${startDateStr}T00:00:00Z`);
+  const end = new Date(`${endDateStr}T00:00:00Z`);
+  return Math.round((end.getTime() - start.getTime()) / 86400000);
 }
 
 // Expands a `repeat` request into the list of occurrence dates
@@ -187,6 +201,22 @@ function resolveOccurrenceDates(itemDate, repeat) {
   }
 
   return dates;
+}
+
+async function getEventDateRange(eventId) {
+  const { rows } = await pool.query(
+    `SELECT start_date, end_date FROM nk_events WHERE id = $1`,
+    [eventId]
+  );
+  return rows[0] ?? null;
+}
+
+// Itinerary items live within their parent event's date span - an item
+// dated outside it would show up detached from the event it belongs to
+// on every calendar view. `dates` is one or more 'YYYY-MM-DD' strings
+// (a single item_date, or every generated occurrence of a repeat).
+function datesWithinRange(dates, range) {
+  return dates.every((d) => d >= range.start_date && d <= range.end_date);
 }
 
 async function coachSharedAthleteIds(coachId, athleteIds) {
@@ -418,8 +448,11 @@ router.post(
       start_time,
       end_time,
       location,
+      venue_id,
       notes,
       training_module_id,
+      kata_id,
+      repeat,
     } = req.body ?? {};
 
     if (typeof title !== "string" || title.trim().length === 0) {
@@ -432,6 +465,32 @@ router.post(
       return res
         .status(400)
         .json({ error: { message: "start_date and end_date are required" } });
+    }
+
+    // A recurring event is generated the same way a recurring itinerary
+    // item is - one independent, independently editable/deletable row per
+    // occurrence - except each occurrence keeps the same day-span as the
+    // original (a 2-day event repeating weekly generates a new 2-day
+    // event each week, anchored to start_date).
+    const spanDays = daysBetween(start_date, end_date);
+    if (spanDays < 0) {
+      return res
+        .status(400)
+        .json({ error: { message: "end_date must not be before start_date" } });
+    }
+
+    let startDates = [start_date];
+    let recurrenceId = null;
+    if (repeat) {
+      try {
+        startDates = resolveOccurrenceDates(start_date, repeat);
+      } catch (err) {
+        if (err.status) {
+          return res.status(err.status).json({ error: { message: err.message } });
+        }
+        throw err;
+      }
+      recurrenceId = crypto.randomUUID();
     }
 
     let athleteIds;
@@ -447,40 +506,52 @@ router.post(
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      const { rows } = await client.query(
-        `INSERT INTO nk_events
-           (title, event_type, start_date, end_date, start_time, end_time, location, notes, training_module_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         RETURNING ${EVENT_FIELDS}`,
-        [
-          title,
-          event_type,
-          start_date,
-          end_date,
-          start_time ?? null,
-          end_time ?? null,
-          location,
-          notes,
-          event_type === "training" ? training_module_id ?? null : null,
-        ]
-      );
-      const event = rows[0];
-
-      for (const athleteId of athleteIds) {
-        await client.query(
-          `INSERT INTO nk_event_athletes (event_id, athlete_id) VALUES ($1, $2)`,
-          [event.id, athleteId]
+      const events = [];
+      for (const occurrenceStart of startDates) {
+        const occurrenceEnd = toDateStr(addUTCDays(occurrenceStart, spanDays));
+        const { rows } = await client.query(
+          `INSERT INTO nk_events
+             (title, event_type, start_date, end_date, start_time, end_time, location,
+              venue_id, kata_id, notes, training_module_id, recurrence_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           RETURNING ${EVENT_FIELDS}`,
+          [
+            title,
+            event_type,
+            occurrenceStart,
+            occurrenceEnd,
+            start_time ?? null,
+            end_time ?? null,
+            location,
+            venue_id ?? null,
+            event_type === "kata_performance" ? kata_id ?? null : null,
+            notes,
+            event_type === "training" ? training_module_id ?? null : null,
+            recurrenceId,
+          ]
         );
+        const event = rows[0];
+        for (const athleteId of athleteIds) {
+          await client.query(
+            `INSERT INTO nk_event_athletes (event_id, athlete_id) VALUES ($1, $2)`,
+            [event.id, athleteId]
+          );
+        }
+        events.push(event);
       }
 
       await client.query("COMMIT");
-      res.status(201).json({ event, athleteIds });
+      if (repeat) {
+        res.status(201).json({ events, athleteIds });
+      } else {
+        res.status(201).json({ event: events[0], athleteIds });
+      }
     } catch (err) {
       await client.query("ROLLBACK");
       if (err.code === "23503") {
-        return res
-          .status(400)
-          .json({ error: { message: "One or more athlete IDs do not exist" } });
+        return res.status(400).json({
+          error: { message: "One or more athlete IDs, the venue, or the kata do not exist" },
+        });
       }
       throw err;
     } finally {
@@ -588,8 +659,10 @@ router.patch(
       start_time,
       end_time,
       location,
+      venue_id,
       notes,
       training_module_id,
+      kata_id,
     } = body;
 
     if (event_type !== undefined && !EVENT_TYPES.includes(event_type)) {
@@ -604,8 +677,10 @@ router.patch(
       start_time,
       end_time,
       location,
+      venue_id,
       notes,
       training_module_id,
+      kata_id,
     };
     const setClauses = [];
     const values = [];
@@ -641,6 +716,39 @@ router.patch(
     );
     const event = await attachEventAthleteStatus(req.user, rows[0], athletes);
     res.json({ event });
+  })
+);
+
+// Deletes every event sharing this event's recurrence_id (i.e. the whole
+// series it was generated as part of), not just this one occurrence - same
+// idea as the itinerary item series delete below. An extra path segment
+// so it can't be shadowed by the plain single-event delete.
+router.delete(
+  "/:id/series",
+  asyncHandler(async (req, res) => {
+    if (!(await isEventEditor(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT recurrence_id FROM nk_events WHERE id = $1`,
+      [req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: { message: "Event not found" } });
+    }
+    const recurrenceId = rows[0].recurrence_id;
+    if (!recurrenceId) {
+      return res
+        .status(400)
+        .json({ error: { message: "This event is not part of a recurring series" } });
+    }
+
+    const { rows: deleted } = await pool.query(
+      `DELETE FROM nk_events WHERE recurrence_id = $1 RETURNING id`,
+      [recurrenceId]
+    );
+    res.json({ deleted_ids: deleted.map((r) => r.id) });
   })
 );
 
@@ -849,6 +957,18 @@ router.post(
       recurrenceId = crypto.randomUUID();
     }
 
+    const eventRange = await getEventDateRange(req.params.id);
+    if (!eventRange) {
+      return res.status(404).json({ error: { message: "Event not found" } });
+    }
+    if (!datesWithinRange(dates, eventRange)) {
+      return res.status(400).json({
+        error: {
+          message: `Itinerary items must fall within the event's date range (${eventRange.start_date} to ${eventRange.end_date})`,
+        },
+      });
+    }
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -927,6 +1047,19 @@ router.patch(
     }
     if ("end_time" in body && !end_time) {
       return res.status(400).json({ error: { message: "end_time is required" } });
+    }
+    if ("item_date" in body && item_date) {
+      const eventRange = await getEventDateRange(req.params.id);
+      if (!eventRange) {
+        return res.status(404).json({ error: { message: "Event not found" } });
+      }
+      if (!datesWithinRange([item_date], eventRange)) {
+        return res.status(400).json({
+          error: {
+            message: `Itinerary items must fall within the event's date range (${eventRange.start_date} to ${eventRange.end_date})`,
+          },
+        });
+      }
     }
 
     const fields = {

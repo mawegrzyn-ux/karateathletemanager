@@ -559,6 +559,179 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `admin/TrainingModules.tsx` and `admin/Katas.tsx` are separate
   list+drawer admin pages (reachable from `More.tsx`, `coach`+admin and
   admin-only respectively) for managing the underlying libraries.
+- **Squads, groups, and venues**: club-scoped structure, distinct from
+  the global-reference-list model used by katas/karate styles/coach
+  roles above. `nk_squads`/`nk_groups` (`club_id` FK, `name`) each have a
+  join table (`nk_squad_athletes`/`nk_group_athletes`) recording which
+  athletes belong; both are managed only by that club's admin (coaches
+  with `is_admin: true` in `nk_coach_clubs`, or a global admin) via
+  `api/src/utils/clubCollections.js`'s `registerClubCollection` — a
+  shared helper registering the full CRUD + `PUT .../athletes`
+  (replace-all-membership) route set once, called twice in
+  `api/src/routes/clubs.js` (once for squads, once for groups) since the
+  two are structurally identical. `nk_venues` (`club_id` nullable —
+  `NULL` means a global venue) is either admin-managed globally
+  (`api/src/routes/adminVenues.js`, mirrors `karateStyles.js`: `GET` open
+  to any authenticated user, `POST`/`PATCH`/`DELETE`
+  `authorize.requireAdmin`) or club-manager-managed
+  (`/api/admin/clubs/:id/venues`, `isClubAdmin`-gated writes, alongside
+  the squads/groups routes in `clubs.js`). All three are edited inline in
+  the club detail drawer in `admin/Clubs.tsx` (`ClubCollectionSection` for
+  squads/groups — accordion rows, tap to expand into a name field +
+  `MemberEditor` + `DeleteButton`, "+ Add" reveals an inline create form
+  below the list, matching `CLAUDE.md`'s nested-line-items convention;
+  `ClubVenuesSection` is the same accordion shape with name/address/notes
+  fields instead of a membership picker) — there's also a standalone
+  `admin/Venues.tsx` (list+drawer, admin-only route) for managing global
+  venues outside any specific club.
+  Since a coach or athlete's Schedule view spans every club they belong
+  to, three read-only cross-club visibility endpoints feed its pickers:
+  `GET /api/squads`, `GET /api/groups` (`api/src/utils/
+  visibleCollections.js`'s `registerVisibilityRoute` — admins see every
+  club's, coaches see only clubs they belong to via `nk_coach_clubs`,
+  anyone else gets `{squads: []}`/`{groups: []}`) and `GET /api/venues`
+  (every global venue plus — for a coach — their own clubs' venues, or
+  every club's for an admin; readable by any authenticated user, unlike
+  squads/groups, since seeing a venue's address isn't sensitive the way
+  athlete-roster membership is). `nk_events` gained a nullable `venue_id`
+  FK (`ON DELETE SET NULL`) *alongside* the pre-existing free-text
+  `location` column, not replacing it — `Schedule.tsx`'s create form and
+  `EventDetail` edit mode show a `SingleSelectPicker` for venue right
+  under the plain Location input; the read-only view prefers the linked
+  venue's name/address when set, falling back to the free-text location.
+  The athlete picker in both the create form and `EventDetail` gains a
+  `GroupQuickAdd` row above it — one chip per visible squad/group,
+  labeled with its club name; tapping a chip bulk-adds every athlete in
+  it (never removes) to the selection, leaving the existing
+  add/remove/search picker underneath for fine-tuning.
+- **Grades**: belts and grades are unified into one concept.
+  `nk_grade_levels` (`kind` `'kyu'|'dan'`, `rank_order` — a flat ascending
+  beginner→advanced scale spanning both kinds, `name`, `belt_color`,
+  nullable `club_id`) replaces the old free-text `nk_athletes.belt`
+  column (migrated: backfilled to the lowest-ranked standard grade
+  sharing that belt color, then dropped) with `nk_athletes.grade_id`
+  (`ON DELETE SET NULL`). `club_id IS NULL` rows are the standard list,
+  seeded with a typical 9-kyu (9th→1st, white→brown) + 10-dan
+  progression and conventional belt colors; `club_id` set means that
+  club's own override list, which *replaces* (not merges with) the
+  standard list for that club's athletes — same override relationship as
+  club karate styles. Two partial unique indexes
+  (`... WHERE club_id IS NULL` / `... WHERE club_id IS NOT NULL`) keep
+  names unique within each scope without treating the seed's repeated
+  `NULL` club_id as distinct rows (Postgres's default `UNIQUE` behavior,
+  which would otherwise let the seed insert duplicate on every
+  migration re-run).
+  Three route files mirror the venues split: `api/src/routes/
+  adminGrades.js` (global list only, `GET` open to any authenticated
+  user, `POST`/`PATCH`/`DELETE` `authorize.requireAdmin`, mounted at
+  `/api/admin/grades`), club-scoped override CRUD alongside the venues
+  block in `clubs.js` (`isClubAdmin`-gated writes, mounted under
+  `/api/admin/clubs/:id/grades`), and `api/src/routes/grades.js` (`GET`
+  only, combined visibility for pickers — every standard grade plus each
+  visible club's overrides: an admin sees every club's, a coach sees
+  their own clubs', and — unlike venues/squads/groups — an *athlete*
+  also sees their own clubs' overrides too, via `nk_athlete_clubs`, so
+  their self-profile can still resolve their own grade's name/color even
+  under a club-specific list). `Grades.tsx` (previously an empty
+  placeholder) reads this combined endpoint: standard grades grouped
+  into Kyu/Dan sections with a small `BeltSwatch` color indicator per
+  row (`ui.tsx`, backed by a shared `BELT_COLOR_HEX` map), any visible
+  club overrides listed read-only underneath grouped by club name
+  (management happens in that club's own drawer, not here), and — admin
+  only — the standard rows become tappable to edit/delete, plus an
+  `AddButton` to create new ones. `admin/Clubs.tsx`'s club drawer gained
+  a `ClubGradesSection` (same accordion shape as squads/groups/venues)
+  for managing that club's override list. Athletes no longer pick a
+  belt from a plain `<select>` — `Athletes.tsx`'s create/edit forms and
+  list rows use a `GradePicker` (search-box + single-select, matching
+  `CLAUDE.md`'s picker convention, with a `BeltSwatch` per result) bound
+  to `grade_id`.
+- **Grading records**: `nk_grades` (already existed, unused, since the
+  original scaffold) is now the athlete grading-history table: one row
+  per graded attempt, tying an `athlete_id` to the `grade_id` they were
+  attempting, whether they `passed`, and optional `grading_body`/
+  `examiner`/`next_grade_due`/`event_id` (nullable link to the Grading
+  event/session it happened at) /`recorded_by_coach_id` (who recorded
+  it). `POST /api/athletes/:id/gradings` (coach/admin) inserts a record
+  and, when `passed` (default `true`), also updates the athlete's
+  current `nk_athletes.grade_id` in the same transaction — recording a
+  grading *is* how an athlete's current grade changes now, there's no
+  separate "just edit the grade field" flow for a real promotion (the
+  grade picker on the athlete's edit form is still there for direct
+  correction, e.g. fixing a data-entry mistake, without going through
+  the grading-history flow). `GET /api/athletes/:id/gradings` is
+  readable by coach/admin/the athlete themself (same `isSelf` pattern as
+  `GET /api/athletes/:id`); `DELETE .../gradings/:gradingId` removes a
+  single history entry (coach/admin) without reverting the athlete's
+  current grade. `Athletes.tsx`'s edit drawer gained a
+  `GradingHistorySection` — accordion rows (tap to expand into grading
+  body/examiner/next-due-date + `DeleteButton`), a `GradePicker` inside
+  an inline "+ Record grading" form (date, examiner, grading body,
+  passed checkbox, next grade due). `AthleteSelfProfile.tsx` shows the
+  same history read-only (no recording action) alongside the athlete's
+  current grade.
+- **Grading event type**: `"grading"` was added to `EVENT_TYPES` in both
+  `events.js` and `Schedule.tsx` — a plain event/item type like any other,
+  no dedicated fields of its own; the actual grading result is recorded
+  separately via the athlete's Grading history, not on the event.
+- **Events and itinerary items share one type set**: `EVENT_TYPES` and
+  `ITEM_TYPES` are literally the same array (`const ITEM_TYPES =
+  EVENT_TYPES`) in both `events.js` and `Schedule.tsx`, covering every
+  type either could need (`rest`/`other`/`kata_performance` used to be
+  item-only; a lone event can now be any of them too). A `kata_performance`
+  event gets the same treatment a `kata_performance` item already had:
+  `nk_events.kata_id` (mirrors `training_module_id`) plus a Kata
+  `SingleSelectPicker` in both the create form and `EventDetail` edit
+  mode that auto-fills the (still-editable) title.
+- **Events can recur, the same way itinerary items already did**:
+  `nk_events.recurrence_id` (mirrors `nk_event_items.recurrence_id`) plus
+  a `repeat` object accepted by `POST /api/events`, reusing the exact
+  same `resolveOccurrenceDates` helper items use (daily/weekly/monthly,
+  interval, weekday/day-of-month selection, until-date or occurrence-
+  count end condition, capped at 60 occurrences). Since an event is a
+  date *range* rather than an item's single date, each generated
+  occurrence keeps the original's day-span (a 2-day event repeating
+  weekly produces a new 2-day event every week, anchored to
+  `start_date`). `POST /api/events` returns `{ events: [...] }` (array)
+  when `repeat` is present, `{ event }` otherwise — same response-shape
+  split `POST /api/events/:id/items` already used. The "New event" form
+  in `Schedule.tsx` grew the identical "Repeats" control the itinerary
+  add-item form has.
+- **Copy and delete, for both events and itinerary items**: "copy" is
+  client-side only (no dedicated endpoint) — a "Duplicate / repeat"
+  button in `EventDetail`'s edit mode (matching the itinerary item one
+  that already existed) pre-fills the "New event" form with the source
+  event's fields *and* its athlete roster, reusing the ordinary create
+  flow once the user reviews and submits. Deleting a single occurrence
+  already worked (`DELETE /api/events/:id`); events gained the
+  itinerary-item-style series delete too — `DELETE /api/events/:id/series`
+  removes every event sharing that `recurrence_id` — surfaced as a
+  "Delete series" button in `EventDetail`, shown only when the currently-
+  loaded event list has more than one event with the same
+  `recurrence_id`.
+- **Itinerary items are bound by their event's date range**: `POST
+  /api/events/:id/items` and `PATCH /api/events/:id/items/:itemId`
+  reject (400) an `item_date` — or, for a repeat, any generated
+  occurrence date — outside the parent event's `start_date`/`end_date`
+  (`getEventDateRange`/`datesWithinRange` helpers in `events.js`).
+  `Schedule.tsx`'s item date inputs (add form, edit form, and the
+  "repeat until" date) get matching `min`/`max` attributes bound to the
+  event's dates, so the common case is caught by the browser before it
+  ever reaches the server-side check.
+- **Fixed: completing an item in the detail view left the Schedule list
+  stale.** Marking an itinerary item (or a no-items event) complete/failed
+  from `EventDetail` only ever updated `EventDetail`'s own local state —
+  the list view's `my_status` badge/checkbox lives on `ScheduleManager`'s
+  separate `events` array, computed once server-side at initial load
+  (`attachMyEventStatus`) and never recomputed after a status edit made
+  in the detail view. `EventDetail` now mirrors that same rollup logic
+  client-side (`syncMyStatus`: any failed item → failed, all items
+  completed → completed, no items → the event's own direct status) and
+  pushes the recomputed status up through the existing `onUpdated`
+  callback after every relevant change — both the item-level path
+  (`setItemsAndSync`, wrapping the `setItems` passed to `ItemsSection`)
+  and the event-level one (`updateEventAthleteStatus`, for events with no
+  itemized itinerary).
 
 ## Auth & RBAC
 
@@ -678,6 +851,51 @@ athletes (GDPR — no directory of children's names is ever exposed):
   now also accepts `'parent'`, valid only when `is_parent` is true). The
   switcher shows a pill for each identity the account actually has
   whenever 2 or more of {athlete, coach, parent} apply.
+
+### Club join links
+
+A club admin (per `isClubAdmin` — the club's global admin, or a coach
+holding `is_admin` on that club in `nk_coach_clubs`) can generate a
+shareable link that takes new registrants straight to a registration
+form pre-locked to "athlete, assigned to this club" — skipping the
+checkboxes and club search entirely. Deliberately modeled as a variant
+of the PIN-linking pattern above, but multi-use and long-lived rather
+than single-use/short-lived, since many people register from the same
+link over time rather than one parent redeeming one code:
+
+- `nk_clubs.join_token` (nullable, unique) holds a long random hex
+  string (`crypto.randomBytes(24).toString("hex")`, not a short PIN —
+  it's embedded in a URL, not typed in by hand, so brute-force
+  guessability isn't a concern the way it is for the 6-digit PIN).
+  `GET/POST/DELETE /api/admin/clubs/:id/join-link` (all `isClubAdmin`-
+  gated, in `clubs.js`) read the current token, generate/regenerate one
+  (overwriting any previous token — old links stop working
+  immediately), or clear it (revoke). Never included in the general
+  club list/detail SELECTs — only these three dedicated endpoints ever
+  return it, since (unlike the list endpoints) they're actually scoped
+  to admins of that specific club, and the token is otherwise sensitive
+  (whoever holds it can let people self-register into the club).
+- `GET /api/public/join/:token` (`publicJoin.js`, unauthenticated, same
+  reasoning as `publicClubs.js` — registration runs before any session
+  exists) resolves a token to `{id, name}` only, 404 on an invalid/
+  revoked/regenerated-away token.
+- Surfaced as a "Join link" section in the club's detail drawer
+  (`JoinLink` in `Clubs.tsx`, gated by the same `canSeePending` check
+  used for `PendingMembers`, right above it), showing the full URL
+  (`${origin}/register?join=${token}`) with Copy/Regenerate/Revoke.
+- `Register.tsx` reads a `?join=` query param and, if present, resolves
+  it via the public endpoint on mount. While resolving: a loading line;
+  on success: the checkboxes/`ClubPicker` are replaced entirely by a
+  fixed "You're joining **{club}** as an athlete" banner, and submission
+  always sends `wants_athlete: true, wants_coach: false,
+  wants_referee: false, requested_club_id: <that club>` regardless of
+  the (now-hidden) form state; on an invalid/expired token: an error
+  banner, but the ordinary checkboxes/picker still render underneath as
+  a fallback so the visitor can still register normally. The resulting
+  `nk_users` row is otherwise unremarkable — same `pending`-by-default
+  status and the same `activateUser` consumption of `requested_club_id`
+  on approval as any other registration; a join link only changes how
+  the intent fields get set, not what happens with them afterward.
 
 ### Referee profiles
 
