@@ -720,6 +720,109 @@ const migrations = [
      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
   `ALTER TABLE nk_events ADD COLUMN IF NOT EXISTS venue_id INTEGER REFERENCES nk_venues(id) ON DELETE SET NULL`,
+
+  // Grades unify what used to be a free-text `belt` column into a proper,
+  // ordered reference list: standard kyu (descending 9th->1st, beginner to
+  // advanced) then dan grades, each carrying its conventional belt color.
+  // club_id NULL means a standard grade, available everywhere; club_id set
+  // means that club's own override list, which takes precedence over the
+  // standard list for that club's athletes (management UI decides which
+  // list to show, same override-not-merge relationship as club karate
+  // styles vs. the global list). rank_order is a flat, ascending
+  // beginner->advanced scale spanning both kinds, used for sorting/
+  // comparing progression regardless of kind.
+  `CREATE TABLE IF NOT EXISTS nk_grade_levels (
+     id         SERIAL PRIMARY KEY,
+     club_id    INTEGER REFERENCES nk_clubs(id) ON DELETE CASCADE,
+     kind       VARCHAR(10) NOT NULL CHECK (kind IN ('kyu', 'dan')),
+     rank_order INTEGER NOT NULL,
+     name       VARCHAR(100) NOT NULL,
+     belt_color VARCHAR(50) NOT NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  // Two partial unique indexes instead of one plain UNIQUE(club_id, name):
+  // Postgres treats NULLs as distinct for uniqueness purposes, so a plain
+  // constraint wouldn't stop the standard-grade seed below from
+  // duplicating on every migration re-run.
+  `CREATE UNIQUE INDEX IF NOT EXISTS nk_grade_levels_global_name_idx
+     ON nk_grade_levels (name) WHERE club_id IS NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS nk_grade_levels_club_name_idx
+     ON nk_grade_levels (club_id, name) WHERE club_id IS NOT NULL`,
+
+  `INSERT INTO nk_grade_levels (kind, rank_order, name, belt_color) VALUES
+     ('kyu', 1, '9th Kyu', 'white'),
+     ('kyu', 2, '8th Kyu', 'yellow'),
+     ('kyu', 3, '7th Kyu', 'orange'),
+     ('kyu', 4, '6th Kyu', 'green'),
+     ('kyu', 5, '5th Kyu', 'blue'),
+     ('kyu', 6, '4th Kyu', 'purple'),
+     ('kyu', 7, '3rd Kyu', 'brown'),
+     ('kyu', 8, '2nd Kyu', 'brown'),
+     ('kyu', 9, '1st Kyu', 'brown'),
+     ('dan', 10, '1st Dan', 'black'),
+     ('dan', 11, '2nd Dan', 'black'),
+     ('dan', 12, '3rd Dan', 'black'),
+     ('dan', 13, '4th Dan', 'black'),
+     ('dan', 14, '5th Dan', 'black'),
+     ('dan', 15, '6th Dan', 'black'),
+     ('dan', 16, '7th Dan', 'black'),
+     ('dan', 17, '8th Dan', 'black'),
+     ('dan', 18, '9th Dan', 'black'),
+     ('dan', 19, '10th Dan', 'black')
+   ON CONFLICT (name) WHERE club_id IS NULL DO NOTHING`,
+
+  `ALTER TABLE nk_athletes ADD COLUMN IF NOT EXISTS grade_id INTEGER REFERENCES nk_grade_levels(id) ON DELETE SET NULL`,
+  // Best-effort backfill from the old free-text belt to the lowest-ranked
+  // standard grade sharing that belt color (e.g. every "brown" belt maps
+  // to 3rd Kyu, the first brown grade) - fully correctable afterward via
+  // the athlete's grade picker. Guarded by a column-existence check (not
+  // just IF NOT EXISTS on the later DROP) since re-running this same
+  // statement after the belt column is gone would otherwise error out on
+  // every subsequent deploy.
+  `DO $$
+   BEGIN
+     IF EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_name = 'nk_athletes' AND column_name = 'belt'
+     ) THEN
+       UPDATE nk_athletes a
+       SET grade_id = g.id
+       FROM (
+         SELECT DISTINCT ON (belt_color) id, belt_color
+         FROM nk_grade_levels
+         WHERE club_id IS NULL
+         ORDER BY belt_color, rank_order
+       ) g
+       WHERE a.grade_id IS NULL AND a.belt = g.belt_color;
+     END IF;
+   END $$`,
+  `ALTER TABLE nk_athletes DROP COLUMN IF EXISTS belt`,
+
+  // nk_grades already existed (unused) as a per-athlete grading-history
+  // table; extended in place rather than replaced, since its shape (one
+  // row per grading attempt) is exactly the "coach records a grading
+  // against an athlete" record. `belt` (free text) is replaced by
+  // `grade_id` (the grade attained), `event_id` optionally links to the
+  // Grading event/session it happened at, `recorded_by_coach_id` is who
+  // recorded it.
+  `ALTER TABLE nk_grades ADD COLUMN IF NOT EXISTS grade_id INTEGER REFERENCES nk_grade_levels(id) ON DELETE SET NULL`,
+  `ALTER TABLE nk_grades ADD COLUMN IF NOT EXISTS event_id INTEGER REFERENCES nk_events(id) ON DELETE SET NULL`,
+  `ALTER TABLE nk_grades ADD COLUMN IF NOT EXISTS recorded_by_coach_id INTEGER REFERENCES nk_coaches(id) ON DELETE SET NULL`,
+  `ALTER TABLE nk_grades DROP COLUMN IF EXISTS belt`,
+
+  // The "Grading" event type needs both the JS-level EVENT_TYPES/ITEM_TYPES
+  // arrays (already updated in events.js) and these DB-level CHECK
+  // constraints extended - same DROP-then-ADD pattern already used above
+  // for item_type when kata_performance was added, safe to rerun every
+  // deploy since the DROP happens first each time.
+  `ALTER TABLE nk_events DROP CONSTRAINT IF EXISTS nk_events_event_type_check;
+   ALTER TABLE nk_events ADD CONSTRAINT nk_events_event_type_check
+     CHECK (event_type IN ('competition','squad_session','training','travel',
+       'time_off','seminar','training_camp','grading'))`,
+  `ALTER TABLE nk_event_items DROP CONSTRAINT IF EXISTS nk_event_items_item_type_check;
+   ALTER TABLE nk_event_items ADD CONSTRAINT nk_event_items_item_type_check
+     CHECK (item_type IN ('competition','squad_session','training','travel',
+       'time_off','seminar','training_camp','rest','other','kata_performance','grading'))`,
 ];
 
 async function migrate() {

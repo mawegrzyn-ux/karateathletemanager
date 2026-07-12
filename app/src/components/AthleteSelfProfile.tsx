@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useApi } from "../hooks/useApi";
-import { Spinner, Avatar } from "./ui";
+import { Spinner, Avatar, BeltSwatch } from "./ui";
 
 interface Athlete {
   id: number;
@@ -11,7 +11,7 @@ interface Athlete {
   phone: string | null;
   emergency_name: string | null;
   emergency_phone: string | null;
-  belt: string;
+  grade_id: number | null;
   join_date: string;
   photo_url: string | null;
   medical_notes: string | null;
@@ -21,6 +21,26 @@ interface Athlete {
 interface KarateStyle {
   id: number;
   name: string;
+}
+
+interface Grade {
+  id: number;
+  kind: string;
+  rank_order: number;
+  name: string;
+  belt_color: string;
+  club_id: number | null;
+  club_name: string | null;
+}
+
+interface Grading {
+  id: number;
+  grade_id: number;
+  graded_at: string;
+  grading_body: string | null;
+  examiner: string | null;
+  passed: boolean;
+  next_grade_due: string | null;
 }
 
 export function ReadOnlyField({
@@ -100,6 +120,8 @@ export function AthleteSelfProfile({ athleteId }: { athleteId: number }) {
   const api = useApi();
   const [athlete, setAthlete] = useState<Athlete | null>(null);
   const [styleNames, setStyleNames] = useState<string[]>([]);
+  const [grades, setGrades] = useState<Grade[]>([]);
+  const [gradings, setGradings] = useState<Grading[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -107,13 +129,17 @@ export function AthleteSelfProfile({ athleteId }: { athleteId: number }) {
       api.get<{ athlete: Athlete }>(`/athletes/${athleteId}`),
       api.get<{ styleIds: number[] }>(`/athletes/${athleteId}/styles`),
       api.get<{ styles: KarateStyle[] }>("/karate-styles"),
+      api.get<{ grades: Grade[] }>("/grades"),
+      api.get<{ gradings: Grading[] }>(`/athletes/${athleteId}/gradings`),
     ])
-      .then(([athleteRes, styleIdsRes, stylesRes]) => {
+      .then(([athleteRes, styleIdsRes, stylesRes, gradesRes, gradingsRes]) => {
         setAthlete(athleteRes.athlete);
         const ids = new Set(styleIdsRes.styleIds);
         setStyleNames(
           stylesRes.styles.filter((s) => ids.has(s.id)).map((s) => s.name)
         );
+        setGrades(gradesRes.grades);
+        setGradings(gradingsRes.gradings);
       })
       .catch(() => setError("Failed to load your athlete profile"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -139,7 +165,22 @@ export function AthleteSelfProfile({ athleteId }: { athleteId: number }) {
           {athlete.first_name} {athlete.last_name}
         </h1>
       </div>
-      <ReadOnlyField label="Belt" value={athlete.belt} />
+      <div className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-stone-700">Grade</span>
+        <span className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3">
+          {(() => {
+            const grade = grades.find((g) => g.id === athlete.grade_id);
+            return grade ? (
+              <>
+                <BeltSwatch color={grade.belt_color} />
+                {grade.name}
+              </>
+            ) : (
+              "—"
+            );
+          })()}
+        </span>
+      </div>
       <ReadOnlyField
         label="Styles"
         value={styleNames.length > 0 ? styleNames.join(", ") : "—"}
@@ -163,6 +204,36 @@ export function AthleteSelfProfile({ athleteId }: { athleteId: number }) {
         label="Medical notes"
         value={athlete.medical_notes ?? "—"}
       />
+
+      {gradings.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-stone-700">
+            Grading history
+          </span>
+          <div className="flex flex-col gap-1">
+            {gradings.map((g) => {
+              const grade = grades.find((gr) => gr.id === g.grade_id);
+              return (
+                <div
+                  key={g.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2"
+                >
+                  <span className="flex items-center gap-2">
+                    {grade && <BeltSwatch color={grade.belt_color} />}
+                    <span className={g.passed ? "" : "text-red-700"}>
+                      {grade?.name ?? "Unknown grade"}
+                      {!g.passed && " (not passed)"}
+                    </span>
+                  </span>
+                  <span className="text-sm text-stone-500">
+                    {g.graded_at.slice(0, 10)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <LinkParentPin athleteId={athlete.id} />
     </div>

@@ -8,6 +8,7 @@ import {
   DeleteButton,
   Field,
   Toast,
+  BeltSwatch,
 } from "../../components/ui";
 
 interface Association {
@@ -432,6 +433,7 @@ export default function Clubs() {
               athletes={allAthletes}
             />
             <ClubVenuesSection clubId={editing.id} />
+            <ClubGradesSection clubId={editing.id} />
 
             <MemberEditor
               label="Athletes"
@@ -951,6 +953,265 @@ interface Venue {
   name: string;
   address: string | null;
   notes: string | null;
+}
+
+interface ClubGrade {
+  id: number;
+  club_id: number;
+  kind: string;
+  rank_order: number;
+  name: string;
+  belt_color: string;
+}
+
+const BELT_COLORS = [
+  "white",
+  "yellow",
+  "orange",
+  "green",
+  "blue",
+  "purple",
+  "brown",
+  "black",
+];
+
+const EMPTY_GRADE_FORM = {
+  name: "",
+  kind: "kyu",
+  rank_order: 1,
+  belt_color: "white",
+};
+
+function ClubGradesSection({ clubId }: { clubId: number }) {
+  const api = useApi();
+  const [grades, setGrades] = useState<ClubGrade[] | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newGrade, setNewGrade] = useState(EMPTY_GRADE_FORM);
+
+  useEffect(() => {
+    setGrades(null);
+    setExpandedId(null);
+    setAdding(false);
+    setNewGrade(EMPTY_GRADE_FORM);
+    api
+      .get<{ grades: ClubGrade[] }>(`/admin/clubs/${clubId}/grades`)
+      .then((res) => setGrades(res.grades))
+      .catch(() => setGrades([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  async function create() {
+    if (!newGrade.name.trim()) return;
+    const { grade } = await api.post<{ grade: ClubGrade }>(
+      `/admin/clubs/${clubId}/grades`,
+      newGrade
+    );
+    setGrades((prev) => (prev ? [...prev, grade] : [grade]));
+    setNewGrade(EMPTY_GRADE_FORM);
+    setAdding(false);
+  }
+
+  async function update(id: number, patch: Record<string, unknown>) {
+    const { grade } = await api.patch<{ grade: ClubGrade }>(
+      `/admin/clubs/${clubId}/grades/${id}`,
+      patch
+    );
+    setGrades((prev) =>
+      prev ? prev.map((g) => (g.id === id ? grade : g)) : prev
+    );
+  }
+
+  async function remove(id: number) {
+    await api.del(`/admin/clubs/${clubId}/grades/${id}`);
+    setGrades((prev) => (prev ? prev.filter((g) => g.id !== id) : prev));
+    setExpandedId((prev) => (prev === id ? null : prev));
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
+        Grades ({grades?.length ?? 0})
+      </span>
+      <p className="px-1 text-xs text-stone-500">
+        Overrides the standard grade list for this club's athletes. Leave
+        empty to use the standard list.
+      </p>
+      {grades === null ? (
+        <Spinner />
+      ) : (
+        <div className="flex flex-col gap-1">
+          {[...grades]
+            .sort((a, b) => a.rank_order - b.rank_order)
+            .map((g) => {
+              const expanded = expandedId === g.id;
+              return (
+                <div
+                  key={g.id}
+                  className="rounded-xl border border-stone-200 bg-white"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(expanded ? null : g.id)}
+                    className="flex min-h-[44px] w-full items-center justify-between px-3 text-left font-medium"
+                  >
+                    <span className="flex items-center gap-2">
+                      <BeltSwatch color={g.belt_color} />
+                      {g.name}
+                    </span>
+                    <span className="text-sm text-stone-500">
+                      {expanded ? "▲" : "▼"}
+                    </span>
+                  </button>
+                  {expanded && (
+                    <div className="flex flex-col gap-3 border-t border-stone-100 p-3">
+                      <Field label="Name">
+                        <input
+                          defaultValue={g.name}
+                          onBlur={(e) => {
+                            if (
+                              e.target.value.trim() &&
+                              e.target.value !== g.name
+                            ) {
+                              update(g.id, { name: e.target.value });
+                            }
+                          }}
+                          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                        />
+                      </Field>
+                      <Field label="Kind">
+                        <select
+                          value={g.kind}
+                          onChange={(e) =>
+                            update(g.id, { kind: e.target.value })
+                          }
+                          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                        >
+                          <option value="kyu">Kyu</option>
+                          <option value="dan">Dan</option>
+                        </select>
+                      </Field>
+                      <Field label="Rank order">
+                        <input
+                          type="number"
+                          defaultValue={g.rank_order}
+                          onBlur={(e) => {
+                            const value = Number(e.target.value);
+                            if (Number.isInteger(value) && value !== g.rank_order) {
+                              update(g.id, { rank_order: value });
+                            }
+                          }}
+                          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                        />
+                      </Field>
+                      <Field label="Belt color">
+                        <select
+                          value={g.belt_color}
+                          onChange={(e) =>
+                            update(g.id, { belt_color: e.target.value })
+                          }
+                          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                        >
+                          {BELT_COLORS.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <DeleteButton onClick={() => remove(g.id)} itemLabel={g.name} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          {grades.length === 0 && !adding && (
+            <p className="px-1 py-2 text-sm text-stone-500">
+              No club-specific grades - using the standard list.
+            </p>
+          )}
+          {adding ? (
+            <div className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-3">
+              <Field label="Name">
+                <input
+                  autoFocus
+                  value={newGrade.name}
+                  onChange={(e) =>
+                    setNewGrade({ ...newGrade, name: e.target.value })
+                  }
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                />
+              </Field>
+              <Field label="Kind">
+                <select
+                  value={newGrade.kind}
+                  onChange={(e) =>
+                    setNewGrade({ ...newGrade, kind: e.target.value })
+                  }
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                >
+                  <option value="kyu">Kyu</option>
+                  <option value="dan">Dan</option>
+                </select>
+              </Field>
+              <Field label="Rank order">
+                <input
+                  type="number"
+                  value={newGrade.rank_order}
+                  onChange={(e) =>
+                    setNewGrade({
+                      ...newGrade,
+                      rank_order: Number(e.target.value) || 1,
+                    })
+                  }
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                />
+              </Field>
+              <Field label="Belt color">
+                <select
+                  value={newGrade.belt_color}
+                  onChange={(e) =>
+                    setNewGrade({ ...newGrade, belt_color: e.target.value })
+                  }
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                >
+                  {BELT_COLORS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAdding(false)}
+                  className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={create}
+                  className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="min-h-[44px] rounded-xl border border-dashed border-stone-300 text-sm font-medium text-stone-600"
+            >
+              + Add club grade
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ClubVenuesSection({ clubId }: { clubId: number }) {

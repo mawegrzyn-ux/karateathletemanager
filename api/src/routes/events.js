@@ -15,6 +15,7 @@ const EVENT_TYPES = [
   "time_off",
   "seminar",
   "training_camp",
+  "grading",
 ];
 const ITEM_TYPES = [...EVENT_TYPES, "rest", "other", "kata_performance"];
 const REPEAT_FREQS = ["daily", "weekly", "monthly"];

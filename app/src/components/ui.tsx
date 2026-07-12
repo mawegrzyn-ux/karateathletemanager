@@ -157,6 +157,27 @@ export function Spinner() {
   );
 }
 
+export const BELT_COLOR_HEX: Record<string, string> = {
+  white: "#f5f5f4",
+  yellow: "#eab308",
+  orange: "#f97316",
+  green: "#22c55e",
+  blue: "#3b82f6",
+  purple: "#a855f7",
+  brown: "#78350f",
+  black: "#1c1917",
+};
+
+export function BeltSwatch({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block h-3.5 w-3.5 shrink-0 rounded-full border border-stone-300"
+      style={{ backgroundColor: BELT_COLOR_HEX[color] ?? "#d6d3d1" }}
+      title={`${color} belt`}
+    />
+  );
+}
+
 export function Badge({ children }: PropsWithChildren) {
   return (
     <span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-1 text-xs font-medium text-stone-700">

@@ -21,6 +21,8 @@ const adminVenues = require("./adminVenues");
 const venues = require("./venues");
 const squads = require("./squads");
 const groups = require("./groups");
+const adminGrades = require("./adminGrades");
+const grades = require("./grades");
 
 const router = Router();
 
@@ -46,5 +48,7 @@ router.use("/admin/venues", adminVenues);
 router.use("/venues", venues);
 router.use("/squads", squads);
 router.use("/groups", groups);
+router.use("/admin/grades", adminGrades);
+router.use("/grades", grades);
 
 module.exports = router;

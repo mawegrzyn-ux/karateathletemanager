@@ -604,6 +604,77 @@ coach-run attendance) — this is personal athlete itinerary planning.
   labeled with its club name; tapping a chip bulk-adds every athlete in
   it (never removes) to the selection, leaving the existing
   add/remove/search picker underneath for fine-tuning.
+- **Grades**: belts and grades are unified into one concept.
+  `nk_grade_levels` (`kind` `'kyu'|'dan'`, `rank_order` — a flat ascending
+  beginner→advanced scale spanning both kinds, `name`, `belt_color`,
+  nullable `club_id`) replaces the old free-text `nk_athletes.belt`
+  column (migrated: backfilled to the lowest-ranked standard grade
+  sharing that belt color, then dropped) with `nk_athletes.grade_id`
+  (`ON DELETE SET NULL`). `club_id IS NULL` rows are the standard list,
+  seeded with a typical 9-kyu (9th→1st, white→brown) + 10-dan
+  progression and conventional belt colors; `club_id` set means that
+  club's own override list, which *replaces* (not merges with) the
+  standard list for that club's athletes — same override relationship as
+  club karate styles. Two partial unique indexes
+  (`... WHERE club_id IS NULL` / `... WHERE club_id IS NOT NULL`) keep
+  names unique within each scope without treating the seed's repeated
+  `NULL` club_id as distinct rows (Postgres's default `UNIQUE` behavior,
+  which would otherwise let the seed insert duplicate on every
+  migration re-run).
+  Three route files mirror the venues split: `api/src/routes/
+  adminGrades.js` (global list only, `GET` open to any authenticated
+  user, `POST`/`PATCH`/`DELETE` `authorize.requireAdmin`, mounted at
+  `/api/admin/grades`), club-scoped override CRUD alongside the venues
+  block in `clubs.js` (`isClubAdmin`-gated writes, mounted under
+  `/api/admin/clubs/:id/grades`), and `api/src/routes/grades.js` (`GET`
+  only, combined visibility for pickers — every standard grade plus each
+  visible club's overrides: an admin sees every club's, a coach sees
+  their own clubs', and — unlike venues/squads/groups — an *athlete*
+  also sees their own clubs' overrides too, via `nk_athlete_clubs`, so
+  their self-profile can still resolve their own grade's name/color even
+  under a club-specific list). `Grades.tsx` (previously an empty
+  placeholder) reads this combined endpoint: standard grades grouped
+  into Kyu/Dan sections with a small `BeltSwatch` color indicator per
+  row (`ui.tsx`, backed by a shared `BELT_COLOR_HEX` map), any visible
+  club overrides listed read-only underneath grouped by club name
+  (management happens in that club's own drawer, not here), and — admin
+  only — the standard rows become tappable to edit/delete, plus an
+  `AddButton` to create new ones. `admin/Clubs.tsx`'s club drawer gained
+  a `ClubGradesSection` (same accordion shape as squads/groups/venues)
+  for managing that club's override list. Athletes no longer pick a
+  belt from a plain `<select>` — `Athletes.tsx`'s create/edit forms and
+  list rows use a `GradePicker` (search-box + single-select, matching
+  `CLAUDE.md`'s picker convention, with a `BeltSwatch` per result) bound
+  to `grade_id`.
+- **Grading records**: `nk_grades` (already existed, unused, since the
+  original scaffold) is now the athlete grading-history table: one row
+  per graded attempt, tying an `athlete_id` to the `grade_id` they were
+  attempting, whether they `passed`, and optional `grading_body`/
+  `examiner`/`next_grade_due`/`event_id` (nullable link to the Grading
+  event/session it happened at) /`recorded_by_coach_id` (who recorded
+  it). `POST /api/athletes/:id/gradings` (coach/admin) inserts a record
+  and, when `passed` (default `true`), also updates the athlete's
+  current `nk_athletes.grade_id` in the same transaction — recording a
+  grading *is* how an athlete's current grade changes now, there's no
+  separate "just edit the grade field" flow for a real promotion (the
+  grade picker on the athlete's edit form is still there for direct
+  correction, e.g. fixing a data-entry mistake, without going through
+  the grading-history flow). `GET /api/athletes/:id/gradings` is
+  readable by coach/admin/the athlete themself (same `isSelf` pattern as
+  `GET /api/athletes/:id`); `DELETE .../gradings/:gradingId` removes a
+  single history entry (coach/admin) without reverting the athlete's
+  current grade. `Athletes.tsx`'s edit drawer gained a
+  `GradingHistorySection` — accordion rows (tap to expand into grading
+  body/examiner/next-due-date + `DeleteButton`), a `GradePicker` inside
+  an inline "+ Record grading" form (date, examiner, grading body,
+  passed checkbox, next grade due). `AthleteSelfProfile.tsx` shows the
+  same history read-only (no recording action) alongside the athlete's
+  current grade.
+- **Grading event type**: `"grading"` was added to `EVENT_TYPES` in both
+  `events.js` and `Schedule.tsx` (and so, via the `[...EVENT_TYPES, ...]`
+  spread, to `ITEM_TYPES` too) — a plain event/item type like any other,
+  no dedicated fields of its own; the actual grading result is recorded
+  separately via the athlete's Grading history, not on the event.
 
 ## Auth & RBAC
 

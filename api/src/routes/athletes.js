@@ -6,7 +6,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const router = Router();
 
 const FIELDS = `id, first_name, last_name, date_of_birth, email, phone,
-                emergency_name, emergency_phone, belt, join_date, photo_url,
+                emergency_name, emergency_phone, grade_id, join_date, photo_url,
                 medical_notes, is_active, created_at`;
 
 router.use(authorize());
@@ -48,7 +48,7 @@ router.post(
       phone,
       emergency_name,
       emergency_phone,
-      belt,
+      grade_id,
       join_date,
       photo_url,
       medical_notes,
@@ -61,29 +61,38 @@ router.post(
         .json({ error: { message: "first_name and last_name are required" } });
     }
 
-    const { rows } = await pool.query(
-      `INSERT INTO nk_athletes
-         (first_name, last_name, date_of_birth, email, phone,
-          emergency_name, emergency_phone, belt, join_date, photo_url, medical_notes, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'white'), COALESCE($9, CURRENT_DATE), $10, $11, COALESCE($12, TRUE))
-       RETURNING ${FIELDS}`,
-      [
-        first_name,
-        last_name,
-        date_of_birth,
-        email,
-        phone,
-        emergency_name,
-        emergency_phone,
-        belt,
-        join_date,
-        photo_url,
-        medical_notes,
-        is_active,
-      ]
-    );
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO nk_athletes
+           (first_name, last_name, date_of_birth, email, phone,
+            emergency_name, emergency_phone, grade_id, join_date, photo_url, medical_notes, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, CURRENT_DATE), $10, $11, COALESCE($12, TRUE))
+         RETURNING ${FIELDS}`,
+        [
+          first_name,
+          last_name,
+          date_of_birth,
+          email,
+          phone,
+          emergency_name,
+          emergency_phone,
+          grade_id ?? null,
+          join_date,
+          photo_url,
+          medical_notes,
+          is_active,
+        ]
+      );
 
-    res.status(201).json({ athlete: rows[0] });
+      res.status(201).json({ athlete: rows[0] });
+    } catch (err) {
+      if (err.code === "23503") {
+        return res
+          .status(400)
+          .json({ error: { message: "That grade does not exist" } });
+      }
+      throw err;
+    }
   })
 );
 
@@ -124,7 +133,7 @@ router.patch(
       phone: body.phone,
       emergency_name: body.emergency_name,
       emergency_phone: body.emergency_phone,
-      belt: body.belt,
+      grade_id: body.grade_id,
       join_date: body.join_date,
       photo_url: body.photo_url,
       medical_notes: body.medical_notes,
@@ -145,17 +154,26 @@ router.patch(
 
     values.push(req.params.id);
 
-    const { rows } = await pool.query(
-      `UPDATE nk_athletes SET ${setClauses.join(", ")}, updated_at = NOW()
-       WHERE id = $${values.length}
-       RETURNING ${FIELDS}`,
-      values
-    );
+    try {
+      const { rows } = await pool.query(
+        `UPDATE nk_athletes SET ${setClauses.join(", ")}, updated_at = NOW()
+         WHERE id = $${values.length}
+         RETURNING ${FIELDS}`,
+        values
+      );
 
-    if (rows.length === 0) {
-      return res.status(404).json({ error: { message: "Athlete not found" } });
+      if (rows.length === 0) {
+        return res.status(404).json({ error: { message: "Athlete not found" } });
+      }
+      res.json({ athlete: rows[0] });
+    } catch (err) {
+      if (err.code === "23503") {
+        return res
+          .status(400)
+          .json({ error: { message: "That grade does not exist" } });
+      }
+      throw err;
     }
-    res.json({ athlete: rows[0] });
   })
 );
 
@@ -285,6 +303,116 @@ router.put(
     } finally {
       client.release();
     }
+  })
+);
+
+const GRADING_FIELDS = `id, athlete_id, grade_id, event_id, recorded_by_coach_id,
+                        graded_at, grading_body, examiner, passed, next_grade_due, created_at`;
+
+// A coach recording a grading result against an athlete - the history of
+// every grading attempt (pass or fail), not just their current grade.
+router.get(
+  "/:id/gradings",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!req.user.is_admin && req.user.role !== "coach" && !isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT ${GRADING_FIELDS} FROM nk_grades
+       WHERE athlete_id = $1
+       ORDER BY graded_at DESC, created_at DESC`,
+      [req.params.id]
+    );
+    res.json({ gradings: rows });
+  })
+);
+
+router.post(
+  "/:id/gradings",
+  asyncHandler(async (req, res) => {
+    if (!req.user.is_admin && req.user.role !== "coach") {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const {
+      grade_id,
+      event_id,
+      graded_at,
+      grading_body,
+      examiner,
+      passed,
+      next_grade_due,
+    } = req.body ?? {};
+
+    if (!Number.isInteger(grade_id)) {
+      return res.status(400).json({ error: { message: "grade_id is required" } });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        `INSERT INTO nk_grades
+           (athlete_id, grade_id, event_id, recorded_by_coach_id, graded_at,
+            grading_body, examiner, passed, next_grade_due)
+         VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_DATE), $6, $7, COALESCE($8, TRUE), $9)
+         RETURNING ${GRADING_FIELDS}`,
+        [
+          req.params.id,
+          grade_id,
+          event_id ?? null,
+          req.user.coach_id ?? null,
+          graded_at,
+          grading_body,
+          examiner,
+          passed,
+          next_grade_due,
+        ]
+      );
+      const grading = rows[0];
+
+      if (grading.passed) {
+        await client.query(
+          `UPDATE nk_athletes SET grade_id = $1, updated_at = NOW() WHERE id = $2`,
+          [grade_id, req.params.id]
+        );
+      }
+
+      await client.query("COMMIT");
+      res.status(201).json({ grading });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      if (err.code === "23503") {
+        return res.status(400).json({
+          error: { message: "The athlete, grade, or event does not exist" },
+        });
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  })
+);
+
+router.delete(
+  "/:id/gradings/:gradingId",
+  asyncHandler(async (req, res) => {
+    if (!req.user.is_admin && req.user.role !== "coach") {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rowCount } = await pool.query(
+      `DELETE FROM nk_grades WHERE id = $1 AND athlete_id = $2`,
+      [req.params.gradingId, req.params.id]
+    );
+    if (rowCount === 0) {
+      return res.status(404).json({ error: { message: "Grading not found" } });
+    }
+    res.status(204).end();
   })
 );
 
