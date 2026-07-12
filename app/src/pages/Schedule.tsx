@@ -1560,21 +1560,28 @@ function kataLabel(k: Kata) {
 }
 
 const SWIPE_THRESHOLD = 64;
+const DISABLED_SWIPE_MAX = 180;
 
 // Wraps a row with horizontal swipe-to-flag: swipe left calls onSwipeComplete,
 // swipe right calls onSwipeFailed. Pointer events (not HTML5 drag-and-drop)
-// so it works on touch, same approach as the Day view's drag-to-move.
+// so it works on touch, same approach as the Day view's drag-to-move. When
+// `disabled` (coaches/admins can't swipe someone else's status), dragging
+// still tracks and reveals `disabledMessage` behind the row instead of the
+// ✓/✗ hint, growing with drag distance so the message can be read - but
+// releasing never fires onSwipeComplete/onSwipeFailed.
 function SwipeableRow({
   children,
   onSwipeComplete,
   onSwipeFailed,
   disabled,
+  disabledMessage = "Only athletes can swipe",
   className,
 }: {
   children: ReactNode;
   onSwipeComplete: () => void;
   onSwipeFailed: () => void;
   disabled?: boolean;
+  disabledMessage?: string;
   className?: string;
 }) {
   const [dragX, setDragX] = useState(0);
@@ -1582,7 +1589,6 @@ function SwipeableRow({
   const draggedRef = useRef(false);
 
   function onPointerDown(e: ReactPointerEvent) {
-    if (disabled) return;
     startXRef.current = e.clientX;
     draggedRef.current = false;
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -1592,32 +1598,49 @@ function SwipeableRow({
     if (startXRef.current == null) return;
     const delta = e.clientX - startXRef.current;
     if (Math.abs(delta) > 8) draggedRef.current = true;
-    setDragX(delta);
+    setDragX(
+      disabled
+        ? Math.max(-DISABLED_SWIPE_MAX, Math.min(DISABLED_SWIPE_MAX, delta))
+        : delta
+    );
   }
 
   function onPointerUp() {
     if (startXRef.current == null) return;
-    if (dragX <= -SWIPE_THRESHOLD) onSwipeComplete();
-    else if (dragX >= SWIPE_THRESHOLD) onSwipeFailed();
+    if (!disabled) {
+      if (dragX <= -SWIPE_THRESHOLD) onSwipeComplete();
+      else if (dragX >= SWIPE_THRESHOLD) onSwipeFailed();
+    }
     setDragX(0);
     startXRef.current = null;
   }
 
-  const hintOpacity = Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD);
+  const hintWidth = disabled ? Math.abs(dragX) : SWIPE_THRESHOLD;
+  const hintOpacity = disabled
+    ? Math.min(1, Math.abs(dragX) / 40)
+    : Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD);
 
   return (
     <div className={`relative overflow-hidden rounded-2xl ${className ?? ""}`}>
+      {/* Positioned on the side the slide actually exposes: dragging left
+          (dragX<0) slides content left, uncovering the row's right edge, so
+          the ✓/complete hint - the action that fires for dragX<0 - lives at
+          right-0 (and vice versa for ✗/failed at left-0). */}
       <div
-        className="pointer-events-none absolute inset-y-0 left-0 flex w-16 items-center justify-center bg-green-100 text-green-700"
-        style={{ opacity: dragX < 0 ? hintOpacity : 0 }}
+        className={`pointer-events-none absolute inset-y-0 right-0 flex items-center justify-center overflow-hidden px-2 text-center text-xs font-medium ${
+          disabled ? "bg-stone-200 text-stone-600" : "bg-green-100 text-green-700"
+        }`}
+        style={{ opacity: dragX < 0 ? hintOpacity : 0, width: hintWidth }}
       >
-        ✓
+        {disabled ? disabledMessage : "✓"}
       </div>
       <div
-        className="pointer-events-none absolute inset-y-0 right-0 flex w-16 items-center justify-center bg-red-100 text-red-700"
-        style={{ opacity: dragX > 0 ? hintOpacity : 0 }}
+        className={`pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center overflow-hidden px-2 text-center text-xs font-medium ${
+          disabled ? "bg-stone-200 text-stone-600" : "bg-red-100 text-red-700"
+        }`}
+        style={{ opacity: dragX > 0 ? hintOpacity : 0, width: hintWidth }}
       >
-        ✗
+        {disabled ? disabledMessage : "✗"}
       </div>
       <div
         onPointerDown={onPointerDown}
@@ -1925,7 +1948,15 @@ function ItemsSection({
                 })
               }
             >
-              <div className="rounded-xl border border-stone-200 bg-white">
+              <div
+                className={`rounded-xl border ${
+                  myEffectiveStatus === "completed"
+                    ? "border-green-200 bg-green-50"
+                    : myEffectiveStatus === "failed"
+                    ? "border-red-200 bg-red-50"
+                    : "border-stone-200 bg-white"
+                }`}
+              >
                 <div className="flex w-full items-start gap-2 px-3 py-2">
                   {myStatus ? (
                     <button
