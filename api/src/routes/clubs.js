@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const { Router } = require("express");
 const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
@@ -369,6 +370,65 @@ router.put(
     } finally {
       client.release();
     }
+  })
+);
+
+router.get(
+  "/:id/join-link",
+  asyncHandler(async (req, res) => {
+    if (!(await isClubAdmin(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT join_token FROM nk_clubs WHERE id = $1`,
+      [req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: { message: "Club not found" } });
+    }
+    res.json({ join_token: rows[0].join_token });
+  })
+);
+
+// Generates (or replaces) this club's join token - a long random, multi-use,
+// no-expiry string embedded in a shareable registration link. Unlike
+// nk_athletes.link_pin (single-use, cleared on redemption), this token stays
+// valid for every registrant until a club admin regenerates or revokes it.
+router.post(
+  "/:id/join-link",
+  asyncHandler(async (req, res) => {
+    if (!(await isClubAdmin(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const token = crypto.randomBytes(24).toString("hex");
+    const { rows } = await pool.query(
+      `UPDATE nk_clubs SET join_token = $1 WHERE id = $2 RETURNING join_token`,
+      [token, req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: { message: "Club not found" } });
+    }
+    res.json({ join_token: rows[0].join_token });
+  })
+);
+
+router.delete(
+  "/:id/join-link",
+  asyncHandler(async (req, res) => {
+    if (!(await isClubAdmin(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rowCount } = await pool.query(
+      `UPDATE nk_clubs SET join_token = NULL WHERE id = $1`,
+      [req.params.id]
+    );
+    if (rowCount === 0) {
+      return res.status(404).json({ error: { message: "Club not found" } });
+    }
+    res.status(204).end();
   })
 );
 

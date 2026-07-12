@@ -7,6 +7,7 @@ import {
   AddButton,
   DeleteButton,
   Field,
+  Toast,
 } from "../../components/ui";
 
 interface Association {
@@ -438,6 +439,8 @@ export default function Clubs() {
               }
             />
 
+            {canSeePending && <JoinLink clubId={editing.id} />}
+
             {canSeePending && <PendingMembers clubId={editing.id} />}
 
             {isAdmin && (
@@ -449,6 +452,104 @@ export default function Clubs() {
           </div>
         )}
       </Drawer>
+    </div>
+  );
+}
+
+function JoinLink({ clubId }: { clubId: number }) {
+  const api = useApi();
+  const [token, setToken] = useState<string | null | undefined>(undefined);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    setToken(undefined);
+    api
+      .get<{ join_token: string | null }>(`/admin/clubs/${clubId}/join-link`)
+      .then((res) => setToken(res.join_token))
+      .catch(() => setToken(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 2500);
+  }
+
+  async function generate() {
+    const res = await api.post<{ join_token: string }>(
+      `/admin/clubs/${clubId}/join-link`,
+      {}
+    );
+    setToken(res.join_token);
+  }
+
+  async function revoke() {
+    await api.del(`/admin/clubs/${clubId}/join-link`);
+    setToken(null);
+  }
+
+  function copyLink(joinUrl: string) {
+    navigator.clipboard
+      .writeText(joinUrl)
+      .then(() => showToast("Link copied"))
+      .catch(() => showToast("Couldn't copy link"));
+  }
+
+  const joinUrl = token ? `${window.location.origin}/register?join=${token}` : null;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">Join link</span>
+      <p className="text-xs text-stone-500">
+        Share this link to let people register directly as an athlete
+        assigned to this club.
+      </p>
+      {token === undefined ? (
+        <Spinner />
+      ) : joinUrl ? (
+        <>
+          <div className="flex gap-2">
+            <input
+              readOnly
+              value={joinUrl}
+              onFocus={(e) => e.target.select()}
+              className="min-h-[44px] flex-1 rounded-xl border border-stone-300 bg-white px-3 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => copyLink(joinUrl)}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-sm font-medium"
+            >
+              Copy
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={generate}
+              className="min-h-[44px] flex-1 rounded-xl border border-stone-300 text-sm font-medium"
+            >
+              Regenerate
+            </button>
+            <button
+              type="button"
+              onClick={revoke}
+              className="min-h-[44px] flex-1 rounded-xl border border-red-200 text-sm font-medium text-red-700"
+            >
+              Revoke
+            </button>
+          </div>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={generate}
+          className="min-h-[44px] rounded-xl border border-stone-300 text-sm font-medium"
+        >
+          Generate join link
+        </button>
+      )}
+      {toast && <Toast message={toast} />}
     </div>
   );
 }

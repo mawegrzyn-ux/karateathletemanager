@@ -670,6 +670,14 @@ const migrations = [
   // "delete whole series" action can find its siblings. Null for
   // manually-created (non-repeating) items.
   `ALTER TABLE nk_event_items ADD COLUMN IF NOT EXISTS recurrence_id UUID`,
+
+  // A club-admin-generated, multi-use, no-expiry token for a shareable
+  // join link (unlike nk_athletes.link_pin, which is single-use/short-
+  // lived). Null means no active join link for that club.
+  `ALTER TABLE nk_clubs ADD COLUMN IF NOT EXISTS join_token VARCHAR(64)`,
+  // Safe to rerun every deploy: the DROP happens first each time.
+  `ALTER TABLE nk_clubs DROP CONSTRAINT IF EXISTS nk_clubs_join_token_unique`,
+  `ALTER TABLE nk_clubs ADD CONSTRAINT nk_clubs_join_token_unique UNIQUE (join_token)`,
 ];
 
 async function migrate() {

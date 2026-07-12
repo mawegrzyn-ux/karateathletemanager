@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { ApiError, useApi } from "../hooks/useApi";
 import { Field } from "../components/ui";
@@ -13,6 +13,8 @@ export default function Register() {
   const { register } = useAuth();
   const api = useApi();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const joinToken = searchParams.get("join");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [wantsAthlete, setWantsAthlete] = useState(false);
@@ -20,6 +22,9 @@ export default function Register() {
   const [wantsReferee, setWantsReferee] = useState(false);
   const [clubId, setClubId] = useState<number | null>(null);
   const [clubs, setClubs] = useState<Club[]>([]);
+  const [joinClub, setJoinClub] = useState<Club | null | undefined>(
+    joinToken ? undefined : null
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -31,16 +36,29 @@ export default function Register() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!joinToken) return;
+    api
+      .get<{ club: Club }>(`/public/join/${joinToken}`)
+      .then((res) => {
+        setJoinClub(res.club);
+        setWantsAthlete(true);
+        setClubId(res.club.id);
+      })
+      .catch(() => setJoinClub(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joinToken]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
       await register(email, password, {
-        wants_athlete: wantsAthlete,
-        wants_coach: wantsCoach,
-        wants_referee: wantsReferee,
-        requested_club_id: clubId,
+        wants_athlete: joinClub ? true : wantsAthlete,
+        wants_coach: joinClub ? false : wantsCoach,
+        wants_referee: joinClub ? false : wantsReferee,
+        requested_club_id: joinClub ? joinClub.id : clubId,
       });
       navigate("/");
     } catch (err) {
@@ -74,37 +92,54 @@ export default function Register() {
           />
         </Field>
 
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-stone-700">
-            I'm joining as (optional)
-          </span>
-          <label className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-300 px-3">
-            <input
-              type="checkbox"
-              checked={wantsAthlete}
-              onChange={(e) => setWantsAthlete(e.target.checked)}
-            />
-            An athlete
-          </label>
-          <label className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-300 px-3">
-            <input
-              type="checkbox"
-              checked={wantsCoach}
-              onChange={(e) => setWantsCoach(e.target.checked)}
-            />
-            A coach
-          </label>
-          <label className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-300 px-3">
-            <input
-              type="checkbox"
-              checked={wantsReferee}
-              onChange={(e) => setWantsReferee(e.target.checked)}
-            />
-            A referee
-          </label>
-        </div>
+        {joinToken && joinClub === undefined && (
+          <p className="text-sm text-stone-500">Loading join link...</p>
+        )}
+        {joinToken && joinClub === null && (
+          <p className="text-sm text-red-700">
+            This join link is invalid or has expired. You can still register
+            below.
+          </p>
+        )}
+        {joinClub ? (
+          <p className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-800">
+            You're joining <strong>{joinClub.name}</strong> as an athlete.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-stone-700">
+                I'm joining as (optional)
+              </span>
+              <label className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-300 px-3">
+                <input
+                  type="checkbox"
+                  checked={wantsAthlete}
+                  onChange={(e) => setWantsAthlete(e.target.checked)}
+                />
+                An athlete
+              </label>
+              <label className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-300 px-3">
+                <input
+                  type="checkbox"
+                  checked={wantsCoach}
+                  onChange={(e) => setWantsCoach(e.target.checked)}
+                />
+                A coach
+              </label>
+              <label className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-300 px-3">
+                <input
+                  type="checkbox"
+                  checked={wantsReferee}
+                  onChange={(e) => setWantsReferee(e.target.checked)}
+                />
+                A referee
+              </label>
+            </div>
 
-        <ClubPicker selectedId={clubId} options={clubs} onSelect={setClubId} />
+            <ClubPicker selectedId={clubId} options={clubs} onSelect={setClubId} />
+          </>
+        )}
 
         {error && <p className="text-sm text-red-700">{error}</p>}
         <button

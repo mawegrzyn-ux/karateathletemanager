@@ -679,6 +679,51 @@ athletes (GDPR — no directory of children's names is ever exposed):
   switcher shows a pill for each identity the account actually has
   whenever 2 or more of {athlete, coach, parent} apply.
 
+### Club join links
+
+A club admin (per `isClubAdmin` — the club's global admin, or a coach
+holding `is_admin` on that club in `nk_coach_clubs`) can generate a
+shareable link that takes new registrants straight to a registration
+form pre-locked to "athlete, assigned to this club" — skipping the
+checkboxes and club search entirely. Deliberately modeled as a variant
+of the PIN-linking pattern above, but multi-use and long-lived rather
+than single-use/short-lived, since many people register from the same
+link over time rather than one parent redeeming one code:
+
+- `nk_clubs.join_token` (nullable, unique) holds a long random hex
+  string (`crypto.randomBytes(24).toString("hex")`, not a short PIN —
+  it's embedded in a URL, not typed in by hand, so brute-force
+  guessability isn't a concern the way it is for the 6-digit PIN).
+  `GET/POST/DELETE /api/admin/clubs/:id/join-link` (all `isClubAdmin`-
+  gated, in `clubs.js`) read the current token, generate/regenerate one
+  (overwriting any previous token — old links stop working
+  immediately), or clear it (revoke). Never included in the general
+  club list/detail SELECTs — only these three dedicated endpoints ever
+  return it, since (unlike the list endpoints) they're actually scoped
+  to admins of that specific club, and the token is otherwise sensitive
+  (whoever holds it can let people self-register into the club).
+- `GET /api/public/join/:token` (`publicJoin.js`, unauthenticated, same
+  reasoning as `publicClubs.js` — registration runs before any session
+  exists) resolves a token to `{id, name}` only, 404 on an invalid/
+  revoked/regenerated-away token.
+- Surfaced as a "Join link" section in the club's detail drawer
+  (`JoinLink` in `Clubs.tsx`, gated by the same `canSeePending` check
+  used for `PendingMembers`, right above it), showing the full URL
+  (`${origin}/register?join=${token}`) with Copy/Regenerate/Revoke.
+- `Register.tsx` reads a `?join=` query param and, if present, resolves
+  it via the public endpoint on mount. While resolving: a loading line;
+  on success: the checkboxes/`ClubPicker` are replaced entirely by a
+  fixed "You're joining **{club}** as an athlete" banner, and submission
+  always sends `wants_athlete: true, wants_coach: false,
+  wants_referee: false, requested_club_id: <that club>` regardless of
+  the (now-hidden) form state; on an invalid/expired token: an error
+  banner, but the ordinary checkboxes/picker still render underneath as
+  a fallback so the visitor can still register normally. The resulting
+  `nk_users` row is otherwise unremarkable — same `pending`-by-default
+  status and the same `activateUser` consumption of `requested_club_id`
+  on approval as any other registration; a join link only changes how
+  the intent fields get set, not what happens with them afterward.
+
 ### Referee profiles
 
 `nk_referees` is a third self-service profile type, a deliberately
