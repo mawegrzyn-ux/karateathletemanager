@@ -7,7 +7,6 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon-32.png", "apple-touch-icon.png"],
       manifest: {
         name: "Nada Karate",
         short_name: "Nada Karate",
@@ -19,16 +18,24 @@ export default defineConfig({
         start_url: "/",
         scope: "/",
         icons: [
-          { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
           {
-            src: "/icon-maskable-192.png",
+            src: "/api/public/branding/icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+          },
+          {
+            src: "/api/public/branding/icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+          },
+          {
+            src: "/api/public/branding/icon-maskable-192.png",
             sizes: "192x192",
             type: "image/png",
             purpose: "maskable",
           },
           {
-            src: "/icon-maskable-512.png",
+            src: "/api/public/branding/icon-maskable-512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",

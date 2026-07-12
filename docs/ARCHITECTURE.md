@@ -758,16 +758,13 @@ via `vite-plugin-pwa` (`app/vite.config.ts`):
   `manifest` option in `vite.config.ts`): name, `theme_color` (`#dc2626`,
   matching the red accent), `background_color` (`#f5f5f4`, matching the
   stone-100 page background), `display: "standalone"`.
-- **Icons**: `app/public/icon-{192,512}.png` (full-bleed) and
-  `icon-maskable-{192,512}.png` (extra safe-zone padding, for Android's
-  adaptive-icon masking) plus `apple-touch-icon.png` (opaque, since iOS
-  ignores alpha/rounds corners itself) and `favicon-32.png`. All four are
-  a red-600 rounded square with a white "NK" monogram, regenerated via
-  `app/scripts/gen-icons.py` (Pillow) if the design ever needs to
-  change — rerun it and commit the resulting PNGs, there's no build-time
-  step that does this automatically. `index.html` also sets the
-  `apple-mobile-web-app-*` meta tags iOS needs for "Add to Home Screen"
-  that the manifest alone doesn't cover.
+- **Icons**: manifest `icons[].src` and `index.html`'s favicon/
+  `apple-touch-icon` `<link>`s all point at `/api/public/branding/*`
+  (see "App icon & social image" below) rather than static files under
+  `app/public/` — this lets an admin change the icon without a new app
+  deploy. `index.html` also sets the `apple-mobile-web-app-*` meta tags
+  iOS needs for "Add to Home Screen" that the manifest alone doesn't
+  cover.
 - **Service worker**: `registerType: "autoUpdate"` (new deploys take
   over silently on next load, no "update available" prompt — acceptable
   here since the app has no user-entered draft state worth preserving
@@ -781,6 +778,55 @@ via `vite-plugin-pwa` (`app/vite.config.ts`):
 - `navigateFallbackDenylist` excludes `/api/` paths from the SPA
   navigation fallback (not that this matters much in practice — `/api`
   calls are `fetch`, not page navigations — but keeps the rule explicit).
+
+### App icon & social image
+
+An admin can upload a single image (More → Admin → App icon,
+`app/src/pages/admin/AppIcon.tsx`) that becomes the app's home-screen
+icon, favicon, apple-touch-icon, PWA manifest icon, *and* the preview
+image shown when the site is shared on social media/iMessage/Slack —
+one upload, all slots, no rebuild required.
+
+- `nk_settings` (key/value table that's existed since the first
+  migration) stores the chosen image's URL under key
+  `branding_icon_url`. `api/src/routes/settings.js`
+  (`authorize.requireAdmin`) exposes `GET`/`PATCH
+  /admin/settings/branding-icon` to read/write it; the upload itself
+  reuses the existing `POST /api/uploads` endpoint
+  (`app/src/components/ui.tsx`'s `uploadFile`) the same way any other
+  `MediaField` does.
+- `api/src/routes/publicBranding.js`, mounted unauthenticated at
+  `/api/public/branding/*`, serves the configured image at 7 fixed path
+  aliases: `favicon-32.png`, `apple-touch-icon.png`, `icon-192.png`,
+  `icon-512.png`, `icon-maskable-192.png`, `icon-maskable-512.png`, and
+  `social-image.png`. It must be unauthenticated — PWA icon fetchers and
+  social-media link-preview crawlers (Facebook/Twitter/Slack/iMessage)
+  never carry the app's session cookie, so gating this behind
+  `authorize()` (like the general `/api/uploads/files/*` static route
+  is) would break every one of them. It resolves the configured
+  filename from `nk_settings` and validates it against a strict
+  `^[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+$` pattern before reading it off disk
+  from `api/uploads/`, to rule out path traversal since this route has
+  no auth layer to fall back on. Before any admin upload (or if
+  `nk_settings` has no row yet), it falls back to a committed default
+  (`api/src/assets/default-icon.jpg`).
+- `index.html`'s favicon/apple-touch-icon `<link>`s and its OG/Twitter
+  `<meta>` tags (`og:image`, `twitter:image`, absolute URL
+  `https://nadakarate.com/api/public/branding/social-image.png` — OG
+  crawlers read raw HTML only, no JS execution, so this has to be a real
+  `<meta>` tag with an absolute URL, not something set client-side) and
+  the PWA manifest's `icons[].src` (`vite.config.ts`) all point at these
+  same 7 URLs. Because the URLs are stable and the bytes behind them
+  are what changes, updating the admin-uploaded image takes effect
+  immediately across app icon, favicon, and social preview — no new
+  frontend deploy needed.
+- **v1 simplification**: the exact same raw uploaded image is served at
+  all 7 slots — there's no server-side resizing/padding (no `sharp` or
+  similar added), so the maskable icons' safe-zone padding and the
+  apple-touch-icon's "no transparency" preference aren't actually
+  enforced; the browser/OS scales the one image as needed. Fully
+  functional, just not pixel-ideal for every slot — revisit with real
+  per-size image processing if that ever matters.
 
 ## Suggested Page Structure (Mobile)
 

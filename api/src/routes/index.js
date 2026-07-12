@@ -14,6 +14,8 @@ const katas = require("./katas");
 const karateStyles = require("./karateStyles");
 const coachRoles = require("./coachRoles");
 const uploads = require("./uploads");
+const settings = require("./settings");
+const publicBranding = require("./publicBranding");
 
 const router = Router();
 
@@ -32,5 +34,7 @@ router.use("/katas", katas);
 router.use("/karate-styles", karateStyles);
 router.use("/coach-roles", coachRoles);
 router.use("/uploads", uploads);
+router.use("/admin/settings", settings);
+router.use("/public/branding", publicBranding);
 
 module.exports = router;
