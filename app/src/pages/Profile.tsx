@@ -13,6 +13,7 @@ export default function Profile() {
   const [firstName, setFirstName] = useState(user?.first_name ?? "");
   const [lastName, setLastName] = useState(user?.last_name ?? "");
   const [phone, setPhone] = useState(user?.phone ?? "");
+  const [dateOfBirth, setDateOfBirth] = useState(user?.date_of_birth ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -25,6 +26,12 @@ export default function Profile() {
   const [picker, setPicker] = useState<SwitchableRole | null>(null);
 
   const showActiveNav = user?.status === "active" && user.role;
+  // A join-link registrant is registering as an athlete, not a parent -
+  // don't offer to link a child (whether they're already active as an
+  // athlete, or still pending approval with that intent recorded).
+  const isAthleteOnly =
+    user?.role === "athlete" ||
+    (user?.status === "pending" && user?.wants_athlete);
 
   function showToast(message: string) {
     setToast(message);
@@ -86,6 +93,7 @@ export default function Profile() {
         first_name: firstName,
         last_name: lastName,
         phone,
+        date_of_birth: dateOfBirth || undefined,
       });
       setSaved(true);
     } catch (err) {
@@ -195,6 +203,14 @@ export default function Profile() {
             className="min-h-[44px] rounded-xl border border-stone-300 px-3"
           />
         </Field>
+        <Field label="Date of birth">
+          <input
+            type="date"
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+          />
+        </Field>
         {error && <p className="text-sm text-red-700">{error}</p>}
         {saved && <p className="text-sm text-green-700">Saved.</p>}
         <button
@@ -206,7 +222,7 @@ export default function Profile() {
         </button>
       </form>
 
-      <LinkChild />
+      {!isAthleteOnly && <LinkChild />}
       {toast && <Toast message={toast} />}
 
       {showActiveNav && (

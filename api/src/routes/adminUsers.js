@@ -89,7 +89,7 @@ router.patch(
         `UPDATE nk_users SET ${setClauses.join(", ")}, updated_at = NOW()
          WHERE id = $${values.length}
          RETURNING id, email, role, status, is_admin, athlete_id, coach_id, referee_id,
-                   first_name, last_name, phone,
+                   first_name, last_name, phone, photo_url, date_of_birth,
                    wants_athlete, wants_coach, wants_referee, requested_club_id`,
         values
       );

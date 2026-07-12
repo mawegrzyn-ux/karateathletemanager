@@ -144,7 +144,8 @@ router.patch(
       return res.status(401).json({ error: { message: "Not authenticated" } });
     }
 
-    const { first_name, last_name, phone, photo_url } = req.body ?? {};
+    const { first_name, last_name, phone, photo_url, date_of_birth } =
+      req.body ?? {};
 
     for (const [field, value, maxLen] of [
       ["first_name", first_name, 100],
@@ -162,17 +163,25 @@ router.patch(
         });
       }
     }
+    if (
+      date_of_birth !== undefined &&
+      date_of_birth !== null &&
+      typeof date_of_birth !== "string"
+    ) {
+      return res.status(400).json({ error: { message: "Invalid date_of_birth" } });
+    }
 
     const { rows } = await pool.query(
       `UPDATE nk_users SET
-         first_name = COALESCE($1, first_name),
-         last_name  = COALESCE($2, last_name),
-         phone      = COALESCE($3, phone),
-         photo_url  = COALESCE($4, photo_url),
-         updated_at = NOW()
-       WHERE id = $5
+         first_name    = COALESCE($1, first_name),
+         last_name     = COALESCE($2, last_name),
+         phone         = COALESCE($3, phone),
+         photo_url     = COALESCE($4, photo_url),
+         date_of_birth = COALESCE($5, date_of_birth),
+         updated_at    = NOW()
+       WHERE id = $6
        RETURNING ${USER_SELECT_FIELDS}`,
-      [first_name, last_name, phone, photo_url, req.user.id]
+      [first_name, last_name, phone, photo_url, date_of_birth, req.user.id]
     );
 
     res.json({ user: rows[0] });

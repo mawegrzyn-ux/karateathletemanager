@@ -48,6 +48,17 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// authenticated -> logged in only, no active-status or role check. For
+// actions a not-yet-approved user must still be able to do before a
+// coach/admin has processed them, e.g. uploading their own avatar.
+function authenticated(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: { message: "Not authenticated" } });
+  }
+  next();
+}
+
 authorize.requireAdmin = requireAdmin;
+authorize.authenticated = authenticated;
 
 module.exports = authorize;
