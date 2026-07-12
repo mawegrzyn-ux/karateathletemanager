@@ -5,10 +5,26 @@ const authorize = require("../middleware/authorize");
 const asyncHandler = require("../utils/asyncHandler");
 const { isClubAdmin } = require("../utils/permissions");
 const { activateUser } = require("../utils/activateUser");
+const { registerClubCollection } = require("../utils/clubCollections");
 
 const router = Router();
 
 router.use(authorize("coach"));
+
+registerClubCollection(router, {
+  path: "squads",
+  table: "nk_squads",
+  joinTable: "nk_squad_athletes",
+  joinKey: "squad_id",
+  label: "squad",
+});
+registerClubCollection(router, {
+  path: "groups",
+  table: "nk_groups",
+  joinTable: "nk_group_athletes",
+  joinKey: "group_id",
+  label: "group",
+});
 
 router.get(
   "/",
@@ -427,6 +443,78 @@ router.delete(
     );
     if (rowCount === 0) {
       return res.status(404).json({ error: { message: "Club not found" } });
+    }
+    res.status(204).end();
+  })
+);
+
+const VENUE_FIELDS = `id, club_id, name, address, notes, created_at`;
+
+router.get(
+  "/:id/venues",
+  asyncHandler(async (req, res) => {
+    const { rows } = await pool.query(
+      `SELECT ${VENUE_FIELDS} FROM nk_venues WHERE club_id = $1 ORDER BY name`,
+      [req.params.id]
+    );
+    res.json({ venues: rows });
+  })
+);
+
+router.post(
+  "/:id/venues",
+  asyncHandler(async (req, res) => {
+    if (!(await isClubAdmin(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+    const { name, address, notes } = req.body ?? {};
+    if (typeof name !== "string" || name.trim().length === 0) {
+      return res.status(400).json({ error: { message: "Name is required" } });
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO nk_venues (club_id, name, address, notes)
+       VALUES ($1, $2, $3, $4) RETURNING ${VENUE_FIELDS}`,
+      [req.params.id, name, address ?? null, notes ?? null]
+    );
+    res.status(201).json({ venue: rows[0] });
+  })
+);
+
+router.patch(
+  "/:id/venues/:venueId",
+  asyncHandler(async (req, res) => {
+    if (!(await isClubAdmin(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+    const { name, address, notes } = req.body ?? {};
+    const { rows } = await pool.query(
+      `UPDATE nk_venues SET
+         name    = COALESCE($1, name),
+         address = COALESCE($2, address),
+         notes   = COALESCE($3, notes)
+       WHERE id = $4 AND club_id = $5
+       RETURNING ${VENUE_FIELDS}`,
+      [name, address, notes, req.params.venueId, req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: { message: "Venue not found" } });
+    }
+    res.json({ venue: rows[0] });
+  })
+);
+
+router.delete(
+  "/:id/venues/:venueId",
+  asyncHandler(async (req, res) => {
+    if (!(await isClubAdmin(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+    const { rowCount } = await pool.query(
+      `DELETE FROM nk_venues WHERE id = $1 AND club_id = $2`,
+      [req.params.venueId, req.params.id]
+    );
+    if (rowCount === 0) {
+      return res.status(404).json({ error: { message: "Venue not found" } });
     }
     res.status(204).end();
   })

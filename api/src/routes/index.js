@@ -17,6 +17,10 @@ const coachRoles = require("./coachRoles");
 const uploads = require("./uploads");
 const settings = require("./settings");
 const publicBranding = require("./publicBranding");
+const adminVenues = require("./adminVenues");
+const venues = require("./venues");
+const squads = require("./squads");
+const groups = require("./groups");
 
 const router = Router();
 
@@ -38,5 +42,9 @@ router.use("/coach-roles", coachRoles);
 router.use("/uploads", uploads);
 router.use("/admin/settings", settings);
 router.use("/public/branding", publicBranding);
+router.use("/admin/venues", adminVenues);
+router.use("/venues", venues);
+router.use("/squads", squads);
+router.use("/groups", groups);
 
 module.exports = router;

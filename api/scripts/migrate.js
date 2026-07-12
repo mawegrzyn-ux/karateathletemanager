@@ -678,6 +678,48 @@ const migrations = [
   // Safe to rerun every deploy: the DROP happens first each time.
   `ALTER TABLE nk_clubs DROP CONSTRAINT IF EXISTS nk_clubs_join_token_unique`,
   `ALTER TABLE nk_clubs ADD CONSTRAINT nk_clubs_join_token_unique UNIQUE (join_token)`,
+
+  // Squads and groups: club-scoped named athlete collections (e.g. a
+  // competition squad, a training-level group), managed by that club's
+  // admin. Structurally identical - two separate concepts per the
+  // domain, not one generic table - so each gets its own table/join
+  // table, mirroring nk_karate_styles' global-list + join-table shape
+  // but scoped to a single club instead of being shared globally.
+  `CREATE TABLE IF NOT EXISTS nk_squads (
+     id         SERIAL PRIMARY KEY,
+     club_id    INTEGER NOT NULL REFERENCES nk_clubs(id) ON DELETE CASCADE,
+     name       VARCHAR(100) NOT NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE TABLE IF NOT EXISTS nk_squad_athletes (
+     squad_id   INTEGER NOT NULL REFERENCES nk_squads(id) ON DELETE CASCADE,
+     athlete_id INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     PRIMARY KEY (squad_id, athlete_id)
+   )`,
+  `CREATE TABLE IF NOT EXISTS nk_groups (
+     id         SERIAL PRIMARY KEY,
+     club_id    INTEGER NOT NULL REFERENCES nk_clubs(id) ON DELETE CASCADE,
+     name       VARCHAR(100) NOT NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE TABLE IF NOT EXISTS nk_group_athletes (
+     group_id   INTEGER NOT NULL REFERENCES nk_groups(id) ON DELETE CASCADE,
+     athlete_id INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     PRIMARY KEY (group_id, athlete_id)
+   )`,
+
+  // Venues: club_id NULL means a global venue (admin-managed, usable by
+  // any club/event); club_id set means that club's own venue, managed
+  // by that club's admin.
+  `CREATE TABLE IF NOT EXISTS nk_venues (
+     id         SERIAL PRIMARY KEY,
+     club_id    INTEGER REFERENCES nk_clubs(id) ON DELETE CASCADE,
+     name       VARCHAR(150) NOT NULL,
+     address    VARCHAR(300),
+     notes      TEXT,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `ALTER TABLE nk_events ADD COLUMN IF NOT EXISTS venue_id INTEGER REFERENCES nk_venues(id) ON DELETE SET NULL`,
 ];
 
 async function migrate() {

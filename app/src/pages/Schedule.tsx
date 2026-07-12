@@ -29,6 +29,7 @@ interface Event {
   start_time: string | null;
   end_time: string | null;
   location: string | null;
+  venue_id: number | null;
   notes: string | null;
   training_module_id: number | null;
   athlete_status: AthleteStatus[];
@@ -68,6 +69,22 @@ interface Kata {
   name: string;
   style: string | null;
   wkf_number: number | null;
+}
+
+interface Venue {
+  id: number;
+  name: string;
+  address: string | null;
+  club_id: number | null;
+  club_name: string | null;
+}
+
+interface AthleteGroup {
+  id: number;
+  name: string;
+  club_id: number;
+  club_name: string;
+  athlete_ids: number[];
 }
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -117,6 +134,7 @@ const EMPTY_FORM = {
   start_time: "",
   end_time: "",
   location: "",
+  venue_id: null as number | null,
   notes: "",
   training_module_id: null as number | null,
 };
@@ -296,6 +314,9 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [athletes, setAthletes] = useState<Person[]>([]);
   const [modules, setModules] = useState<TrainingModule[]>([]);
   const [katas, setKatas] = useState<Kata[]>([]);
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [squads, setSquads] = useState<AthleteGroup[]>([]);
+  const [groups, setGroups] = useState<AthleteGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [drawer, setDrawer] = useState<"closed" | "create" | Event>("closed");
@@ -356,6 +377,22 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       .get<{ katas: Kata[] }>("/katas")
       .then((res) => setKatas(res.katas))
       .catch(() => setKatas([]));
+
+    api
+      .get<{ venues: Venue[] }>("/venues")
+      .then((res) => setVenues(res.venues))
+      .catch(() => setVenues([]));
+
+    if (canPickAthletes) {
+      api
+        .get<{ squads: AthleteGroup[] }>("/squads")
+        .then((res) => setSquads(res.squads))
+        .catch(() => setSquads([]));
+      api
+        .get<{ groups: AthleteGroup[] }>("/groups")
+        .then((res) => setGroups(res.groups))
+        .catch(() => setGroups([]));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }
 
@@ -648,6 +685,13 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
+          <SingleSelectPicker
+            label="Venue"
+            placeholder="Search venues..."
+            options={venues.map((v) => ({ id: v.id, label: venueLabel(v) }))}
+            selectedId={form.venue_id}
+            onSelect={(id) => setForm({ ...form, venue_id: id })}
+          />
           <Field label="Notes">
             <textarea
               value={form.notes}
@@ -667,14 +711,26 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           )}
 
           {canPickAthletes && (
-            <AthletePicker
-              ids={formAthleteIds}
-              options={athletes}
-              onAdd={(id) => setFormAthleteIds((prev) => [...prev, id])}
-              onRemove={(id) =>
-                setFormAthleteIds((prev) => prev.filter((i) => i !== id))
-              }
-            />
+            <>
+              <GroupQuickAdd
+                squads={squads}
+                groups={groups}
+                onAddAthletes={(ids) =>
+                  setFormAthleteIds((prev) => [
+                    ...prev,
+                    ...ids.filter((id) => !prev.includes(id)),
+                  ])
+                }
+              />
+              <AthletePicker
+                ids={formAthleteIds}
+                options={athletes}
+                onAdd={(id) => setFormAthleteIds((prev) => [...prev, id])}
+                onRemove={(id) =>
+                  setFormAthleteIds((prev) => prev.filter((i) => i !== id))
+                }
+              />
+            </>
           )}
 
           <button
@@ -699,6 +755,9 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             allAthletes={athletes}
             modules={modules}
             katas={katas}
+            venues={venues}
+            squads={squads}
+            groups={groups}
             onUpdated={updateEventInList}
             onDeleted={() => deleteEvent(editing.id)}
           />
@@ -714,6 +773,9 @@ function EventDetail({
   allAthletes,
   modules,
   katas,
+  venues,
+  squads,
+  groups,
   onUpdated,
   onDeleted,
 }: {
@@ -722,6 +784,9 @@ function EventDetail({
   allAthletes: Person[];
   modules: TrainingModule[];
   katas: Kata[];
+  venues: Venue[];
+  squads: AthleteGroup[];
+  groups: AthleteGroup[];
   onUpdated: (event: Event) => void;
   onDeleted: () => void;
 }) {
@@ -883,6 +948,13 @@ function EventDetail({
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
+          <SingleSelectPicker
+            label="Venue"
+            placeholder="Search venues..."
+            options={venues.map((v) => ({ id: v.id, label: venueLabel(v) }))}
+            selectedId={event.venue_id}
+            onSelect={(id) => updateEvent({ venue_id: id })}
+          />
           <Field label="Notes">
             <textarea
               defaultValue={event.notes ?? ""}
@@ -906,12 +978,24 @@ function EventDetail({
           )}
 
           {canPickAthletes && (
-            <AthletePicker
-              ids={athleteIds}
-              options={allAthletes}
-              onAdd={(id) => setAthletes([...athleteIds, id])}
-              onRemove={(id) => setAthletes(athleteIds.filter((i) => i !== id))}
-            />
+            <>
+              <GroupQuickAdd
+                squads={squads}
+                groups={groups}
+                onAddAthletes={(ids) =>
+                  setAthletes([
+                    ...athleteIds,
+                    ...ids.filter((id) => !athleteIds.includes(id)),
+                  ])
+                }
+              />
+              <AthletePicker
+                ids={athleteIds}
+                options={allAthletes}
+                onAdd={(id) => setAthletes([...athleteIds, id])}
+                onRemove={(id) => setAthletes(athleteIds.filter((i) => i !== id))}
+              />
+            </>
           )}
 
           <DeleteButton onClick={onDeleted} itemLabel={event.title} />
@@ -929,8 +1013,21 @@ function EventDetail({
               {event.end_time ? `–${toTimeInput(event.end_time)}` : ""}
             </span>
           </div>
+          {event.venue_id != null &&
+            (() => {
+              const venue = venues.find((v) => v.id === event.venue_id);
+              return venue ? (
+                <p className="text-sm text-stone-600">
+                  📍 {venue.name}
+                  {venue.address ? ` – ${venue.address}` : ""}
+                </p>
+              ) : null;
+            })()}
           {event.location && (
-            <p className="text-sm text-stone-600">📍 {event.location}</p>
+            <p className="text-sm text-stone-600">
+              {event.venue_id != null ? "" : "📍 "}
+              {event.location}
+            </p>
           )}
           {event.notes && <p className="text-stone-700">{event.notes}</p>}
 
@@ -1024,6 +1121,41 @@ function AthletePicker({
         {results.length === 0 && (
           <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
+      </div>
+    </div>
+  );
+}
+
+// A quick shortcut above the plain athlete search picker: tapping a squad
+// or group chip bulk-adds every athlete in it (never removes - the
+// AthletePicker below still handles individual add/remove/undo).
+function GroupQuickAdd({
+  squads,
+  groups,
+  onAddAthletes,
+}: {
+  squads: AthleteGroup[];
+  groups: AthleteGroup[];
+  onAddAthletes: (athleteIds: number[]) => void;
+}) {
+  if (squads.length === 0 && groups.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
+        Add a whole squad or group
+      </span>
+      <div className="flex flex-wrap gap-2">
+        {[...squads, ...groups].map((g) => (
+          <button
+            key={g.id}
+            type="button"
+            onClick={() => onAddAthletes(g.athlete_ids)}
+            className="min-h-[36px] rounded-full border border-stone-300 px-3 text-sm font-medium text-stone-700"
+          >
+            + {g.name} ({g.club_name})
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -1557,6 +1689,10 @@ function dayOfMonthOf(dateStr: string) {
 function kataLabel(k: Kata) {
   const label = k.wkf_number != null ? `${k.wkf_number}. ${k.name}` : k.name;
   return k.style ? `${label} (${k.style})` : label;
+}
+
+function venueLabel(v: Venue) {
+  return v.club_name ? `${v.name} (${v.club_name})` : v.name;
 }
 
 const SWIPE_THRESHOLD = 64;

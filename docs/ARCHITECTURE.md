@@ -559,6 +559,51 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `admin/TrainingModules.tsx` and `admin/Katas.tsx` are separate
   list+drawer admin pages (reachable from `More.tsx`, `coach`+admin and
   admin-only respectively) for managing the underlying libraries.
+- **Squads, groups, and venues**: club-scoped structure, distinct from
+  the global-reference-list model used by katas/karate styles/coach
+  roles above. `nk_squads`/`nk_groups` (`club_id` FK, `name`) each have a
+  join table (`nk_squad_athletes`/`nk_group_athletes`) recording which
+  athletes belong; both are managed only by that club's admin (coaches
+  with `is_admin: true` in `nk_coach_clubs`, or a global admin) via
+  `api/src/utils/clubCollections.js`'s `registerClubCollection` — a
+  shared helper registering the full CRUD + `PUT .../athletes`
+  (replace-all-membership) route set once, called twice in
+  `api/src/routes/clubs.js` (once for squads, once for groups) since the
+  two are structurally identical. `nk_venues` (`club_id` nullable —
+  `NULL` means a global venue) is either admin-managed globally
+  (`api/src/routes/adminVenues.js`, mirrors `karateStyles.js`: `GET` open
+  to any authenticated user, `POST`/`PATCH`/`DELETE`
+  `authorize.requireAdmin`) or club-manager-managed
+  (`/api/admin/clubs/:id/venues`, `isClubAdmin`-gated writes, alongside
+  the squads/groups routes in `clubs.js`). All three are edited inline in
+  the club detail drawer in `admin/Clubs.tsx` (`ClubCollectionSection` for
+  squads/groups — accordion rows, tap to expand into a name field +
+  `MemberEditor` + `DeleteButton`, "+ Add" reveals an inline create form
+  below the list, matching `CLAUDE.md`'s nested-line-items convention;
+  `ClubVenuesSection` is the same accordion shape with name/address/notes
+  fields instead of a membership picker) — there's also a standalone
+  `admin/Venues.tsx` (list+drawer, admin-only route) for managing global
+  venues outside any specific club.
+  Since a coach or athlete's Schedule view spans every club they belong
+  to, three read-only cross-club visibility endpoints feed its pickers:
+  `GET /api/squads`, `GET /api/groups` (`api/src/utils/
+  visibleCollections.js`'s `registerVisibilityRoute` — admins see every
+  club's, coaches see only clubs they belong to via `nk_coach_clubs`,
+  anyone else gets `{squads: []}`/`{groups: []}`) and `GET /api/venues`
+  (every global venue plus — for a coach — their own clubs' venues, or
+  every club's for an admin; readable by any authenticated user, unlike
+  squads/groups, since seeing a venue's address isn't sensitive the way
+  athlete-roster membership is). `nk_events` gained a nullable `venue_id`
+  FK (`ON DELETE SET NULL`) *alongside* the pre-existing free-text
+  `location` column, not replacing it — `Schedule.tsx`'s create form and
+  `EventDetail` edit mode show a `SingleSelectPicker` for venue right
+  under the plain Location input; the read-only view prefers the linked
+  venue's name/address when set, falling back to the free-text location.
+  The athlete picker in both the create form and `EventDetail` gains a
+  `GroupQuickAdd` row above it — one chip per visible squad/group,
+  labeled with its club name; tapping a chip bulk-adds every athlete in
+  it (never removes) to the selection, leaving the existing
+  add/remove/search picker underneath for fine-tuning.
 
 ## Auth & RBAC
 

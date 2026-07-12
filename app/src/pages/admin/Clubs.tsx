@@ -417,6 +417,22 @@ export default function Clubs() {
               onRemove={(id) => removeClubStyle(editing.id, id)}
             />
 
+            <ClubCollectionSection
+              clubId={editing.id}
+              kind="squads"
+              label="Squads"
+              singular="squad"
+              athletes={allAthletes}
+            />
+            <ClubCollectionSection
+              clubId={editing.id}
+              kind="groups"
+              label="Groups"
+              singular="group"
+              athletes={allAthletes}
+            />
+            <ClubVenuesSection clubId={editing.id} />
+
             <MemberEditor
               label="Athletes"
               ids={editingMembership.athleteIds}
@@ -750,6 +766,340 @@ function MemberEditor({
           <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+interface CollectionItem {
+  id: number;
+  name: string;
+  athlete_ids: number[];
+}
+
+function ClubCollectionSection({
+  clubId,
+  kind,
+  label,
+  singular,
+  athletes,
+}: {
+  clubId: number;
+  kind: "squads" | "groups";
+  label: string;
+  singular: string;
+  athletes: Person[];
+}) {
+  const api = useApi();
+  const [items, setItems] = useState<CollectionItem[] | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  useEffect(() => {
+    setItems(null);
+    setExpandedId(null);
+    setAdding(false);
+    setNewName("");
+    api
+      .get<Record<string, CollectionItem[]>>(`/admin/clubs/${clubId}/${kind}`)
+      .then((res) => setItems(res[kind]))
+      .catch(() => setItems([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId, kind]);
+
+  async function create() {
+    if (!newName.trim()) return;
+    const res = await api.post<Record<string, CollectionItem>>(
+      `/admin/clubs/${clubId}/${kind}`,
+      { name: newName }
+    );
+    const created = Object.values(res)[0];
+    setItems((prev) => (prev ? [...prev, created] : [created]));
+    setNewName("");
+    setAdding(false);
+  }
+
+  async function rename(id: number, name: string) {
+    await api.patch(`/admin/clubs/${clubId}/${kind}/${id}`, { name });
+    setItems((prev) =>
+      prev ? prev.map((i) => (i.id === id ? { ...i, name } : i)) : prev
+    );
+  }
+
+  async function remove(id: number) {
+    await api.del(`/admin/clubs/${clubId}/${kind}/${id}`);
+    setItems((prev) => (prev ? prev.filter((i) => i.id !== id) : prev));
+    setExpandedId((prev) => (prev === id ? null : prev));
+  }
+
+  async function setMembers(id: number, athleteIds: number[]) {
+    await api.put(`/admin/clubs/${clubId}/${kind}/${id}/athletes`, {
+      athleteIds,
+    });
+    setItems((prev) =>
+      prev
+        ? prev.map((i) => (i.id === id ? { ...i, athlete_ids: athleteIds } : i))
+        : prev
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
+        {label} ({items?.length ?? 0})
+      </span>
+      {items === null ? (
+        <Spinner />
+      ) : (
+        <div className="flex flex-col gap-1">
+          {items.map((item) => {
+            const expanded = expandedId === item.id;
+            return (
+              <div
+                key={item.id}
+                className="rounded-xl border border-stone-200 bg-white"
+              >
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(expanded ? null : item.id)}
+                  className="flex min-h-[44px] w-full items-center justify-between px-3 text-left font-medium"
+                >
+                  <span>{item.name}</span>
+                  <span className="text-sm text-stone-500">
+                    {item.athlete_ids.length} {expanded ? "▲" : "▼"}
+                  </span>
+                </button>
+                {expanded && (
+                  <div className="flex flex-col gap-3 border-t border-stone-100 p-3">
+                    <Field label="Name">
+                      <input
+                        defaultValue={item.name}
+                        onBlur={(e) => {
+                          if (
+                            e.target.value.trim() &&
+                            e.target.value !== item.name
+                          ) {
+                            rename(item.id, e.target.value);
+                          }
+                        }}
+                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                      />
+                    </Field>
+                    <MemberEditor
+                      label="Athletes"
+                      ids={item.athlete_ids}
+                      options={athletes}
+                      onAdd={(value) =>
+                        setMembers(item.id, [...item.athlete_ids, Number(value)])
+                      }
+                      onRemove={(id) =>
+                        setMembers(
+                          item.id,
+                          item.athlete_ids.filter((a) => a !== id)
+                        )
+                      }
+                    />
+                    <DeleteButton
+                      onClick={() => remove(item.id)}
+                      itemLabel={item.name}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {items.length === 0 && !adding && (
+            <p className="px-1 py-2 text-sm text-stone-500">
+              No {label.toLowerCase()} yet.
+            </p>
+          )}
+          {adding ? (
+            <div className="flex gap-2 p-1">
+              <input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder={`New ${singular} name`}
+                className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
+              />
+              <button
+                type="button"
+                onClick={create}
+                className="min-h-[44px] rounded-xl bg-red-600 px-3 text-sm font-medium text-white"
+              >
+                Add
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="min-h-[44px] rounded-xl border border-dashed border-stone-300 text-sm font-medium text-stone-600"
+            >
+              + Add {singular}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface Venue {
+  id: number;
+  club_id: number | null;
+  name: string;
+  address: string | null;
+  notes: string | null;
+}
+
+function ClubVenuesSection({ clubId }: { clubId: number }) {
+  const api = useApi();
+  const [venues, setVenues] = useState<Venue[] | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  useEffect(() => {
+    setVenues(null);
+    setExpandedId(null);
+    setAdding(false);
+    setNewName("");
+    api
+      .get<{ venues: Venue[] }>(`/admin/clubs/${clubId}/venues`)
+      .then((res) => setVenues(res.venues))
+      .catch(() => setVenues([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  async function create() {
+    if (!newName.trim()) return;
+    const { venue } = await api.post<{ venue: Venue }>(
+      `/admin/clubs/${clubId}/venues`,
+      { name: newName }
+    );
+    setVenues((prev) => (prev ? [...prev, venue] : [venue]));
+    setNewName("");
+    setAdding(false);
+  }
+
+  async function update(id: number, patch: Record<string, unknown>) {
+    const { venue } = await api.patch<{ venue: Venue }>(
+      `/admin/clubs/${clubId}/venues/${id}`,
+      patch
+    );
+    setVenues((prev) =>
+      prev ? prev.map((v) => (v.id === id ? venue : v)) : prev
+    );
+  }
+
+  async function remove(id: number) {
+    await api.del(`/admin/clubs/${clubId}/venues/${id}`);
+    setVenues((prev) => (prev ? prev.filter((v) => v.id !== id) : prev));
+    setExpandedId((prev) => (prev === id ? null : prev));
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
+        Venues ({venues?.length ?? 0})
+      </span>
+      {venues === null ? (
+        <Spinner />
+      ) : (
+        <div className="flex flex-col gap-1">
+          {venues.map((v) => {
+            const expanded = expandedId === v.id;
+            return (
+              <div
+                key={v.id}
+                className="rounded-xl border border-stone-200 bg-white"
+              >
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(expanded ? null : v.id)}
+                  className="flex min-h-[44px] w-full items-center justify-between px-3 text-left font-medium"
+                >
+                  <span>{v.name}</span>
+                  <span className="text-sm text-stone-500">
+                    {expanded ? "▲" : "▼"}
+                  </span>
+                </button>
+                {expanded && (
+                  <div className="flex flex-col gap-3 border-t border-stone-100 p-3">
+                    <Field label="Name">
+                      <input
+                        defaultValue={v.name}
+                        onBlur={(e) => {
+                          if (
+                            e.target.value.trim() &&
+                            e.target.value !== v.name
+                          ) {
+                            update(v.id, { name: e.target.value });
+                          }
+                        }}
+                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                      />
+                    </Field>
+                    <Field label="Address">
+                      <input
+                        defaultValue={v.address ?? ""}
+                        onBlur={(e) => {
+                          if (e.target.value !== (v.address ?? "")) {
+                            update(v.id, { address: e.target.value });
+                          }
+                        }}
+                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                      />
+                    </Field>
+                    <Field label="Notes">
+                      <input
+                        defaultValue={v.notes ?? ""}
+                        onBlur={(e) => {
+                          if (e.target.value !== (v.notes ?? "")) {
+                            update(v.id, { notes: e.target.value });
+                          }
+                        }}
+                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                      />
+                    </Field>
+                    <DeleteButton onClick={() => remove(v.id)} itemLabel={v.name} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {venues.length === 0 && !adding && (
+            <p className="px-1 py-2 text-sm text-stone-500">No venues yet.</p>
+          )}
+          {adding ? (
+            <div className="flex gap-2 p-1">
+              <input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="New venue name"
+                className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
+              />
+              <button
+                type="button"
+                onClick={create}
+                className="min-h-[44px] rounded-xl bg-red-600 px-3 text-sm font-medium text-white"
+              >
+                Add
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="min-h-[44px] rounded-xl border border-dashed border-stone-300 text-sm font-medium text-stone-600"
+            >
+              + Add venue
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

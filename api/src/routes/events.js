@@ -21,7 +21,7 @@ const REPEAT_FREQS = ["daily", "weekly", "monthly"];
 const MAX_REPEAT_OCCURRENCES = 60;
 const STATUS_VALUES = ["pending", "completed", "failed"];
 
-const EVENT_FIELDS = `id, title, event_type, start_date, end_date, start_time, end_time, location, notes, training_module_id, created_at`;
+const EVENT_FIELDS = `id, title, event_type, start_date, end_date, start_time, end_time, location, venue_id, notes, training_module_id, created_at`;
 const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id, recurrence_id`;
 
 router.use(authorize());
@@ -418,6 +418,7 @@ router.post(
       start_time,
       end_time,
       location,
+      venue_id,
       notes,
       training_module_id,
     } = req.body ?? {};
@@ -449,8 +450,8 @@ router.post(
       await client.query("BEGIN");
       const { rows } = await client.query(
         `INSERT INTO nk_events
-           (title, event_type, start_date, end_date, start_time, end_time, location, notes, training_module_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           (title, event_type, start_date, end_date, start_time, end_time, location, venue_id, notes, training_module_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING ${EVENT_FIELDS}`,
         [
           title,
@@ -460,6 +461,7 @@ router.post(
           start_time ?? null,
           end_time ?? null,
           location,
+          venue_id ?? null,
           notes,
           event_type === "training" ? training_module_id ?? null : null,
         ]
@@ -478,9 +480,9 @@ router.post(
     } catch (err) {
       await client.query("ROLLBACK");
       if (err.code === "23503") {
-        return res
-          .status(400)
-          .json({ error: { message: "One or more athlete IDs do not exist" } });
+        return res.status(400).json({
+          error: { message: "One or more athlete IDs or the venue do not exist" },
+        });
       }
       throw err;
     } finally {
@@ -588,6 +590,7 @@ router.patch(
       start_time,
       end_time,
       location,
+      venue_id,
       notes,
       training_module_id,
     } = body;
@@ -604,6 +607,7 @@ router.patch(
       start_time,
       end_time,
       location,
+      venue_id,
       notes,
       training_module_id,
     };
