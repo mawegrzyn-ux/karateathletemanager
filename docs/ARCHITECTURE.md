@@ -682,6 +682,35 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `events.js` and `Schedule.tsx` — a plain event/item type like any other,
   no dedicated fields of its own; the actual grading result is recorded
   separately via the athlete's Grading history, not on the event.
+- **Competition results**: `nk_competition_results` — one row per
+  recorded performance, tying an `athlete_id` to `competition_name`,
+  `competition_date`, `location`, `rounds_completed`, `final_position`
+  (`VARCHAR`, not an int/enum — placements aren't on one consistent scale
+  across formats: "1st", "Gold", "Round of 16", "DNF" are all valid),
+  `notes`, and `recorded_by_user_id`. Unlike gradings, this is a
+  deliberate permission divergence: POST/PATCH/DELETE on
+  `/api/athletes/:id/competition-results` allow the athlete themself (not
+  just coach/admin) — a competition result is the athlete's own
+  self-reported performance, not something requiring third-party
+  certification. `event_id` and `event_item_id` are both nullable and
+  mutually optional (no XOR constraint) — a result can stand alone, tie
+  to a whole event, or tie to one nested itinerary item, since a
+  competition can be either (see "Events and itinerary items share one
+  type set" above). `GET /api/events/:id/competition-results`
+  (`isEventEditor`-gated, the same trust level already governing the
+  whole event view) returns every result tied to the event *or* to any of
+  its items in one query; the frontend filters client-side by
+  `event_item_id` to scope what's shown at each render site.
+  `app/src/components/CompetitionResults.tsx` exports
+  `CompetitionResultsSection` (athlete-scoped, accordion add/expand/
+  delete, same shape as `GradingHistorySection`) — used in `Athletes.tsx`'s
+  edit drawer and, as the one editable section on an otherwise read-only
+  page, `AthleteSelfProfile.tsx` — and `EventCompetitionResults`
+  (event/item-scoped), rendered in `Schedule.tsx`'s `EventDetail` for a
+  whole competition event and in `ItemsSection` for an expanded
+  competition-type item. Capturing a result for someone else (coach/admin)
+  shows an athlete `<select>`; capturing your own (self-athlete) skips it
+  and prefills your own profile automatically.
 - **Events and itinerary items share one type set**: `EVENT_TYPES` and
   `ITEM_TYPES` are literally the same array (`const ITEM_TYPES =
   EVENT_TYPES`) in both `events.js` and `Schedule.tsx`, covering every

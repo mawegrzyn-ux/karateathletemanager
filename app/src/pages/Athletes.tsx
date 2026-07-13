@@ -12,6 +12,7 @@ import {
   BeltSwatch,
 } from "../components/ui";
 import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
+import { CompetitionResultsSection } from "../components/CompetitionResults";
 
 interface Athlete {
   id: number;
@@ -476,6 +477,7 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               onRemove={(id) => removeStyle(editing.id, id)}
             />
             <GradingHistorySection athleteId={editing.id} grades={grades} />
+            <CompetitionResultsSection athleteId={editing.id} />
             <label className="flex items-center gap-2 text-sm text-stone-600">
               <input
                 type="checkbox"

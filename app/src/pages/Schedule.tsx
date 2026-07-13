@@ -17,6 +17,7 @@ import {
   Badge,
 } from "../components/ui";
 import { TrainingModuleView, type TrainingModule } from "../components/TrainingModuleView";
+import { EventCompetitionResults } from "../components/CompetitionResults";
 
 type CompletionStatus = "pending" | "completed" | "failed";
 
@@ -1390,6 +1391,16 @@ function EventDetail({
         onUpdate={updateEventAthleteStatus}
       />
 
+      {event.event_type === "competition" && (
+        <EventCompetitionResults
+          eventId={eventId}
+          athletes={athleteNames}
+          defaultName={event.title}
+          defaultDate={toDateInput(event.start_date)}
+          defaultLocation={event.location ?? ""}
+        />
+      )}
+
       <ItemsSection
         eventId={eventId}
         items={items}
@@ -2676,6 +2687,16 @@ function ItemsSection({
                   onUpdate={(athleteId, patch) =>
                     updateAthleteStatus(item.id, athleteId, patch)
                   }
+                />
+              )}
+              {expanded && item.item_type === "competition" && (
+                <EventCompetitionResults
+                  eventId={eventId}
+                  eventItemId={item.id}
+                  athletes={eventAthletes}
+                  defaultName={item.title}
+                  defaultDate={toDateInput(item.item_date)}
+                  defaultLocation=""
                 />
               )}
               </div>

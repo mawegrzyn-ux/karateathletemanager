@@ -416,4 +416,164 @@ router.delete(
   })
 );
 
+const RESULT_FIELDS = `id, athlete_id, event_id, event_item_id, competition_name,
+                        competition_date, location, rounds_completed, final_position,
+                        notes, recorded_by_user_id, created_at, updated_at`;
+
+// Competition results - unlike gradings, an athlete may record their own
+// (it's their own performance they're reporting, not something only a
+// coach can certify), so POST/PATCH/DELETE all use the same isSelf
+// pattern as GET rather than being coach/admin only.
+router.get(
+  "/:id/competition-results",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!req.user.is_admin && req.user.role !== "coach" && !isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT ${RESULT_FIELDS} FROM nk_competition_results
+       WHERE athlete_id = $1
+       ORDER BY competition_date DESC, created_at DESC`,
+      [req.params.id]
+    );
+    res.json({ results: rows });
+  })
+);
+
+router.post(
+  "/:id/competition-results",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!req.user.is_admin && req.user.role !== "coach" && !isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const {
+      competition_name,
+      competition_date,
+      location,
+      rounds_completed,
+      final_position,
+      notes,
+      event_id,
+      event_item_id,
+    } = req.body ?? {};
+
+    if (typeof competition_name !== "string" || !competition_name.trim()) {
+      return res
+        .status(400)
+        .json({ error: { message: "competition_name is required" } });
+    }
+    if (!competition_date) {
+      return res
+        .status(400)
+        .json({ error: { message: "competition_date is required" } });
+    }
+
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO nk_competition_results
+           (athlete_id, event_id, event_item_id, competition_name, competition_date,
+            location, rounds_completed, final_position, notes, recorded_by_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING ${RESULT_FIELDS}`,
+        [
+          req.params.id,
+          event_id ?? null,
+          event_item_id ?? null,
+          competition_name,
+          competition_date,
+          location ?? null,
+          rounds_completed ?? null,
+          final_position ?? null,
+          notes ?? null,
+          req.user.id,
+        ]
+      );
+      res.status(201).json({ result: rows[0] });
+    } catch (err) {
+      if (err.code === "23503") {
+        return res.status(400).json({
+          error: { message: "The athlete, event, or event item does not exist" },
+        });
+      }
+      throw err;
+    }
+  })
+);
+
+router.patch(
+  "/:id/competition-results/:resultId",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!req.user.is_admin && req.user.role !== "coach" && !isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const body = req.body ?? {};
+    const fields = {
+      competition_name: body.competition_name,
+      competition_date: body.competition_date,
+      location: body.location,
+      rounds_completed: body.rounds_completed,
+      final_position: body.final_position,
+      notes: body.notes,
+    };
+    const setClauses = [];
+    const values = [];
+    for (const [key, value] of Object.entries(fields)) {
+      if (key in body) {
+        values.push(value);
+        setClauses.push(`${key} = $${values.length}`);
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: { message: "No fields to update" } });
+    }
+
+    values.push(req.params.resultId, req.params.id);
+
+    const { rows } = await pool.query(
+      `UPDATE nk_competition_results SET ${setClauses.join(", ")}, updated_at = NOW()
+       WHERE id = $${values.length - 1} AND athlete_id = $${values.length}
+       RETURNING ${RESULT_FIELDS}`,
+      values
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: { message: "Result not found" } });
+    }
+    res.json({ result: rows[0] });
+  })
+);
+
+router.delete(
+  "/:id/competition-results/:resultId",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!req.user.is_admin && req.user.role !== "coach" && !isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rowCount } = await pool.query(
+      `DELETE FROM nk_competition_results WHERE id = $1 AND athlete_id = $2`,
+      [req.params.resultId, req.params.id]
+    );
+    if (rowCount === 0) {
+      return res.status(404).json({ error: { message: "Result not found" } });
+    }
+    res.status(204).end();
+  })
+);
+
 module.exports = router;

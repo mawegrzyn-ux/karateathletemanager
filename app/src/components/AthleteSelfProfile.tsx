@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useApi } from "../hooks/useApi";
 import { Spinner, Avatar, BeltSwatch } from "./ui";
+import { CompetitionResultsSection } from "./CompetitionResults";
 
 interface Athlete {
   id: number;
@@ -234,6 +235,8 @@ export function AthleteSelfProfile({ athleteId }: { athleteId: number }) {
           </div>
         </div>
       )}
+
+      <CompetitionResultsSection athleteId={athlete.id} />
 
       <LinkParentPin athleteId={athlete.id} />
     </div>
