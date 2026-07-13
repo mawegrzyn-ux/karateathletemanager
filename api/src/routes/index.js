@@ -23,6 +23,7 @@ const squads = require("./squads");
 const groups = require("./groups");
 const adminGrades = require("./adminGrades");
 const grades = require("./grades");
+const osu = require("./osu");
 
 const router = Router();
 
@@ -50,5 +51,6 @@ router.use("/squads", squads);
 router.use("/groups", groups);
 router.use("/admin/grades", adminGrades);
 router.use("/grades", grades);
+router.use("/osu", osu);
 
 module.exports = router;
