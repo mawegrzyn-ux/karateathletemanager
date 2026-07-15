@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { Link } from "react-router-dom";
 import { useApi } from "../hooks/useApi";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -2171,17 +2172,18 @@ function AthleteStatusList({
             className="flex flex-col gap-2 rounded-lg bg-stone-50 p-2"
           >
             <div className="flex items-center justify-between gap-2">
-              <span
+              <Link
+                to={`/athletes/${s.athlete_id}/profile`}
                 className={
                   s.status === "completed"
                     ? "line-through text-stone-400"
                     : s.status === "failed"
                     ? "text-red-700"
-                    : ""
+                    : "underline decoration-dotted underline-offset-2"
                 }
               >
                 {athlete ? `${athlete.first_name} ${athlete.last_name}` : "Athlete"}
-              </span>
+              </Link>
               <div className="flex gap-1">
                 <button
                   type="button"

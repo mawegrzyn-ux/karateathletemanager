@@ -5,6 +5,7 @@ import { ApiError, useApi } from "../hooks/useApi";
 import { Field, Drawer, MediaField, Toast } from "../components/ui";
 import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
 import { StaffSelfProfile } from "../components/StaffSelfProfile";
+import { AthleteSocialProfile } from "../components/AthleteSocialProfile";
 
 type SwitchableRole = "athlete" | "coach" | "parent" | "referee";
 
@@ -159,6 +160,12 @@ export default function Profile() {
       {user?.role === "athlete" && user.athlete_id && (
         <div className="rounded-2xl bg-white p-4 shadow-card">
           <AthleteSelfProfile athleteId={user.athlete_id} />
+        </div>
+      )}
+      {user?.role === "athlete" && user.athlete_id && (
+        <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-card">
+          <h2 className="font-semibold">My social profile</h2>
+          <AthleteSocialProfile athleteId={user.athlete_id} isSelf />
         </div>
       )}
       {user?.role === "coach" && user.coach_id && (
