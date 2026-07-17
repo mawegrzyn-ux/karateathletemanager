@@ -711,6 +711,27 @@ coach-run attendance) — this is personal athlete itinerary planning.
   competition-type item. Capturing a result for someone else (coach/admin)
   shows an athlete `<select>`; capturing your own (self-athlete) skips it
   and prefills your own profile automatically.
+- **Competitions page**: `app/src/pages/Competitions.tsx` (`/competitions`,
+  linked from `More.tsx` for admin/coach/athlete) is the cross-cutting
+  "see every competition result in one place" list+drawer view, distinct
+  from the athlete-scoped/event-scoped sections above (those stay for
+  capturing a result in the context of one athlete's profile or one
+  schedule item). `GET /api/competition-results`
+  (`api/src/routes/competitionResults.js`) backs it: a coach/admin gets
+  every athlete's results (with an `?q=` athlete-name filter, matching
+  `Athletes.tsx`'s list-search convention), an athlete gets just their
+  own, without needing their own `athlete_id` in the URL. Creating/
+  editing/deleting still goes through the existing athlete-scoped
+  endpoints - this route is a read-only rollup. The list row reuses
+  `ResultSummary` (now exported from `CompetitionResults.tsx`, alongside
+  `ResultFields`/`resultPayload`/`EMPTY_RESULT_FORM`, for reuse here);
+  tapping a row opens a fully editable detail drawer (onBlur-per-field
+  PATCH, matching the standard entity-page convention, unlike the
+  view-then-delete-only accordion rows elsewhere) plus a `DeleteButton`.
+  The create drawer's athlete picker (coach/admin only; skipped for a
+  self-athlete, who can only ever record for themselves) is a search-box
+  single-select, per the app's picker convention, rather than a
+  `<select>`.
 - **Athlete social profile**: `nk_athletes.bio` (text) and
   `is_public_profile` (boolean, default false) plus `nk_athlete_posts` — a
   Facebook-style feed an athlete can post freeform notes to (`body`/

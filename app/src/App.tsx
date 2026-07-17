@@ -4,6 +4,7 @@ import { Avatar } from "./components/ui";
 import Schedule from "./pages/Schedule";
 import Athletes from "./pages/Athletes";
 import Grades from "./pages/Grades";
+import Competitions from "./pages/Competitions";
 import More from "./pages/More";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -135,6 +136,14 @@ export default function App() {
         <Route path="/athletes" element={<Athletes />} />
         <Route path="/athletes/:id/profile" element={<AthleteProfile />} />
         <Route path="/grades" element={<Grades />} />
+        <Route
+          path="/competitions"
+          element={
+            <RequireAuth roles={["coach", "athlete"]}>
+              <Competitions />
+            </RequireAuth>
+          }
+        />
         <Route path="/more" element={<More />} />
         <Route
           path="/admin/users"
