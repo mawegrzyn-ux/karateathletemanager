@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { useApi } from "../hooks/useApi";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -12,6 +13,7 @@ import {
   BeltSwatch,
 } from "../components/ui";
 import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
+import { CompetitionResultsSection } from "../components/CompetitionResults";
 
 interface Athlete {
   id: number;
@@ -476,6 +478,13 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
               onRemove={(id) => removeStyle(editing.id, id)}
             />
             <GradingHistorySection athleteId={editing.id} grades={grades} />
+            <CompetitionResultsSection athleteId={editing.id} />
+            <Link
+              to={`/athletes/${editing.id}/profile`}
+              className="min-h-[44px] flex items-center justify-center rounded-xl border border-stone-300 text-sm font-medium text-stone-700"
+            >
+              View social profile →
+            </Link>
             <label className="flex items-center gap-2 text-sm text-stone-600">
               <input
                 type="checkbox"

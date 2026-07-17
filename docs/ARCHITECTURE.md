@@ -682,6 +682,68 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `events.js` and `Schedule.tsx` — a plain event/item type like any other,
   no dedicated fields of its own; the actual grading result is recorded
   separately via the athlete's Grading history, not on the event.
+- **Competition results**: `nk_competition_results` — one row per
+  recorded performance, tying an `athlete_id` to `competition_name`,
+  `competition_date`, `location`, `rounds_completed`, `final_position`
+  (`VARCHAR`, not an int/enum — placements aren't on one consistent scale
+  across formats: "1st", "Gold", "Round of 16", "DNF" are all valid),
+  `notes`, and `recorded_by_user_id`. Unlike gradings, this is a
+  deliberate permission divergence: POST/PATCH/DELETE on
+  `/api/athletes/:id/competition-results` allow the athlete themself (not
+  just coach/admin) — a competition result is the athlete's own
+  self-reported performance, not something requiring third-party
+  certification. `event_id` and `event_item_id` are both nullable and
+  mutually optional (no XOR constraint) — a result can stand alone, tie
+  to a whole event, or tie to one nested itinerary item, since a
+  competition can be either (see "Events and itinerary items share one
+  type set" above). `GET /api/events/:id/competition-results`
+  (`isEventEditor`-gated, the same trust level already governing the
+  whole event view) returns every result tied to the event *or* to any of
+  its items in one query; the frontend filters client-side by
+  `event_item_id` to scope what's shown at each render site.
+  `app/src/components/CompetitionResults.tsx` exports
+  `CompetitionResultsSection` (athlete-scoped, accordion add/expand/
+  delete, same shape as `GradingHistorySection`) — used in `Athletes.tsx`'s
+  edit drawer and, as the one editable section on an otherwise read-only
+  page, `AthleteSelfProfile.tsx` — and `EventCompetitionResults`
+  (event/item-scoped), rendered in `Schedule.tsx`'s `EventDetail` for a
+  whole competition event and in `ItemsSection` for an expanded
+  competition-type item. Capturing a result for someone else (coach/admin)
+  shows an athlete `<select>`; capturing your own (self-athlete) skips it
+  and prefills your own profile automatically.
+- **Athlete social profile**: `nk_athletes.bio` (text) and
+  `is_public_profile` (boolean, default false) plus `nk_athlete_posts` — a
+  Facebook-style feed an athlete can post freeform notes to (`body`/
+  `image_url`) or use to share something from their own history: a
+  schedule event/item, a grading, or a competition result (`share_kind` +
+  one of four nullable `share_*_id` columns, resolved via LEFT JOIN at
+  read time rather than duplicated onto the post, so an edit to the
+  underlying record stays reflected in the feed). Visibility is
+  deliberately "other app users" not "the whole internet" — no
+  unauthenticated public route exists for this; `GET
+  /api/athletes/:id/social-profile` and `GET .../posts` are visible to
+  self, any coach, any admin unconditionally (the same trust level they
+  already have for the full athlete record), or to any other signed-in
+  user only once the athlete has flipped `is_public_profile` on
+  themselves — no coach/admin approval step, unlike account activation.
+  Posting (`POST .../posts`) is self-only even for coach/admin (it's the
+  athlete's own voice, not a third-party-certified record like a
+  grading); sharing validates the referenced event/item/grading/result
+  actually belongs to that athlete before allowing it. Deleting a post is
+  self *or* admin (moderation). `GET .../shareable` feeds the composer's
+  "share from schedule" picker (self-only) with the athlete's own recent
+  events/items/gradings/competition results.
+  `app/src/components/AthleteSocialProfile.tsx` exports
+  `AthleteSocialProfile({ athleteId, isSelf })`: the self view (rendered
+  on `Profile.tsx`, alongside the existing read-only `AthleteSelfProfile`
+  block — tapping the bottom-nav profile icon is still the same `/profile`
+  page, just extended) shows an editable bio, the public/private toggle,
+  and the composer; a non-self view (`app/src/pages/AthleteProfile.tsx` at
+  `/athletes/:id/profile`) shows a read-only header (avatar/name/belt) and
+  feed only, or a "This profile is private" message if the backend 403s.
+  Reachable from an athlete's name in `Schedule.tsx`'s `AthleteStatusList`
+  (any user sharing a schedule item with them) and from a "View social
+  profile →" link in `Athletes.tsx`'s edit drawer (coach/admin).
 - **Events and itinerary items share one type set**: `EVENT_TYPES` and
   `ITEM_TYPES` are literally the same array (`const ITEM_TYPES =
   EVENT_TYPES`) in both `events.js` and `Schedule.tsx`, covering every

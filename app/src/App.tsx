@@ -8,6 +8,7 @@ import More from "./pages/More";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Profile from "./pages/Profile";
+import AthleteProfile from "./pages/AthleteProfile";
 import AdminUsers from "./pages/admin/Users";
 import AdminAssociations from "./pages/admin/Associations";
 import AdminClubs from "./pages/admin/Clubs";
@@ -132,6 +133,7 @@ export default function App() {
       >
         <Route path="/" element={<Schedule />} />
         <Route path="/athletes" element={<Athletes />} />
+        <Route path="/athletes/:id/profile" element={<AthleteProfile />} />
         <Route path="/grades" element={<Grades />} />
         <Route path="/more" element={<More />} />
         <Route

@@ -643,6 +643,33 @@ router.get(
   })
 );
 
+// Every competition result tied to this event, whether captured against
+// the event itself or against one of its nested itinerary items - same
+// visibility gate as the event detail view itself (isEventEditor), so
+// anyone who can see this schedule item's athlete list can see what's
+// been recorded for it.
+router.get(
+  "/:id/competition-results",
+  asyncHandler(async (req, res) => {
+    if (!(await isEventEditor(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT r.id, r.athlete_id, a.first_name, a.last_name, r.event_id, r.event_item_id,
+              r.competition_name, r.competition_date, r.location, r.rounds_completed,
+              r.final_position, r.notes, r.created_at
+       FROM nk_competition_results r
+       JOIN nk_athletes a ON a.id = r.athlete_id
+       WHERE r.event_id = $1
+          OR r.event_item_id IN (SELECT id FROM nk_event_items WHERE event_id = $1)
+       ORDER BY r.competition_date DESC, r.created_at DESC`,
+      [req.params.id]
+    );
+    res.json({ results: rows });
+  })
+);
+
 router.patch(
   "/:id",
   asyncHandler(async (req, res) => {

@@ -846,6 +846,58 @@ const migrations = [
   // can be collected before approval and copied onto the real athlete
   // record once one is created.
   `ALTER TABLE nk_users ADD COLUMN IF NOT EXISTS date_of_birth DATE`,
+
+  // Competition results, captured either from an athlete's own profile
+  // or directly off a schedule item (event or itinerary item) of type
+  // 'competition'. event_id/event_item_id are both nullable and mutually
+  // optional (a result can be entered standalone with no schedule link
+  // at all) since a competition can be a whole event or a single day
+  // inside a bigger multi-day event - whichever the athlete or coach was
+  // looking at when they captured it. final_position is free text
+  // ("1st", "Gold", "Round of 16", "DNF", ...) rather than an integer,
+  // since karate competition placements aren't a single consistent scale.
+  `CREATE TABLE IF NOT EXISTS nk_competition_results (
+     id                  SERIAL PRIMARY KEY,
+     athlete_id          INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     event_id            INTEGER REFERENCES nk_events(id) ON DELETE SET NULL,
+     event_item_id       INTEGER REFERENCES nk_event_items(id) ON DELETE SET NULL,
+     competition_name    VARCHAR(200) NOT NULL,
+     competition_date    DATE NOT NULL,
+     location            VARCHAR(200),
+     rounds_completed    INTEGER,
+     final_position      VARCHAR(50),
+     notes               TEXT,
+     recorded_by_user_id INTEGER REFERENCES nk_users(id) ON DELETE SET NULL,
+     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  // Athlete social profile: a bio + a self-controlled public/private
+  // toggle (no coach/admin approval step - the athlete flips it
+  // themselves, like any other self-edit field) and a Facebook-style
+  // post feed. A post can be a plain freeform note (body/image_url only)
+  // or a share of something from the athlete's own schedule/history -
+  // share_kind identifies which of the four nullable share_* columns is
+  // populated. Only one athlete_posts table backs all four kinds rather
+  // than one table per kind, since a post is a post regardless of what
+  // (if anything) it links to; ON DELETE SET NULL keeps the post itself
+  // around (falling back to a plain note) if the shared record is later
+  // deleted, rather than cascading the deletion into someone's feed.
+  `ALTER TABLE nk_athletes ADD COLUMN IF NOT EXISTS bio TEXT`,
+  `ALTER TABLE nk_athletes ADD COLUMN IF NOT EXISTS is_public_profile BOOLEAN NOT NULL DEFAULT false`,
+  `CREATE TABLE IF NOT EXISTS nk_athlete_posts (
+     id                          SERIAL PRIMARY KEY,
+     athlete_id                  INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     body                        TEXT,
+     image_url                   VARCHAR(500),
+     share_kind                  VARCHAR(20),
+     share_event_id              INTEGER REFERENCES nk_events(id) ON DELETE SET NULL,
+     share_event_item_id         INTEGER REFERENCES nk_event_items(id) ON DELETE SET NULL,
+     share_grading_id            INTEGER REFERENCES nk_grades(id) ON DELETE SET NULL,
+     share_competition_result_id INTEGER REFERENCES nk_competition_results(id) ON DELETE SET NULL,
+     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS nk_athlete_posts_athlete_idx ON nk_athlete_posts (athlete_id, created_at DESC)`,
 ];
 
 async function migrate() {

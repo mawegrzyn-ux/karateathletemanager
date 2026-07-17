@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { Link } from "react-router-dom";
 import { useApi } from "../hooks/useApi";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -17,6 +18,7 @@ import {
   Badge,
 } from "../components/ui";
 import { TrainingModuleView, type TrainingModule } from "../components/TrainingModuleView";
+import { EventCompetitionResults } from "../components/CompetitionResults";
 
 type CompletionStatus = "pending" | "completed" | "failed";
 
@@ -1390,6 +1392,16 @@ function EventDetail({
         onUpdate={updateEventAthleteStatus}
       />
 
+      {event.event_type === "competition" && (
+        <EventCompetitionResults
+          eventId={eventId}
+          athletes={athleteNames}
+          defaultName={event.title}
+          defaultDate={toDateInput(event.start_date)}
+          defaultLocation={event.location ?? ""}
+        />
+      )}
+
       <ItemsSection
         eventId={eventId}
         items={items}
@@ -2160,17 +2172,18 @@ function AthleteStatusList({
             className="flex flex-col gap-2 rounded-lg bg-stone-50 p-2"
           >
             <div className="flex items-center justify-between gap-2">
-              <span
+              <Link
+                to={`/athletes/${s.athlete_id}/profile`}
                 className={
                   s.status === "completed"
                     ? "line-through text-stone-400"
                     : s.status === "failed"
                     ? "text-red-700"
-                    : ""
+                    : "underline decoration-dotted underline-offset-2"
                 }
               >
                 {athlete ? `${athlete.first_name} ${athlete.last_name}` : "Athlete"}
-              </span>
+              </Link>
               <div className="flex gap-1">
                 <button
                   type="button"
@@ -2676,6 +2689,16 @@ function ItemsSection({
                   onUpdate={(athleteId, patch) =>
                     updateAthleteStatus(item.id, athleteId, patch)
                   }
+                />
+              )}
+              {expanded && item.item_type === "competition" && (
+                <EventCompetitionResults
+                  eventId={eventId}
+                  eventItemId={item.id}
+                  athletes={eventAthletes}
+                  defaultName={item.title}
+                  defaultDate={toDateInput(item.item_date)}
+                  defaultLocation=""
                 />
               )}
               </div>
