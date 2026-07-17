@@ -19,7 +19,7 @@ export interface CompetitionResult {
   created_at: string;
 }
 
-const EMPTY_RESULT_FORM = {
+export const EMPTY_RESULT_FORM = {
   competition_name: "",
   competition_date: "",
   location: "",
@@ -28,9 +28,9 @@ const EMPTY_RESULT_FORM = {
   notes: "",
 };
 
-type ResultForm = typeof EMPTY_RESULT_FORM;
+export type ResultForm = typeof EMPTY_RESULT_FORM;
 
-function ResultFields({
+export function ResultFields({
   form,
   setForm,
 }: {
@@ -89,7 +89,7 @@ function ResultFields({
   );
 }
 
-function resultPayload(form: ResultForm) {
+export function resultPayload(form: ResultForm) {
   return {
     competition_name: form.competition_name,
     competition_date: form.competition_date,
@@ -100,7 +100,7 @@ function resultPayload(form: ResultForm) {
   };
 }
 
-function ResultSummary({ result }: { result: CompetitionResult }) {
+export function ResultSummary({ result }: { result: CompetitionResult }) {
   return (
     <>
       <span className="flex flex-col">

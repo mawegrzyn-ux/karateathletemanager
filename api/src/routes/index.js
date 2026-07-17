@@ -24,6 +24,7 @@ const groups = require("./groups");
 const adminGrades = require("./adminGrades");
 const grades = require("./grades");
 const osu = require("./osu");
+const competitionResults = require("./competitionResults");
 
 const router = Router();
 
@@ -52,5 +53,6 @@ router.use("/groups", groups);
 router.use("/admin/grades", adminGrades);
 router.use("/grades", grades);
 router.use("/osu", osu);
+router.use("/competition-results", competitionResults);
 
 module.exports = router;
