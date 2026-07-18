@@ -714,7 +714,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                     {isOverdue(e) && (
                       <div
                         aria-hidden
-                        className="flex w-10 shrink-0 items-center justify-center bg-red-600 text-xl font-bold text-red-50"
+                        className="flex w-12 shrink-0 items-center justify-center bg-red-600 text-5xl font-black leading-none text-red-50"
                       >
                         !
                       </div>
