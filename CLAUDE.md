@@ -71,7 +71,10 @@ Delete actions, and only the Delete tap calls your `onClick` handler.
 Always pass `itemLabel` (the record's name) so the confirmation is
 specific. Never wire a delete straight to an icon tap, and never build a
 second confirmation mechanism — extend `DeleteButton` itself if the
-pattern needs to change.
+pattern needs to change. For a spot that needs an icon-only trigger (no
+text/border pill — e.g. a social post's top-right corner, see `PostCard`
+in `AthleteSocialProfile.tsx`), pass `iconOnly` rather than rolling a
+separate button; the confirm `Modal` behavior is unchanged either way.
 
 ## UI convention: search-based membership pickers
 

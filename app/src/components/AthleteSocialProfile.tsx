@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useApi } from "../hooks/useApi";
 import { Avatar, BeltSwatch, DeleteButton, Drawer, MediaField, Spinner, Toast } from "./ui";
 
@@ -18,6 +18,7 @@ type ShareKind = "event" | "event_item" | "grading" | "competition_result";
 export interface Post {
   id: number;
   athlete_id: number;
+  title: string | null;
   body: string | null;
   image_url: string | null;
   share_kind: ShareKind | null;
@@ -104,19 +105,69 @@ function ShareBadge({ post }: { post: Post }) {
   return null;
 }
 
+// Minimal, safe "WYSIWYG-lite" formatting: the composer's Bold/Italic
+// toolbar wraps selected text in **/*  markers, and this turns those
+// markers back into <strong>/<em> at render time - never raw HTML, so
+// there's no injection risk from a post body.
+function renderFormattedBody(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const regex = /\*\*(.+?)\*\*|\*(.+?)\*/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = regex.exec(text))) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+    if (match[1] !== undefined) {
+      nodes.push(<strong key={key++}>{match[1]}</strong>);
+    } else if (match[2] !== undefined) {
+      nodes.push(<em key={key++}>{match[2]}</em>);
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes;
+}
+
 function PostCard({
   post,
   profile,
+  canEdit,
   canDelete,
+  onEdit,
   onDelete,
 }: {
   post: Post;
   profile: SocialProfile;
+  canEdit: boolean;
   canDelete: boolean;
+  onEdit: (post: Post) => void;
   onDelete: (id: number) => void;
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-stone-200 bg-white p-3">
+    <div className="relative flex flex-col gap-2 border-b border-stone-200 bg-white p-4">
+      {(canEdit || canDelete) && (
+        <div className="absolute right-2 top-2 flex gap-1">
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => onEdit(post)}
+              aria-label="Edit post"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-stone-500"
+            >
+              ✏️
+            </button>
+          )}
+          {canDelete && (
+            <DeleteButton
+              onClick={() => onDelete(post.id)}
+              itemLabel="this post"
+              iconOnly
+            />
+          )}
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <Avatar
           name={`${profile.first_name} ${profile.last_name}`}
@@ -132,18 +183,14 @@ function PostCard({
           </span>
         </div>
       </div>
-      {post.body && <p className="whitespace-pre-wrap text-sm">{post.body}</p>}
+      {post.title && <h3 className="font-semibold">{post.title}</h3>}
+      {post.body && (
+        <p className="whitespace-pre-wrap text-sm">{renderFormattedBody(post.body)}</p>
+      )}
       {post.image_url && (
-        <img
-          src={post.image_url}
-          alt=""
-          className="max-h-80 w-full rounded-xl object-cover"
-        />
+        <img src={post.image_url} alt="" className="max-h-80 w-full object-cover" />
       )}
       <ShareBadge post={post} />
-      {canDelete && (
-        <DeleteButton onClick={() => onDelete(post.id)} itemLabel="this post" />
-      )}
     </div>
   );
 }
@@ -253,22 +300,26 @@ function ShareFromSchedulePicker({
 
 function Composer({
   athleteId,
-  onPosted,
+  post,
+  onSaved,
   showToast,
 }: {
   athleteId: number;
-  onPosted: (post: Post) => void;
+  post?: Post;
+  onSaved: (post: Post) => void;
   showToast: (message: string) => void;
 }) {
   const api = useApi();
-  const [body, setBody] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [title, setTitle] = useState(post?.title ?? "");
+  const [body, setBody] = useState(post?.body ?? "");
+  const [imageUrl, setImageUrl] = useState(post?.image_url ?? "");
   const [share, setShare] = useState<{ kind: ShareKind; id: number; label: string } | null>(
     null
   );
   const [picking, setPicking] = useState(false);
   const [shareable, setShareable] = useState<Shareable | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   function openPicker() {
     setPicking(true);
@@ -280,22 +331,57 @@ function Composer({
     }
   }
 
+  // Minimal formatting toolbar: wraps the current textarea selection in
+  // **/* markers (rendered back into <strong>/<em> in the feed) rather
+  // than pulling in a rich-text editor dependency.
+  function wrapSelection(marker: string) {
+    const el = bodyRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? body.length;
+    const end = el.selectionEnd ?? body.length;
+    const selected = body.slice(start, end);
+    const next = `${body.slice(0, start)}${marker}${selected}${marker}${body.slice(end)}`;
+    setBody(next);
+    const cursor = selected ? end + marker.length * 2 : start + marker.length;
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(cursor, cursor);
+    });
+  }
+
   async function submit() {
-    if (!body.trim() && !imageUrl && !share) return;
+    if (!title.trim() && !body.trim() && !imageUrl && !share) return;
     setSubmitting(true);
     try {
-      const { post } = await api.post<{ post: Post }>(`/athletes/${athleteId}/posts`, {
-        body: body.trim() || undefined,
-        image_url: imageUrl || undefined,
-        share_kind: share?.kind,
-        share_id: share?.id,
-      });
-      onPosted(post);
-      setBody("");
-      setImageUrl("");
-      setShare(null);
+      if (post) {
+        const { post: updated } = await api.patch<{ post: Post }>(
+          `/athletes/${athleteId}/posts/${post.id}`,
+          {
+            title: title.trim() || null,
+            body: body.trim() || null,
+            image_url: imageUrl || null,
+          }
+        );
+        onSaved(updated);
+      } else {
+        const { post: created } = await api.post<{ post: Post }>(
+          `/athletes/${athleteId}/posts`,
+          {
+            title: title.trim() || undefined,
+            body: body.trim() || undefined,
+            image_url: imageUrl || undefined,
+            share_kind: share?.kind,
+            share_id: share?.id,
+          }
+        );
+        onSaved(created);
+        setTitle("");
+        setBody("");
+        setImageUrl("");
+        setShare(null);
+      }
     } catch {
-      showToast("Failed to post");
+      showToast(post ? "Failed to save post" : "Failed to post");
     } finally {
       setSubmitting(false);
     }
@@ -303,7 +389,32 @@ function Composer({
 
   return (
     <div className="flex flex-col gap-3">
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Title (optional)"
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+      />
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => wrapSelection("**")}
+          aria-label="Bold"
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-stone-300 font-bold"
+        >
+          B
+        </button>
+        <button
+          type="button"
+          onClick={() => wrapSelection("*")}
+          aria-label="Italic"
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-stone-300 italic"
+        >
+          I
+        </button>
+      </div>
       <textarea
+        ref={bodyRef}
         value={body}
         onChange={(e) => setBody(e.target.value)}
         placeholder="What's on your mind?"
@@ -341,20 +452,22 @@ function Composer({
         />
       )}
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={openPicker}
-          className="min-h-[44px] flex-1 rounded-xl border border-stone-300 text-sm font-medium text-stone-600"
-        >
-          Share from schedule
-        </button>
+        {!post && (
+          <button
+            type="button"
+            onClick={openPicker}
+            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 text-sm font-medium text-stone-600"
+          >
+            Share from schedule
+          </button>
+        )}
         <button
           type="button"
           onClick={submit}
-          disabled={submitting || (!body.trim() && !imageUrl && !share)}
+          disabled={submitting || (!title.trim() && !body.trim() && !imageUrl && !share)}
           className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
         >
-          Post
+          {post ? "Save" : "Post"}
         </button>
       </div>
     </div>
@@ -377,6 +490,7 @@ function PostsFeed({
   const api = useApi();
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
 
   useEffect(() => {
     setPosts(null);
@@ -399,15 +513,19 @@ function PostsFeed({
       ) : posts.length === 0 ? (
         <p className="px-1 py-2 text-sm text-stone-500">No posts yet.</p>
       ) : (
-        posts.map((p) => (
-          <PostCard
-            key={p.id}
-            post={p}
-            profile={profile}
-            canDelete={canPost || canModerate}
-            onDelete={remove}
-          />
-        ))
+        <div className="-mx-4 flex flex-col">
+          {posts.map((p) => (
+            <PostCard
+              key={p.id}
+              post={p}
+              profile={profile}
+              canEdit={canPost}
+              canDelete={canPost || canModerate}
+              onEdit={setEditingPost}
+              onDelete={remove}
+            />
+          ))}
+        </div>
       )}
 
       {canPost && (
@@ -427,12 +545,31 @@ function PostsFeed({
           >
             <Composer
               athleteId={athleteId}
-              onPosted={(post) => {
+              onSaved={(post) => {
                 setPosts((prev) => (prev ? [post, ...prev] : [post]));
                 setComposerOpen(false);
               }}
               showToast={showToast}
             />
+          </Drawer>
+          <Drawer
+            open={editingPost !== null}
+            onClose={() => setEditingPost(null)}
+            title="Edit post"
+          >
+            {editingPost && (
+              <Composer
+                athleteId={athleteId}
+                post={editingPost}
+                onSaved={(updated) => {
+                  setPosts((prev) =>
+                    prev ? prev.map((p) => (p.id === updated.id ? updated : p)) : prev
+                  );
+                  setEditingPost(null);
+                }}
+                showToast={showToast}
+              />
+            )}
           </Drawer>
         </>
       )}
@@ -441,20 +578,29 @@ function PostsFeed({
 }
 
 // The athlete's social profile: a full-bleed cover photo (self-editable,
-// falls back to their initials avatar) with name/belt overlaid and a
-// diagonal bottom edge, a bio, a self-controlled "make my profile public"
-// toggle (no coach/admin approval needed), and a Facebook-style feed they
-// can post freeform notes/photos to or share their own
-// training/competition/grading history into via a floating "+" button that
-// opens the composer in a Drawer. For isSelf, everything defaults to a
-// read-only view (matching the rest of the app's read-only-until-edit
-// convention) - a pencil icon overlaid on the cover photo's top-right
-// corner (the "editing" prop, controlled by the parent so it can gate its
-// own editable sections too, e.g. Profile.tsx's Account form) toggles into
-// the editable cover-photo/bio/toggle form. A non-self viewer (only
-// reachable at all if the profile is public, per the backend's
-// canViewSocialProfile gate) always gets the read-only header + feed, no
-// edit icon.
+// falls back to their initials avatar) with name (header font, matching
+// the app's Oswald-based heading convention) and belt overlaid, a
+// diagonal bottom edge, a bio, and a Facebook-style feed they can post
+// freeform notes/photos to or share their own training/competition/
+// grading history into via a floating "+" button that opens the composer
+// in a Drawer. For isSelf, everything defaults to a read-only view
+// (matching the rest of the app's read-only-until-edit convention) - a
+// pencil icon overlaid on the cover photo's top-right corner (the
+// "editing" prop, controlled by the parent so it can gate its own
+// editable sections too, e.g. Profile.tsx's Account form) toggles into
+// the editable cover-photo/bio form, and a public/private icon right next
+// to it (🌐/🔒, icon-only, no label) directly toggles is_public_profile
+// regardless of editing state - it's a one-tap action, not a field to
+// edit. A non-self viewer (only reachable at all if the profile is
+// public, per the backend's canViewSocialProfile gate) always gets the
+// read-only header + feed, no icons. Each post in the feed is edge-to-
+// edge (no side margins/rounding, just a bottom divider) with an
+// edit/delete icon pair in its own top-right corner (self-only; delete
+// reuses the shared DeleteButton's confirm-modal in its iconOnly form
+// rather than a bespoke second confirmation mechanism) - edit reopens the
+// same composer used to create posts, now supporting an optional title
+// and a minimal Bold/Italic toolbar that wraps the textarea selection in
+// safe **/* markers rendered back into <strong>/<em> (never raw HTML).
 export function AthleteSocialProfile({
   athleteId,
   isSelf,
@@ -544,17 +690,31 @@ export function AthleteSocialProfile({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
         {isSelf && (
-          <button
-            type="button"
-            onClick={onToggleEdit}
-            aria-label={editing ? "Done editing" : "Edit profile"}
-            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur"
-          >
-            {editing ? "✓" : "✏️"}
-          </button>
+          <div className="absolute right-4 top-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => togglePublic(!profile.is_public_profile)}
+              aria-label={
+                profile.is_public_profile
+                  ? "Make profile private"
+                  : "Make profile public"
+              }
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur"
+            >
+              {profile.is_public_profile ? "🌐" : "🔒"}
+            </button>
+            <button
+              type="button"
+              onClick={onToggleEdit}
+              aria-label={editing ? "Done editing" : "Edit profile"}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur"
+            >
+              {editing ? "✓" : "✏️"}
+            </button>
+          </div>
         )}
         <div className="relative flex max-w-[75%] flex-col gap-1 p-4 text-white">
-          <span className="text-2xl font-bold tracking-tight [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
+          <span className="font-display text-2xl uppercase tracking-wide [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
             {profile.first_name} {profile.last_name}
           </span>
           {profile.grade_name && (
@@ -594,31 +754,6 @@ export function AthleteSocialProfile({
               (isSelf ? "No bio yet. Tap ✏️ to add one." : null)}
           </p>
         )}
-        {isSelf &&
-          (editing ? (
-            <>
-              <label className="flex min-h-[44px] items-center justify-between rounded-xl bg-stone-50 px-3">
-                <span className="text-sm font-medium text-stone-700">
-                  Make my profile public
-                </span>
-                <input
-                  type="checkbox"
-                  checked={profile.is_public_profile}
-                  onChange={(e) => togglePublic(e.target.checked)}
-                  className="h-5 w-5"
-                />
-              </label>
-              <p className="text-xs text-stone-500">
-                {profile.is_public_profile
-                  ? "Any signed-in user of the app can view your profile and posts."
-                  : "Only you, your coaches, and admins can see your profile and posts."}
-              </p>
-            </>
-          ) : (
-            <div className="flex items-center gap-2 rounded-xl bg-stone-50 px-3 py-2 text-sm text-stone-600">
-              {profile.is_public_profile ? "🌐 Public profile" : "🔒 Private profile"}
-            </div>
-          ))}
         <PostsFeed
           athleteId={athleteId}
           profile={profile}
