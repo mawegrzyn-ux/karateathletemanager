@@ -280,6 +280,24 @@ function eventOverlapsDate(event: Event, dateStr: string) {
   );
 }
 
+// An event is overdue when the athlete never marked it complete/failed and
+// its whole date range has already passed - only meaningful for the
+// signed-in athlete's own events (my_status is null for a coach/admin
+// viewing someone else's, since there's nothing "incomplete" from their
+// point of view).
+function isOverdue(event: Event) {
+  return event.my_status === "pending" && toDateInput(event.end_date) < todayStr();
+}
+
+// Merges a newly-fetched slice into the already-loaded events, replacing
+// any duplicate by id rather than assuming the windows never overlap -
+// keeps lazy-loaded pages idempotent to re-fetch.
+function mergeEvents(prev: Event[] | null, incoming: Event[]) {
+  const map = new Map((prev ?? []).map((e) => [e.id, e]));
+  for (const e of incoming) map.set(e.id, e);
+  return [...map.values()];
+}
+
 function timeToMinutes(t: string | null) {
   if (!t) return null;
   const [h, m] = t.slice(0, 5).split(":").map(Number);
@@ -302,6 +320,14 @@ const GRID_HOURS = Array.from(
   { length: DAY_END_HOUR - DAY_START_HOUR + 1 },
   (_, i) => DAY_START_HOUR + i
 );
+
+// The list view initially loads a 4-week window centered on today (2 back,
+// 2 forward) rather than the whole schedule, then lazy-loads another 2
+// weeks in whichever direction the user scrolls toward, capped a year out
+// either way so an empty schedule can't make the observer fetch forever.
+const INITIAL_WINDOW_DAYS = 14;
+const LAZY_LOAD_STEP_DAYS = 14;
+const MAX_WINDOW_DAYS = 365;
 
 function formatHour(hour: number) {
   const h = hour % 24;
@@ -349,6 +375,12 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [focusedDate, setFocusedDate] = useState(todayStr());
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const hasAutoScrolledRef = useRef(false);
+  const loadedFromRef = useRef(addDaysStr(todayStr(), -INITIAL_WINDOW_DAYS));
+  const loadedToRef = useRef(addDaysStr(todayStr(), INITIAL_WINDOW_DAYS));
+  const loadingPastRef = useRef(false);
+  const loadingFutureRef = useRef(false);
+  const [loadingPast, setLoadingPast] = useState(false);
+  const [loadingFuture, setLoadingFuture] = useState(false);
 
   function scrollToToday(behavior: ScrollBehavior = "smooth") {
     const today = todayStr();
@@ -376,9 +408,80 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events]);
 
+  // List view lazy-loads further past/future weeks only in response to an
+  // actual scroll gesture on the page's scroll container (App.tsx's
+  // <main>, which Schedule.tsx doesn't otherwise hold a ref to) - not an
+  // IntersectionObserver, which would fire immediately (before the user
+  // scrolls at all) any time the loaded window is sparse enough not to
+  // fill the viewport on its own, cascading through months of empty
+  // fetches. Near-top/near-bottom thresholds trigger the next 2-week page;
+  // loadMorePast/loadMoreFuture's own re-entrancy guards and MAX_WINDOW_DAYS
+  // bound keep repeated scroll events from piling up requests.
+  useEffect(() => {
+    if (viewMode !== "list") return;
+    const container = document.querySelector("main");
+    if (!container) return;
+
+    function onScroll() {
+      if (!container) return;
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      if (scrollTop < 150) loadMorePast();
+      if (scrollHeight - scrollTop - clientHeight < 150) loadMoreFuture();
+    }
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
+
+  async function loadMorePast() {
+    const oldestAllowed = addDaysStr(todayStr(), -MAX_WINDOW_DAYS);
+    if (loadingPastRef.current || loadedFromRef.current <= oldestAllowed) return;
+    loadingPastRef.current = true;
+    setLoadingPast(true);
+    const to = addDaysStr(loadedFromRef.current, -1);
+    let from = addDaysStr(loadedFromRef.current, -LAZY_LOAD_STEP_DAYS);
+    if (from < oldestAllowed) from = oldestAllowed;
+    try {
+      const res = await api.get<{ events: Event[] }>(
+        `/events?from=${from}&to=${to}`
+      );
+      setEvents((prev) => mergeEvents(prev, res.events));
+      loadedFromRef.current = from;
+    } catch {
+      // leave the window as-is; the next scroll near the edge retries
+    } finally {
+      loadingPastRef.current = false;
+      setLoadingPast(false);
+    }
+  }
+
+  async function loadMoreFuture() {
+    const newestAllowed = addDaysStr(todayStr(), MAX_WINDOW_DAYS);
+    if (loadingFutureRef.current || loadedToRef.current >= newestAllowed) return;
+    loadingFutureRef.current = true;
+    setLoadingFuture(true);
+    const from = addDaysStr(loadedToRef.current, 1);
+    let to = addDaysStr(loadedToRef.current, LAZY_LOAD_STEP_DAYS);
+    if (to > newestAllowed) to = newestAllowed;
+    try {
+      const res = await api.get<{ events: Event[] }>(
+        `/events?from=${from}&to=${to}`
+      );
+      setEvents((prev) => mergeEvents(prev, res.events));
+      loadedToRef.current = to;
+    } catch {
+      // leave the window as-is; the next scroll near the edge retries
+    } finally {
+      loadingFutureRef.current = false;
+      setLoadingFuture(false);
+    }
+  }
+
   function load() {
     api
-      .get<{ events: Event[] }>("/events")
+      .get<{ events: Event[] }>(
+        `/events?from=${loadedFromRef.current}&to=${loadedToRef.current}`
+      )
       .then((res) => setEvents(res.events))
       .catch(() => setError("Failed to load schedule"));
 
@@ -584,6 +687,11 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
 
       {viewMode === "list" && (
         <div className="flex flex-col gap-4">
+          {loadingPast && (
+            <div className="flex justify-center py-2">
+              <Spinner />
+            </div>
+          )}
           {groupEventsByDate(filteredEvents).map(({ date, events: dayEvents }) => (
             <div
               key={date}
@@ -602,41 +710,51 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                   onSwipeComplete={() => swipeEventStatus(e, "completed")}
                   onSwipeFailed={() => swipeEventStatus(e, "failed")}
                 >
-                  <button
-                    onClick={() => setDrawer(e)}
-                    className="flex min-h-[44px] w-full flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 text-left shadow-card"
-                  >
-                    <div className="flex w-full items-center justify-between gap-2">
-                      <span
-                        className={`font-medium ${
-                          e.my_status === "completed"
-                            ? "line-through text-stone-400"
-                            : e.my_status === "failed"
-                            ? "text-red-700"
-                            : ""
-                        }`}
+                  <div className="flex overflow-hidden rounded-2xl shadow-card">
+                    {isOverdue(e) && (
+                      <div
+                        aria-hidden
+                        className="flex w-10 shrink-0 items-center justify-center bg-red-600 text-xl font-bold text-red-50"
                       >
-                        {TYPE_ICONS[e.event_type] ?? ""} {e.title}
-                      </span>
-                      {e.my_status === "completed" && (
-                        <span className="shrink-0 text-green-600">✓</span>
-                      )}
-                      {e.my_status === "failed" && (
-                        <span className="shrink-0 text-red-600">✗</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge>{TYPE_LABELS[e.event_type] ?? e.event_type}</Badge>
-                      <span className="text-xs text-stone-500">
-                        {toDateInput(e.start_date)}
-                        {e.end_date !== e.start_date
-                          ? ` – ${toDateInput(e.end_date)}`
-                          : ""}
-                        {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
-                        {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
-                      </span>
-                    </div>
-                  </button>
+                        !
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setDrawer(e)}
+                      className="flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 bg-white px-4 py-3 text-left"
+                    >
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <span
+                          className={`font-medium ${
+                            e.my_status === "completed"
+                              ? "line-through text-stone-400"
+                              : e.my_status === "failed"
+                              ? "text-red-700"
+                              : ""
+                          }`}
+                        >
+                          {TYPE_ICONS[e.event_type] ?? ""} {e.title}
+                        </span>
+                        {e.my_status === "completed" && (
+                          <span className="shrink-0 text-green-600">✓</span>
+                        )}
+                        {e.my_status === "failed" && (
+                          <span className="shrink-0 text-red-600">✗</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge>{TYPE_LABELS[e.event_type] ?? e.event_type}</Badge>
+                        <span className="text-xs text-stone-500">
+                          {toDateInput(e.start_date)}
+                          {e.end_date !== e.start_date
+                            ? ` – ${toDateInput(e.end_date)}`
+                            : ""}
+                          {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
+                          {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
+                        </span>
+                      </div>
+                    </button>
+                  </div>
                 </SwipeableRow>
               ))}
             </div>
@@ -645,6 +763,11 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             <p className="px-1 py-2 text-sm text-stone-500">
               Nothing scheduled yet.
             </p>
+          )}
+          {loadingFuture && (
+            <div className="flex justify-center py-2">
+              <Spinner />
+            </div>
           )}
         </div>
       )}

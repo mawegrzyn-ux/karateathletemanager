@@ -400,23 +400,37 @@ async function resolveAthleteIds(user, requested) {
   throw { status: 403, message: "Forbidden" };
 }
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Schedule.tsx's list view only loads a rolling window (2 weeks back/
+// forward by default, lazy-loaded further on scroll) rather than the
+// entire schedule - `from`/`to` are both optional so any other caller (or
+// an older client) still gets everything, unfiltered, as before.
 router.get(
   "/",
   asyncHandler(async (req, res) => {
+    const { from, to } = req.query;
+    const hasRange = ISO_DATE_RE.test(from) && ISO_DATE_RE.test(to);
+
     let query;
     let params;
 
     if (req.user.is_admin) {
-      query = `SELECT ${EVENT_FIELDS} FROM nk_events ORDER BY start_date`;
-      params = [];
+      query = `SELECT ${EVENT_FIELDS} FROM nk_events e
+               ${hasRange ? "WHERE e.end_date >= $1 AND e.start_date <= $2" : ""}
+               ORDER BY start_date`;
+      params = hasRange ? [from, to] : [];
     } else if (req.user.role === "athlete" && req.user.athlete_id) {
       query = `SELECT ${EVENT_FIELDS} FROM nk_events e
                WHERE EXISTS (
                  SELECT 1 FROM nk_event_athletes ea
                  WHERE ea.event_id = e.id AND ea.athlete_id = $1
                )
+               ${hasRange ? "AND e.end_date >= $2 AND e.start_date <= $3" : ""}
                ORDER BY start_date`;
-      params = [req.user.athlete_id];
+      params = hasRange
+        ? [req.user.athlete_id, from, to]
+        : [req.user.athlete_id];
     } else if (req.user.role === "coach" && req.user.coach_id) {
       query = `SELECT DISTINCT ${EVENT_FIELDS} FROM nk_events e
                WHERE EXISTS (
@@ -425,8 +439,9 @@ router.get(
                  JOIN nk_coach_clubs cc ON cc.club_id = ac.club_id
                  WHERE ea.event_id = e.id AND cc.coach_id = $1
                )
+               ${hasRange ? "AND e.end_date >= $2 AND e.start_date <= $3" : ""}
                ORDER BY start_date`;
-      params = [req.user.coach_id];
+      params = hasRange ? [req.user.coach_id, from, to] : [req.user.coach_id];
     } else {
       return res.json({ events: [] });
     }
