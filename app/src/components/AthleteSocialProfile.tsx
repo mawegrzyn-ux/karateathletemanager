@@ -441,20 +441,30 @@ function PostsFeed({
 }
 
 // The athlete's social profile: a full-bleed cover photo (self-editable,
-// falls back to their initials avatar) with name/belt overlaid, a bio, a
-// self-controlled "make my profile public" toggle (no coach/admin approval
-// needed), and a Facebook-style feed they can post freeform notes/photos to
-// or share their own training/competition/grading history into via a
-// floating "+" button that opens the composer in a Drawer. isSelf renders
-// the editable cover-photo/bio/toggle/composer; a non-self viewer (only
+// falls back to their initials avatar) with name/belt overlaid and a
+// diagonal bottom edge, a bio, a self-controlled "make my profile public"
+// toggle (no coach/admin approval needed), and a Facebook-style feed they
+// can post freeform notes/photos to or share their own
+// training/competition/grading history into via a floating "+" button that
+// opens the composer in a Drawer. For isSelf, everything defaults to a
+// read-only view (matching the rest of the app's read-only-until-edit
+// convention) - a pencil icon overlaid on the cover photo's top-right
+// corner (the "editing" prop, controlled by the parent so it can gate its
+// own editable sections too, e.g. Profile.tsx's Account form) toggles into
+// the editable cover-photo/bio/toggle form. A non-self viewer (only
 // reachable at all if the profile is public, per the backend's
-// canViewSocialProfile gate) gets a read-only header + feed.
+// canViewSocialProfile gate) always gets the read-only header + feed, no
+// edit icon.
 export function AthleteSocialProfile({
   athleteId,
   isSelf,
+  editing = false,
+  onToggleEdit,
 }: {
   athleteId: number;
   isSelf: boolean;
+  editing?: boolean;
+  onToggleEdit?: () => void;
 }) {
   const api = useApi();
   const [profile, setProfile] = useState<SocialProfile | null>(null);
@@ -518,10 +528,11 @@ export function AthleteSocialProfile({
   return (
     <div className="flex flex-col">
       <div
-        className="relative flex h-56 w-full flex-col justify-end bg-stone-800 bg-cover bg-center"
-        style={
-          profile.photo_url ? { backgroundImage: `url(${profile.photo_url})` } : undefined
-        }
+        className="relative flex h-64 w-full flex-col justify-end bg-stone-800 bg-cover bg-center"
+        style={{
+          ...(profile.photo_url ? { backgroundImage: `url(${profile.photo_url})` } : {}),
+          clipPath: "polygon(0 0, 100% 0, 100% 82%, 0 100%)",
+        }}
       >
         {!profile.photo_url && (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -532,7 +543,17 @@ export function AthleteSocialProfile({
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
-        <div className="relative flex flex-col gap-1 p-4 text-white">
+        {isSelf && (
+          <button
+            type="button"
+            onClick={onToggleEdit}
+            aria-label={editing ? "Done editing" : "Edit profile"}
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur"
+          >
+            {editing ? "✓" : "✏️"}
+          </button>
+        )}
+        <div className="relative flex max-w-[75%] flex-col gap-1 p-4 text-white">
           <span className="text-2xl font-bold tracking-tight [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
             {profile.first_name} {profile.last_name}
           </span>
@@ -546,46 +567,58 @@ export function AthleteSocialProfile({
       </div>
 
       <div className="flex flex-col gap-3 p-4">
-        {isSelf ? (
-          <>
-            <MediaField
-              label="Cover photo"
-              kind="image"
-              value={profile.photo_url ?? ""}
-              onChange={updatePhoto}
-              onError={showToast}
-            />
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-stone-700">Bio</span>
-              <textarea
-                key={profile.bio ?? ""}
-                defaultValue={bio}
-                onChange={(e) => setBio(e.target.value)}
-                onBlur={saveBio}
-                placeholder="Tell people about yourself..."
-                className="min-h-[80px] rounded-xl border border-stone-300 px-3 py-2"
-              />
-            </label>
-            <label className="flex min-h-[44px] items-center justify-between rounded-xl bg-stone-50 px-3">
-              <span className="text-sm font-medium text-stone-700">
-                Make my profile public
-              </span>
-              <input
-                type="checkbox"
-                checked={profile.is_public_profile}
-                onChange={(e) => togglePublic(e.target.checked)}
-                className="h-5 w-5"
-              />
-            </label>
-            <p className="text-xs text-stone-500">
-              {profile.is_public_profile
-                ? "Any signed-in user of the app can view your profile and posts."
-                : "Only you, your coaches, and admins can see your profile and posts."}
-            </p>
-          </>
-        ) : (
-          profile.bio && <p className="text-sm text-stone-700">{profile.bio}</p>
+        {isSelf && editing && (
+          <MediaField
+            label="Cover photo"
+            kind="image"
+            value={profile.photo_url ?? ""}
+            onChange={updatePhoto}
+            onError={showToast}
+          />
         )}
+        {isSelf && editing ? (
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-stone-700">Bio</span>
+            <textarea
+              key={profile.bio ?? ""}
+              defaultValue={bio}
+              onChange={(e) => setBio(e.target.value)}
+              onBlur={saveBio}
+              placeholder="Tell people about yourself..."
+              className="min-h-[80px] rounded-xl border border-stone-300 px-3 py-2"
+            />
+          </label>
+        ) : (
+          <p className="text-sm text-stone-700">
+            {profile.bio ||
+              (isSelf ? "No bio yet. Tap ✏️ to add one." : null)}
+          </p>
+        )}
+        {isSelf &&
+          (editing ? (
+            <>
+              <label className="flex min-h-[44px] items-center justify-between rounded-xl bg-stone-50 px-3">
+                <span className="text-sm font-medium text-stone-700">
+                  Make my profile public
+                </span>
+                <input
+                  type="checkbox"
+                  checked={profile.is_public_profile}
+                  onChange={(e) => togglePublic(e.target.checked)}
+                  className="h-5 w-5"
+                />
+              </label>
+              <p className="text-xs text-stone-500">
+                {profile.is_public_profile
+                  ? "Any signed-in user of the app can view your profile and posts."
+                  : "Only you, your coaches, and admins can see your profile and posts."}
+              </p>
+            </>
+          ) : (
+            <div className="flex items-center gap-2 rounded-xl bg-stone-50 px-3 py-2 text-sm text-stone-600">
+              {profile.is_public_profile ? "🌐 Public profile" : "🔒 Private profile"}
+            </div>
+          ))}
         <PostsFeed
           athleteId={athleteId}
           profile={profile}
