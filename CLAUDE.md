@@ -118,6 +118,33 @@ style) to reveal its fields (same auto-save + `DeleteButton` pattern as
 any other record); adding a new one reveals an inline form below the
 list rather than opening anything else.
 
+## UI convention: view/edit toggle for a self-service page
+
+A full-page self-service view that mixes several distinct pieces (e.g.
+the athlete's own `/profile` — the social-profile hero/bio/toggle from
+`AthleteSocialProfile.tsx` plus `Profile.tsx`'s own "Account" form) can
+default to **view-only** rather than always-editable, when there's more
+read-only info to show at a glance than there is to edit. See
+`AthleteSocialProfile`/`Profile.tsx` for the reference implementation:
+
+- A single `editing` boolean lives in the top-level page component (not
+  in any sub-component), passed down as `editing`/`onToggleEdit` props to
+  whichever pieces need to react to it — this is what lets one icon gate
+  multiple, structurally separate blocks of UI at once.
+- The toggle itself is a circular icon button (✏️ / ✓ while editing)
+  overlaid top-right on the page's hero image (`absolute right-4 top-4`,
+  `bg-black/40 backdrop-blur`), not a text button or a separate row.
+  `aria-label` swaps between `"Edit profile"` / `"Done editing"`.
+- While not editing, every field renders as styled read-only text (reuse
+  `ReadOnlyField` from `AthleteSelfProfile.tsx` for label/value rows)
+  rather than a disabled input — editable controls (inputs, `MediaField`,
+  toggles, Save buttons) only mount once `editing` is true.
+- This is opt-in per page/role, not a new default for every form in the
+  app — most self-service and admin editors (`StaffSelfProfile`, the
+  entity list+drawer pattern) stay always-editable; only add the toggle
+  where a page is otherwise cluttered with more always-visible editable
+  fields than a glance-first view needs.
+
 ## Other conventions
 
 - Backend routes: one Express Router per resource in `api/src/routes/`,

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth, type Child, type Profile as ProfileRecord } from "../context/AuthContext";
 import { ApiError, useApi } from "../hooks/useApi";
 import { Field, Drawer, MediaField, Toast } from "../components/ui";
-import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
+import { AthleteSelfProfile, ReadOnlyField } from "../components/AthleteSelfProfile";
 import { StaffSelfProfile } from "../components/StaffSelfProfile";
 import { AthleteSocialProfile } from "../components/AthleteSocialProfile";
 
@@ -25,6 +25,7 @@ export default function Profile() {
     referees: ProfileRecord[];
   }>({ athletes: [], coaches: [], referees: [] });
   const [picker, setPicker] = useState<SwitchableRole | null>(null);
+  const [editing, setEditing] = useState(false);
 
   const showActiveNav = user?.status === "active" && user.role;
   // A join-link registrant is registering as an athlete, not a parent -
@@ -107,7 +108,12 @@ export default function Profile() {
   return (
     <div className="flex min-h-full flex-col">
       {user?.role === "athlete" && user.athlete_id && (
-        <AthleteSocialProfile athleteId={user.athlete_id} isSelf />
+        <AthleteSocialProfile
+          athleteId={user.athlete_id}
+          isSelf
+          editing={editing}
+          onToggleEdit={() => setEditing((e) => !e)}
+        />
       )}
       <div className="flex flex-1 flex-col justify-center gap-6 p-6">
         <div>
@@ -177,55 +183,73 @@ export default function Profile() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <h2 className="font-semibold">Account</h2>
-          <MediaField
-            label="Avatar"
-            kind="image"
-            value={user?.photo_url ?? ""}
-            onChange={(url) => updateProfile({ photo_url: url })}
-            onError={showToast}
-          />
-          <Field label="First name">
-            <input
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+        {user?.role === "athlete" && !editing && (
+          <div className="flex flex-col gap-4">
+            <h2 className="font-semibold">Account</h2>
+            {user?.photo_url && (
+              <img
+                src={user.photo_url}
+                alt=""
+                className="h-16 w-16 rounded-full object-cover"
+              />
+            )}
+            <ReadOnlyField label="First name" value={firstName || "—"} />
+            <ReadOnlyField label="Last name" value={lastName || "—"} />
+            <ReadOnlyField label="Phone number" value={phone || "—"} />
+            <ReadOnlyField label="Date of birth" value={dateOfBirth || "—"} />
+          </div>
+        )}
+        {(user?.role !== "athlete" || editing) && (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <h2 className="font-semibold">Account</h2>
+            <MediaField
+              label="Avatar"
+              kind="image"
+              value={user?.photo_url ?? ""}
+              onChange={(url) => updateProfile({ photo_url: url })}
+              onError={showToast}
             />
-          </Field>
-          <Field label="Last name">
-            <input
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          <Field label="Phone number">
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          <Field label="Date of birth">
-            <input
-              type="date"
-              value={dateOfBirth}
-              onChange={(e) => setDateOfBirth(e.target.value)}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          {error && <p className="text-sm text-red-700">{error}</p>}
-          {saved && <p className="text-sm text-green-700">Saved.</p>}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
-          >
-            Save
-          </button>
-        </form>
+            <Field label="First name">
+              <input
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Last name">
+              <input
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Phone number">
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Date of birth">
+              <input
+                type="date"
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            {error && <p className="text-sm text-red-700">{error}</p>}
+            {saved && <p className="text-sm text-green-700">Saved.</p>}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+            >
+              Save
+            </button>
+          </form>
+        )}
 
         {!isAthleteOnly && <LinkChild />}
         {toast && <Toast message={toast} />}

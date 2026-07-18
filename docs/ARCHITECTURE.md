@@ -755,24 +755,39 @@ coach-run attendance) — this is personal athlete itinerary planning.
   "share from schedule" picker (self-only) with the athlete's own recent
   events/items/gradings/competition results.
   `app/src/components/AthleteSocialProfile.tsx` exports
-  `AthleteSocialProfile({ athleteId, isSelf })`, rendered full-bleed (call
-  sites give it no padding of its own so its cover photo can reach the
-  screen edges): a full-width photo banner (`nk_athletes.photo_url`, a
-  self-editable `MediaField` right below it for `isSelf`, falling back to
-  an initials `Avatar` when unset) with the athlete's name/belt overlaid
-  via a gradient, then bio/toggle, then the feed. Posting is reached via a
-  floating "+" (`position: fixed`, bottom-right, above the bottom nav)
+  `AthleteSocialProfile({ athleteId, isSelf, editing?, onToggleEdit? })`,
+  rendered full-bleed (call sites give it no padding of its own so its
+  cover photo can reach the screen edges): a full-width photo banner
+  (`nk_athletes.photo_url`, falling back to an initials `Avatar` when
+  unset) with a diagonal-cut bottom edge (`clip-path: polygon(0 0, 100% 0,
+  100% 82%, 0 100%)` — left corner full height, right corner cut to 82%,
+  chosen over the mirrored cut so it clears the bottom-left name/belt
+  overlay text, which is also capped at `max-w-[75%]` as extra insurance
+  for long names), then bio/toggle, then the feed. Posting is reached via
+  a floating "+" (`position: fixed`, bottom-right, above the bottom nav)
   rather than an always-open composer — tapping it opens the same
-  body/photo/share-from-schedule composer inside a `Drawer`. The self view
-  (rendered on `Profile.tsx`, above the existing read-only
-  `AthleteSelfProfile` card — tapping the bottom-nav profile icon is still
-  the same `/profile` page, just extended) is fully editable; a non-self
-  view (`app/src/pages/AthleteProfile.tsx` at `/athletes/:id/profile`)
-  shows the same hero read-only plus the feed (no FAB), or a "This profile
-  is private" message if the backend 403s. Reachable from an athlete's
-  name in `Schedule.tsx`'s `AthleteStatusList` (any user sharing a
-  schedule item with them) and from a "View social profile →" link in
-  `Athletes.tsx`'s edit drawer (coach/admin).
+  body/photo/share-from-schedule composer inside a `Drawer`.
+  **The athlete's own profile is view-only by default.** A pencil button
+  overlaid on the hero's top-right corner (shown only for `isSelf`) calls
+  `onToggleEdit`; while `editing` is false, the cover-photo `MediaField`
+  and bio textarea are replaced by plain styled read-only text and the
+  public/private toggle becomes a static "🌐 Public profile"/"🔒 Private
+  profile" line, and the pencil becomes a "✓" (tap to finish editing) —
+  the same `editing` boolean is lifted to `Profile.tsx` (the only caller
+  that ever renders `isSelf`) so it can simultaneously gate this
+  component's fields *and* `Profile.tsx`'s own "Account" form
+  (first/last name, phone, DOB), which swaps to `ReadOnlyField` rows (the
+  same read-only building block `AthleteSelfProfile.tsx` already used for
+  grade/styles/etc.) whenever `user.role === "athlete" && !editing`. A
+  non-self view (`app/src/pages/AthleteProfile.tsx` at
+  `/athletes/:id/profile`) never shows the pencil and is always read-only,
+  regardless of `editing`/`onToggleEdit` (both default to
+  `false`/`undefined` there) — it shows the same hero plus the feed (no
+  FAB), or a "This profile is private" message if the backend 403s.
+  Reachable from an athlete's name in `Schedule.tsx`'s
+  `AthleteStatusList` (any user sharing a schedule item with them) and
+  from a "View social profile →" link in `Athletes.tsx`'s edit drawer
+  (coach/admin).
 - **Events and itinerary items share one type set**: `EVENT_TYPES` and
   `ITEM_TYPES` are literally the same array (`const ITEM_TYPES =
   EVENT_TYPES`) in both `events.js` and `Schedule.tsx`, covering every
