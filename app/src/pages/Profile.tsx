@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth, type Child, type Profile as ProfileRecord } from "../context/AuthContext";
 import { ApiError, useApi } from "../hooks/useApi";
 import { Field, Drawer, MediaField, Toast } from "../components/ui";
-import { AthleteSelfProfile, ReadOnlyField } from "../components/AthleteSelfProfile";
+import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
 import { StaffSelfProfile } from "../components/StaffSelfProfile";
 import { AthleteSocialProfile } from "../components/AthleteSocialProfile";
 
@@ -116,10 +116,12 @@ export default function Profile() {
         />
       )}
       <div className="flex flex-1 flex-col justify-center gap-6 p-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">My profile</h1>
-          <p className="text-sm text-stone-600">{user?.email}</p>
-        </div>
+        {(user?.role !== "athlete" || editing) && (
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">My profile</h1>
+            <p className="text-sm text-stone-600">{user?.email}</p>
+          </div>
+        )}
 
         {(availableRoles.length >= 2 || singleRoleMultiProfile) && (
           <div className="flex flex-col gap-2 rounded-2xl bg-white p-3 shadow-card">
@@ -167,7 +169,7 @@ export default function Profile() {
           />
         </Drawer>
 
-        {user?.role === "athlete" && user.athlete_id && (
+        {user?.role === "athlete" && user.athlete_id && editing && (
           <div className="rounded-2xl bg-white p-4 shadow-card">
             <AthleteSelfProfile athleteId={user.athlete_id} />
           </div>
@@ -183,22 +185,6 @@ export default function Profile() {
           </div>
         )}
 
-        {user?.role === "athlete" && !editing && (
-          <div className="flex flex-col gap-4">
-            <h2 className="font-semibold">Account</h2>
-            {user?.photo_url && (
-              <img
-                src={user.photo_url}
-                alt=""
-                className="h-16 w-16 rounded-full object-cover"
-              />
-            )}
-            <ReadOnlyField label="First name" value={firstName || "—"} />
-            <ReadOnlyField label="Last name" value={lastName || "—"} />
-            <ReadOnlyField label="Phone number" value={phone || "—"} />
-            <ReadOnlyField label="Date of birth" value={dateOfBirth || "—"} />
-          </div>
-        )}
         {(user?.role !== "athlete" || editing) && (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <h2 className="font-semibold">Account</h2>
