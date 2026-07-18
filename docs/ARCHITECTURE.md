@@ -364,6 +364,52 @@ coach-run attendance) — this is personal athlete itinerary planning.
     place — once only, via a ref flag, so it never fights a user's
     manual scroll — and a floating arrow button re-triggers the same
     scroll on demand.
+    - **Windowed loading**: rather than fetching the athlete/coach's
+      entire schedule up front, the initial `GET /api/events` call only
+      asks for a 4-week window (`INITIAL_WINDOW_DAYS` = 2 weeks back, 2
+      forward from today) via new optional `from`/`to` query params
+      (`YYYY-MM-DD`, validated against `ISO_DATE_RE`; each of the three
+      role-scoped branches in the route — admin/athlete/coach — appends
+      an `e.end_date >= $n AND e.start_date <= $n` overlap clause only
+      when both are present, so an older/other caller that omits them
+      still gets the unfiltered result exactly as before). `loadMorePast`/
+      `loadMoreFuture` each fetch one more `LAZY_LOAD_STEP_DAYS` (2-week)
+      slice beyond whatever's currently loaded (tracked in
+      `loadedFromRef`/`loadedToRef`, not state, since they're read from
+      inside a scroll-event closure) and merge it into `events` by id
+      (`mergeEvents`) rather than replacing the array, capped at
+      `MAX_WINDOW_DAYS` (a year) out in either direction so a schedule
+      with nothing else to load can't have its scroll handler retry
+      forever. Both are guarded by their own re-entrancy ref
+      (`loadingPastRef`/`loadingFutureRef`) and show a `Spinner` at the
+      corresponding end of the list while in flight.
+    - **Triggered by an actual scroll, not `IntersectionObserver`**: the
+      lazy-load is wired to a `scroll` listener on `App.tsx`'s `<main>`
+      (found via `document.querySelector`, since `Schedule.tsx` doesn't
+      otherwise hold a ref to the page-level scroll container) that
+      calls `loadMorePast`/`loadMoreFuture` once `scrollTop`/the
+      distance-from-bottom drops under 150px. This was deliberately
+      *not* built as a pair of sentinel `<div>`s watched by an
+      `IntersectionObserver`, which fires the instant a sentinel is
+      visible — including on first paint, before the user has scrolled
+      at all, any time the loaded window is sparse enough not to fill
+      the viewport on its own. On a lightly-booked schedule that meant
+      the observer cascaded straight through months of empty fetches up
+      to the `MAX_WINDOW_DAYS` bound on every page load. A real `scroll`
+      event only fires in response to the user actually scrolling, so a
+      short list that fits on screen simply stays put until they do.
+    - **Overdue marker**: a list row whose event is still `pending` (the
+      signed-in athlete's own `my_status`, so this only ever shows on
+      the athlete's own events, never a coach/admin's view of someone
+      else's) *and* whose `end_date` has already passed (`isOverdue`)
+      gets a `w-10` red (`bg-red-600`) strip fused to the left edge of
+      its tile, a plain light "!" glyph (not the ❗ emoji, which has its
+      own fixed coloring you can't lighten) centered in it — the strip
+      and the row's button are wrapped in one flush `overflow-hidden
+      rounded-2xl` container so together they still read as a single
+      tile, and that wrapper (not the button alone) is what
+      `SwipeableRow` drags, so swipe-to-complete/fail still slides the
+      whole row including its overdue strip.
   - **Month**: a standard 7×6 day grid; each in-month cell shows up to
     3 small `TYPE_ICONS` emoji (one per overlapping event, `+N` beyond
     that) rather than full event rows, since a month cell has no room
