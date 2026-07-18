@@ -634,6 +634,7 @@ router.patch(
     const fields = {
       bio: body.bio,
       is_public_profile: body.is_public_profile,
+      photo_url: body.photo_url,
     };
     const setClauses = [];
     const values = [];
@@ -653,7 +654,7 @@ router.patch(
     const { rows } = await pool.query(
       `UPDATE nk_athletes SET ${setClauses.join(", ")}, updated_at = NOW()
        WHERE id = $${values.length}
-       RETURNING id, bio, is_public_profile`,
+       RETURNING id, bio, is_public_profile, photo_url`,
       values
     );
     if (rows.length === 0) {

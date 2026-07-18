@@ -105,138 +105,137 @@ export default function Profile() {
   }
 
   return (
-    <div className="flex min-h-full flex-col justify-center gap-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">My profile</h1>
-        <p className="text-sm text-stone-600">{user?.email}</p>
-      </div>
-
-      {(availableRoles.length >= 2 || singleRoleMultiProfile) && (
-        <div className="flex flex-col gap-2 rounded-2xl bg-white p-3 shadow-card">
-          <span className="text-sm font-medium text-stone-700">Acting as</span>
-          {availableRoles.length >= 2 ? (
-            <div className="flex gap-1 rounded-full bg-stone-100 p-1">
-              {availableRoles.map(({ role, label }) => (
-                <button
-                  key={role}
-                  onClick={() => handleRoleClick(role)}
-                  className={`min-h-[40px] flex-1 rounded-full px-3 text-sm font-medium transition-colors ${
-                    user?.role === role
-                      ? "bg-red-600 text-white shadow-sm"
-                      : "text-stone-600"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setPicker(availableRoles[0].role)}
-              className="min-h-[44px] rounded-full border border-stone-300 px-4 text-sm font-medium text-stone-700"
-            >
-              Switch {availableRoles[0].label.toLowerCase()} profile
-            </button>
-          )}
-        </div>
-      )}
-
-      <Drawer
-        open={picker !== null}
-        onClose={() => setPicker(null)}
-        title={`Choose ${picker ?? ""} profile`}
-      >
-        <ProfilePicker
-          options={pickerOptions}
-          selectedId={pickerSelectedId ?? null}
-          onSelect={async (id) => {
-            if (picker) await switchRole(picker, id);
-            setPicker(null);
-          }}
-        />
-      </Drawer>
-
+    <div className="flex min-h-full flex-col">
       {user?.role === "athlete" && user.athlete_id && (
-        <div className="rounded-2xl bg-white p-4 shadow-card">
-          <AthleteSelfProfile athleteId={user.athlete_id} />
-        </div>
+        <AthleteSocialProfile athleteId={user.athlete_id} isSelf />
       )}
-      {user?.role === "athlete" && user.athlete_id && (
-        <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-card">
-          <h2 className="font-semibold">My social profile</h2>
-          <AthleteSocialProfile athleteId={user.athlete_id} isSelf />
+      <div className="flex flex-1 flex-col justify-center gap-6 p-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">My profile</h1>
+          <p className="text-sm text-stone-600">{user?.email}</p>
         </div>
-      )}
-      {user?.role === "coach" && user.coach_id && (
-        <div className="rounded-2xl bg-white p-4 shadow-card">
-          <StaffSelfProfile kind="coach" id={user.coach_id} />
-        </div>
-      )}
-      {user?.role === "referee" && user.referee_id && (
-        <div className="rounded-2xl bg-white p-4 shadow-card">
-          <StaffSelfProfile kind="referee" id={user.referee_id} />
-        </div>
-      )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <h2 className="font-semibold">Account</h2>
-        <MediaField
-          label="Avatar"
-          kind="image"
-          value={user?.photo_url ?? ""}
-          onChange={(url) => updateProfile({ photo_url: url })}
-          onError={showToast}
-        />
-        <Field label="First name">
-          <input
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-          />
-        </Field>
-        <Field label="Last name">
-          <input
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-          />
-        </Field>
-        <Field label="Phone number">
-          <input
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-          />
-        </Field>
-        <Field label="Date of birth">
-          <input
-            type="date"
-            value={dateOfBirth}
-            onChange={(e) => setDateOfBirth(e.target.value)}
-            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-          />
-        </Field>
-        {error && <p className="text-sm text-red-700">{error}</p>}
-        {saved && <p className="text-sm text-green-700">Saved.</p>}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+        {(availableRoles.length >= 2 || singleRoleMultiProfile) && (
+          <div className="flex flex-col gap-2 rounded-2xl bg-white p-3 shadow-card">
+            <span className="text-sm font-medium text-stone-700">Acting as</span>
+            {availableRoles.length >= 2 ? (
+              <div className="flex gap-1 rounded-full bg-stone-100 p-1">
+                {availableRoles.map(({ role, label }) => (
+                  <button
+                    key={role}
+                    onClick={() => handleRoleClick(role)}
+                    className={`min-h-[40px] flex-1 rounded-full px-3 text-sm font-medium transition-colors ${
+                      user?.role === role
+                        ? "bg-red-600 text-white shadow-sm"
+                        : "text-stone-600"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPicker(availableRoles[0].role)}
+                className="min-h-[44px] rounded-full border border-stone-300 px-4 text-sm font-medium text-stone-700"
+              >
+                Switch {availableRoles[0].label.toLowerCase()} profile
+              </button>
+            )}
+          </div>
+        )}
+
+        <Drawer
+          open={picker !== null}
+          onClose={() => setPicker(null)}
+          title={`Choose ${picker ?? ""} profile`}
         >
-          Save
-        </button>
-      </form>
+          <ProfilePicker
+            options={pickerOptions}
+            selectedId={pickerSelectedId ?? null}
+            onSelect={async (id) => {
+              if (picker) await switchRole(picker, id);
+              setPicker(null);
+            }}
+          />
+        </Drawer>
 
-      {!isAthleteOnly && <LinkChild />}
-      {toast && <Toast message={toast} />}
+        {user?.role === "athlete" && user.athlete_id && (
+          <div className="rounded-2xl bg-white p-4 shadow-card">
+            <AthleteSelfProfile athleteId={user.athlete_id} />
+          </div>
+        )}
+        {user?.role === "coach" && user.coach_id && (
+          <div className="rounded-2xl bg-white p-4 shadow-card">
+            <StaffSelfProfile kind="coach" id={user.coach_id} />
+          </div>
+        )}
+        {user?.role === "referee" && user.referee_id && (
+          <div className="rounded-2xl bg-white p-4 shadow-card">
+            <StaffSelfProfile kind="referee" id={user.referee_id} />
+          </div>
+        )}
 
-      {showActiveNav && (
-        <Link to="/" className="text-center text-sm font-medium text-red-700">
-          Back to app
-        </Link>
-      )}
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <h2 className="font-semibold">Account</h2>
+          <MediaField
+            label="Avatar"
+            kind="image"
+            value={user?.photo_url ?? ""}
+            onChange={(url) => updateProfile({ photo_url: url })}
+            onError={showToast}
+          />
+          <Field label="First name">
+            <input
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Last name">
+            <input
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Phone number">
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Date of birth">
+            <input
+              type="date"
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          {error && <p className="text-sm text-red-700">{error}</p>}
+          {saved && <p className="text-sm text-green-700">Saved.</p>}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+          >
+            Save
+          </button>
+        </form>
+
+        {!isAthleteOnly && <LinkChild />}
+        {toast && <Toast message={toast} />}
+
+        {showActiveNav && (
+          <Link to="/" className="text-center text-sm font-medium text-red-700">
+            Back to app
+          </Link>
+        )}
+      </div>
     </div>
   );
 }
