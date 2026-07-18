@@ -135,10 +135,14 @@ read-only info to show at a glance than there is to edit. See
   overlaid top-right on the page's hero image (`absolute right-4 top-4`,
   `bg-black/40 backdrop-blur`), not a text button or a separate row.
   `aria-label` swaps between `"Edit profile"` / `"Done editing"`.
-- While not editing, every field renders as styled read-only text (reuse
-  `ReadOnlyField` from `AthleteSelfProfile.tsx` for label/value rows)
-  rather than a disabled input — editable controls (inputs, `MediaField`,
-  toggles, Save buttons) only mount once `editing` is true.
+- While not editing, fields that stay visible in view mode (e.g. the
+  bio, a public/private status line) render as styled read-only text
+  (reuse `ReadOnlyField` from `AthleteSelfProfile.tsx` for label/value
+  rows) rather than a disabled input. Whole sections that are pure
+  detail/edit affordances with nothing worth showing at a glance (e.g.
+  `Profile.tsx`'s "My profile" card and "Account" form) are instead
+  omitted entirely while not editing, not rendered read-only — only
+  reappear, fully editable, once `editing` is true.
 - This is opt-in per page/role, not a new default for every form in the
   app — most self-service and admin editors (`StaffSelfProfile`, the
   entity list+drawer pattern) stay always-editable; only add the toggle

@@ -767,23 +767,27 @@ coach-run attendance) — this is personal athlete itinerary planning.
   a floating "+" (`position: fixed`, bottom-right, above the bottom nav)
   rather than an always-open composer — tapping it opens the same
   body/photo/share-from-schedule composer inside a `Drawer`.
-  **The athlete's own profile is view-only by default.** A pencil button
-  overlaid on the hero's top-right corner (shown only for `isSelf`) calls
-  `onToggleEdit`; while `editing` is false, the cover-photo `MediaField`
-  and bio textarea are replaced by plain styled read-only text and the
-  public/private toggle becomes a static "🌐 Public profile"/"🔒 Private
-  profile" line, and the pencil becomes a "✓" (tap to finish editing) —
-  the same `editing` boolean is lifted to `Profile.tsx` (the only caller
-  that ever renders `isSelf`) so it can simultaneously gate this
-  component's fields *and* `Profile.tsx`'s own "Account" form
-  (first/last name, phone, DOB), which swaps to `ReadOnlyField` rows (the
-  same read-only building block `AthleteSelfProfile.tsx` already used for
-  grade/styles/etc.) whenever `user.role === "athlete" && !editing`. A
-  non-self view (`app/src/pages/AthleteProfile.tsx` at
-  `/athletes/:id/profile`) never shows the pencil and is always read-only,
-  regardless of `editing`/`onToggleEdit` (both default to
-  `false`/`undefined` there) — it shows the same hero plus the feed (no
-  FAB), or a "This profile is private" message if the backend 403s.
+  **The athlete's own profile is view-only by default, and view mode
+  shows only the hero photo, bio, and feed** — nothing else. A pencil
+  button overlaid on the hero's top-right corner (shown only for
+  `isSelf`) calls `onToggleEdit`; while `editing` is false, the
+  cover-photo `MediaField` and bio textarea are replaced by plain styled
+  read-only text and the public/private toggle becomes a static "🌐
+  Public profile"/"🔒 Private profile" line, and the pencil becomes a "✓"
+  (tap to finish editing). The same `editing` boolean is lifted to
+  `Profile.tsx` (the only caller that ever renders `isSelf`) so it can
+  simultaneously gate this component's fields *and*, on `Profile.tsx`
+  itself, the "My profile" page title, the read-only `AthleteSelfProfile`
+  card (grade/styles/DOB/etc., competition results, link-a-parent), and
+  the "Account" form (first/last name, phone, DOB) — all three are
+  omitted entirely (not shown as read-only) whenever
+  `user.role === "athlete" && !editing`, and reappear, fully editable, as
+  soon as `editing` is toggled on. A non-self view
+  (`app/src/pages/AthleteProfile.tsx` at `/athletes/:id/profile`) never
+  shows the pencil and is always read-only, regardless of
+  `editing`/`onToggleEdit` (both default to `false`/`undefined` there) —
+  it shows the same hero plus the feed (no FAB), or a "This profile is
+  private" message if the backend 403s.
   Reachable from an athlete's name in `Schedule.tsx`'s
   `AthleteStatusList` (any user sharing a schedule item with them) and
   from a "View social profile →" link in `Athletes.tsx`'s edit drawer
