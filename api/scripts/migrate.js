@@ -898,6 +898,10 @@ const migrations = [
      created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `CREATE INDEX IF NOT EXISTS nk_athlete_posts_athlete_idx ON nk_athlete_posts (athlete_id, created_at DESC)`,
+
+  // Post editing: a title field alongside the existing body, plus the
+  // PATCH endpoint needed to edit a post after it's created.
+  `ALTER TABLE nk_athlete_posts ADD COLUMN IF NOT EXISTS title VARCHAR(200)`,
 ];
 
 async function migrate() {

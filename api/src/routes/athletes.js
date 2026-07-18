@@ -665,7 +665,7 @@ router.patch(
 );
 
 const POST_JOIN_SQL = `
-  SELECT p.id, p.athlete_id, p.body, p.image_url, p.share_kind, p.created_at,
+  SELECT p.id, p.athlete_id, p.title, p.body, p.image_url, p.share_kind, p.created_at,
          e.title AS share_event_title, e.start_date AS share_event_date,
          ei.title AS share_item_title, ei.item_date AS share_item_date,
          gl.name AS share_grade_name, gl.belt_color AS share_grade_color,
@@ -730,10 +730,10 @@ router.post(
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
-    const { body, image_url, share_kind, share_id } = req.body ?? {};
-    if (!body?.trim() && !image_url && !share_kind) {
+    const { title, body, image_url, share_kind, share_id } = req.body ?? {};
+    if (!title?.trim() && !body?.trim() && !image_url && !share_kind) {
       return res.status(400).json({
-        error: { message: "Post must have text, an image, or a shared item" },
+        error: { message: "Post must have a title, text, an image, or a shared item" },
       });
     }
 
@@ -768,12 +768,13 @@ router.post(
 
     const { rows } = await pool.query(
       `INSERT INTO nk_athlete_posts
-         (athlete_id, body, image_url, share_kind, share_event_id,
+         (athlete_id, title, body, image_url, share_kind, share_event_id,
           share_event_item_id, share_grading_id, share_competition_result_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id`,
       [
         req.params.id,
+        title?.trim() || null,
         body?.trim() || null,
         image_url || null,
         share_kind || null,
@@ -789,6 +790,57 @@ router.post(
       [rows[0].id]
     );
     res.status(201).json({ post: hydrated[0] });
+  })
+);
+
+// Editing a post is self-only, same as creating one - it's the athlete's
+// own voice, not something a coach/admin should be able to rewrite. Only
+// title/body/image_url can be changed; the share_* link (if any) is fixed
+// at creation time.
+router.patch(
+  "/:id/posts/:postId",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const reqBody = req.body ?? {};
+    const fields = {
+      title: reqBody.title,
+      body: reqBody.body,
+      image_url: reqBody.image_url,
+    };
+    const setClauses = [];
+    const values = [];
+    for (const [key, value] of Object.entries(fields)) {
+      if (key in reqBody) {
+        values.push(value);
+        setClauses.push(`${key} = $${values.length}`);
+      }
+    }
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: { message: "No fields to update" } });
+    }
+    values.push(req.params.postId, req.params.id);
+
+    const { rows } = await pool.query(
+      `UPDATE nk_athlete_posts SET ${setClauses.join(", ")}
+       WHERE id = $${values.length - 1} AND athlete_id = $${values.length}
+       RETURNING id`,
+      values
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: { message: "Post not found" } });
+    }
+
+    const { rows: hydrated } = await pool.query(
+      `${POST_JOIN_SQL} WHERE p.id = $1`,
+      [rows[0].id]
+    );
+    res.json({ post: hydrated[0] });
   })
 );
 

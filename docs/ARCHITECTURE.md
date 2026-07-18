@@ -750,10 +750,15 @@ coach-run attendance) — this is personal athlete itinerary planning.
   Posting (`POST .../posts`) is self-only even for coach/admin (it's the
   athlete's own voice, not a third-party-certified record like a
   grading); sharing validates the referenced event/item/grading/result
-  actually belongs to that athlete before allowing it. Deleting a post is
-  self *or* admin (moderation). `GET .../shareable` feeds the composer's
-  "share from schedule" picker (self-only) with the athlete's own recent
-  events/items/gradings/competition results.
+  actually belongs to that athlete before allowing it. Editing a post
+  (`PATCH .../posts/:postId` — `title`/`body`/`image_url` only, via the
+  same presence-based dynamic `SET` clause every other `PATCH` in the app
+  uses; the `share_*` link itself is fixed at creation time) is also
+  self-only, same reasoning as posting. Deleting a post is self *or*
+  admin (moderation). `GET .../shareable` feeds the composer's "share
+  from schedule" picker (self-only, create-only — not shown when
+  editing) with the athlete's own recent events/items/gradings/
+  competition results.
   `app/src/components/AthleteSocialProfile.tsx` exports
   `AthleteSocialProfile({ athleteId, isSelf, editing?, onToggleEdit? })`,
   rendered full-bleed (call sites give it no padding of its own so its
@@ -763,28 +768,34 @@ coach-run attendance) — this is personal athlete itinerary planning.
   100% 82%, 0 100%)` — left corner full height, right corner cut to 82%,
   chosen over the mirrored cut so it clears the bottom-left name/belt
   overlay text, which is also capped at `max-w-[75%]` as extra insurance
-  for long names), then bio/toggle, then the feed. Posting is reached via
-  a floating "+" (`position: fixed`, bottom-right, above the bottom nav)
-  rather than an always-open composer — tapping it opens the same
-  body/photo/share-from-schedule composer inside a `Drawer`.
+  for long names) and the athlete's name overlaid in the app's header
+  font (`font-display uppercase tracking-wide`, the same Oswald-based
+  styling `h1`/`h2` get globally, applied explicitly here since this is a
+  `span` not a heading element), then bio, then the feed. Posting is
+  reached via a floating "+" (`position: fixed`, bottom-right, above the
+  bottom nav) rather than an always-open composer — tapping it opens the
+  composer inside a `Drawer`.
   **The athlete's own profile is view-only by default, and view mode
   shows only the hero photo, bio, and feed** — nothing else. A pencil
   button overlaid on the hero's top-right corner (shown only for
   `isSelf`) calls `onToggleEdit`; while `editing` is false, the
   cover-photo `MediaField` and bio textarea are replaced by plain styled
-  read-only text and the public/private toggle becomes a static "🌐
-  Public profile"/"🔒 Private profile" line, and the pencil becomes a "✓"
-  (tap to finish editing). The same `editing` boolean is lifted to
-  `Profile.tsx` (the only caller that ever renders `isSelf`) so it can
-  simultaneously gate this component's fields *and*, on `Profile.tsx`
-  itself, the "My profile" page title, the read-only `AthleteSelfProfile`
-  card (grade/styles/DOB/etc., competition results, link-a-parent), and
-  the "Account" form (first/last name, phone, DOB) — all three are
-  omitted entirely (not shown as read-only) whenever
-  `user.role === "athlete" && !editing`, and reappear, fully editable, as
-  soon as `editing` is toggled on. A non-self view
+  read-only text, and the pencil becomes a "✓" (tap to finish editing).
+  Right next to the pencil (same circular `bg-black/40 backdrop-blur`
+  style, icon-only, no text label) is a 🌐/🔒 button that directly calls
+  `togglePublic` to flip `is_public_profile` — unlike the pencil this
+  isn't a mode toggle, it's a one-tap action available regardless of
+  `editing`, since flipping a single boolean doesn't need a form. The
+  same `editing` boolean is lifted to `Profile.tsx` (the only caller that
+  ever renders `isSelf`) so it can simultaneously gate this component's
+  fields *and*, on `Profile.tsx` itself, the "My profile" page title, the
+  read-only `AthleteSelfProfile` card (grade/styles/DOB/etc., competition
+  results, link-a-parent), and the "Account" form (first/last name,
+  phone, DOB) — all three are omitted entirely (not shown as read-only)
+  whenever `user.role === "athlete" && !editing`, and reappear, fully
+  editable, as soon as `editing` is toggled on. A non-self view
   (`app/src/pages/AthleteProfile.tsx` at `/athletes/:id/profile`) never
-  shows the pencil and is always read-only, regardless of
+  shows either icon and is always read-only, regardless of
   `editing`/`onToggleEdit` (both default to `false`/`undefined` there) —
   it shows the same hero plus the feed (no FAB), or a "This profile is
   private" message if the backend 403s.
@@ -792,6 +803,23 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `AthleteStatusList` (any user sharing a schedule item with them) and
   from a "View social profile →" link in `Athletes.tsx`'s edit drawer
   (coach/admin).
+  **Each post is edge-to-edge** (`PostCard`: no side border/rounding, just
+  a bottom divider; the feed wraps its list in `-mx-4` to cancel the
+  parent's padding) with an optional `title` (bold, above the body) and a
+  self-only edit/delete icon pair absolutely positioned in the post's own
+  top-right corner — edit (✏️) reopens the same `Composer` used to create
+  posts (now pre-filled and PATCHing instead of POSTing, "Save" instead
+  of "Post"), and delete reuses the shared `DeleteButton` in its new
+  `iconOnly` form (🗑 only, no text/border pill) rather than a bespoke
+  control, so it keeps the same confirm-modal double-confirmation every
+  other delete in the app gets. The composer itself has a "Title"
+  input plus a minimal Bold/Italic toolbar: the buttons wrap the
+  textarea's current selection in `**`/`*` markers (a small, deliberately
+  non-rich-text "WYSIWYG-lite" — no editor dependency, no HTML), and
+  `renderFormattedBody` turns those markers back into `<strong>`/`<em>`
+  at render time by parsing the two known patterns into React elements
+  (never `dangerouslySetInnerHTML`, so a post body can't inject arbitrary
+  markup).
 - **Events and itinerary items share one type set**: `EVENT_TYPES` and
   `ITEM_TYPES` are literally the same array (`const ITEM_TYPES =
   EVENT_TYPES`) in both `events.js` and `Schedule.tsx`, covering every
