@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useApi } from "../hooks/useApi";
-import { Avatar, BeltSwatch, DeleteButton, MediaField, Spinner, Toast } from "./ui";
+import { Avatar, BeltSwatch, DeleteButton, Drawer, MediaField, Spinner, Toast } from "./ui";
 
 export interface SocialProfile {
   id: number;
@@ -302,12 +302,13 @@ function Composer({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-stone-200 bg-white p-3">
+    <div className="flex flex-col gap-3">
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
         placeholder="What's on your mind?"
-        className="min-h-[80px] rounded-xl border border-stone-300 px-3 py-2"
+        className="min-h-[100px] rounded-xl border border-stone-300 px-3 py-2"
+        autoFocus
       />
       <MediaField
         label="Photo"
@@ -375,6 +376,7 @@ function PostsFeed({
 }) {
   const api = useApi();
   const [posts, setPosts] = useState<Post[] | null>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
 
   useEffect(() => {
     setPosts(null);
@@ -392,13 +394,6 @@ function PostsFeed({
 
   return (
     <div className="flex flex-col gap-3">
-      {canPost && (
-        <Composer
-          athleteId={athleteId}
-          onPosted={(post) => setPosts((prev) => (prev ? [post, ...prev] : [post]))}
-          showToast={showToast}
-        />
-      )}
       {posts === null ? (
         <Spinner />
       ) : posts.length === 0 ? (
@@ -414,17 +409,46 @@ function PostsFeed({
           />
         ))
       )}
+
+      {canPost && (
+        <>
+          <button
+            type="button"
+            onClick={() => setComposerOpen(true)}
+            aria-label="New post"
+            className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-3xl leading-none text-white shadow-lg"
+          >
+            +
+          </button>
+          <Drawer
+            open={composerOpen}
+            onClose={() => setComposerOpen(false)}
+            title="New post"
+          >
+            <Composer
+              athleteId={athleteId}
+              onPosted={(post) => {
+                setPosts((prev) => (prev ? [post, ...prev] : [post]));
+                setComposerOpen(false);
+              }}
+              showToast={showToast}
+            />
+          </Drawer>
+        </>
+      )}
     </div>
   );
 }
 
-// The athlete's social profile: a bio, a self-controlled "make my profile
-// public" toggle (no coach/admin approval needed), and a Facebook-style
-// feed they can post freeform notes to or share their own
-// training/competition/grading history into. isSelf renders the editable
-// bio/toggle/composer; a non-self viewer (only reachable at all if the
-// profile is public, per the backend's canViewSocialProfile gate) gets a
-// read-only header + feed.
+// The athlete's social profile: a full-bleed cover photo (self-editable,
+// falls back to their initials avatar) with name/belt overlaid, a bio, a
+// self-controlled "make my profile public" toggle (no coach/admin approval
+// needed), and a Facebook-style feed they can post freeform notes/photos to
+// or share their own training/competition/grading history into via a
+// floating "+" button that opens the composer in a Drawer. isSelf renders
+// the editable cover-photo/bio/toggle/composer; a non-self viewer (only
+// reachable at all if the profile is public, per the backend's
+// canViewSocialProfile gate) gets a read-only header + feed.
 export function AthleteSocialProfile({
   athleteId,
   isSelf,
@@ -475,76 +499,101 @@ export function AthleteSocialProfile({
     );
   }
 
-  if (error) return <p className="px-1 py-2 text-sm text-stone-500">{error}</p>;
+  async function updatePhoto(photoUrl: string) {
+    const { athlete } = await api.patch<{ athlete: { photo_url: string | null } }>(
+      `/athletes/${athleteId}/social-profile`,
+      { photo_url: photoUrl || null }
+    );
+    setProfile((prev) => (prev ? { ...prev, photo_url: athlete.photo_url } : prev));
+  }
+
+  if (error) return <p className="p-6 text-sm text-stone-500">{error}</p>;
   if (!profile)
     return (
-      <div className="flex justify-center p-4">
+      <div className="flex justify-center p-6">
         <Spinner />
       </div>
     );
 
   return (
-    <div className="flex flex-col gap-3">
-      {!isSelf && (
-        <div className="flex items-center gap-3">
-          <Avatar
-            name={`${profile.first_name} ${profile.last_name}`}
-            url={profile.photo_url}
-            size={56}
-          />
-          <div className="flex flex-col">
-            <span className="text-xl font-bold tracking-tight">
-              {profile.first_name} {profile.last_name}
-            </span>
-            {profile.grade_name && (
-              <span className="flex items-center gap-1 text-sm text-stone-600">
-                {profile.belt_color && <BeltSwatch color={profile.belt_color} />}
-                {profile.grade_name}
-              </span>
-            )}
+    <div className="flex flex-col">
+      <div
+        className="relative flex h-56 w-full flex-col justify-end bg-stone-800 bg-cover bg-center"
+        style={
+          profile.photo_url ? { backgroundImage: `url(${profile.photo_url})` } : undefined
+        }
+      >
+        {!profile.photo_url && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Avatar
+              name={`${profile.first_name} ${profile.last_name}`}
+              size={96}
+            />
           </div>
-        </div>
-      )}
-      {isSelf ? (
-        <>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-stone-700">Bio</span>
-            <textarea
-              key={profile.bio ?? ""}
-              defaultValue={bio}
-              onChange={(e) => setBio(e.target.value)}
-              onBlur={saveBio}
-              placeholder="Tell people about yourself..."
-              className="min-h-[80px] rounded-xl border border-stone-300 px-3 py-2"
-            />
-          </label>
-          <label className="flex min-h-[44px] items-center justify-between rounded-xl bg-stone-50 px-3">
-            <span className="text-sm font-medium text-stone-700">
-              Make my profile public
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+        <div className="relative flex flex-col gap-1 p-4 text-white">
+          <span className="text-2xl font-bold tracking-tight [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
+            {profile.first_name} {profile.last_name}
+          </span>
+          {profile.grade_name && (
+            <span className="flex items-center gap-1 text-sm [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
+              {profile.belt_color && <BeltSwatch color={profile.belt_color} />}
+              {profile.grade_name}
             </span>
-            <input
-              type="checkbox"
-              checked={profile.is_public_profile}
-              onChange={(e) => togglePublic(e.target.checked)}
-              className="h-5 w-5"
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 p-4">
+        {isSelf ? (
+          <>
+            <MediaField
+              label="Cover photo"
+              kind="image"
+              value={profile.photo_url ?? ""}
+              onChange={updatePhoto}
+              onError={showToast}
             />
-          </label>
-          <p className="text-xs text-stone-500">
-            {profile.is_public_profile
-              ? "Any signed-in user of the app can view your profile and posts."
-              : "Only you, your coaches, and admins can see your profile and posts."}
-          </p>
-        </>
-      ) : (
-        profile.bio && <p className="text-sm text-stone-700">{profile.bio}</p>
-      )}
-      <PostsFeed
-        athleteId={athleteId}
-        profile={profile}
-        canPost={isSelf}
-        canModerate={false}
-        showToast={showToast}
-      />
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-stone-700">Bio</span>
+              <textarea
+                key={profile.bio ?? ""}
+                defaultValue={bio}
+                onChange={(e) => setBio(e.target.value)}
+                onBlur={saveBio}
+                placeholder="Tell people about yourself..."
+                className="min-h-[80px] rounded-xl border border-stone-300 px-3 py-2"
+              />
+            </label>
+            <label className="flex min-h-[44px] items-center justify-between rounded-xl bg-stone-50 px-3">
+              <span className="text-sm font-medium text-stone-700">
+                Make my profile public
+              </span>
+              <input
+                type="checkbox"
+                checked={profile.is_public_profile}
+                onChange={(e) => togglePublic(e.target.checked)}
+                className="h-5 w-5"
+              />
+            </label>
+            <p className="text-xs text-stone-500">
+              {profile.is_public_profile
+                ? "Any signed-in user of the app can view your profile and posts."
+                : "Only you, your coaches, and admins can see your profile and posts."}
+            </p>
+          </>
+        ) : (
+          profile.bio && <p className="text-sm text-stone-700">{profile.bio}</p>
+        )}
+        <PostsFeed
+          athleteId={athleteId}
+          profile={profile}
+          canPost={isSelf}
+          canModerate={false}
+          showToast={showToast}
+        />
+      </div>
       {toast && <Toast message={toast} />}
     </div>
   );

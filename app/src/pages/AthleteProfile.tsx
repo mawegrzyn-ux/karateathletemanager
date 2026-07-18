@@ -15,11 +15,12 @@ export default function AthleteProfile() {
   const isSelf = user?.role === "athlete" && user.athlete_id === athleteId;
 
   return (
-    <div className="flex min-h-full flex-col gap-4 p-6">
-      <div className="rounded-2xl bg-white p-4 shadow-card">
-        <AthleteSocialProfile athleteId={athleteId} isSelf={isSelf} />
-      </div>
-      <Link to="/" className="text-center text-sm font-medium text-red-700">
+    <div className="flex min-h-full flex-col gap-4">
+      <AthleteSocialProfile athleteId={athleteId} isSelf={isSelf} />
+      <Link
+        to="/"
+        className="px-6 text-center text-sm font-medium text-red-700"
+      >
         Back to app
       </Link>
     </div>

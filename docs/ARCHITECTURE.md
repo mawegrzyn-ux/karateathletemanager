@@ -755,16 +755,24 @@ coach-run attendance) — this is personal athlete itinerary planning.
   "share from schedule" picker (self-only) with the athlete's own recent
   events/items/gradings/competition results.
   `app/src/components/AthleteSocialProfile.tsx` exports
-  `AthleteSocialProfile({ athleteId, isSelf })`: the self view (rendered
-  on `Profile.tsx`, alongside the existing read-only `AthleteSelfProfile`
-  block — tapping the bottom-nav profile icon is still the same `/profile`
-  page, just extended) shows an editable bio, the public/private toggle,
-  and the composer; a non-self view (`app/src/pages/AthleteProfile.tsx` at
-  `/athletes/:id/profile`) shows a read-only header (avatar/name/belt) and
-  feed only, or a "This profile is private" message if the backend 403s.
-  Reachable from an athlete's name in `Schedule.tsx`'s `AthleteStatusList`
-  (any user sharing a schedule item with them) and from a "View social
-  profile →" link in `Athletes.tsx`'s edit drawer (coach/admin).
+  `AthleteSocialProfile({ athleteId, isSelf })`, rendered full-bleed (call
+  sites give it no padding of its own so its cover photo can reach the
+  screen edges): a full-width photo banner (`nk_athletes.photo_url`, a
+  self-editable `MediaField` right below it for `isSelf`, falling back to
+  an initials `Avatar` when unset) with the athlete's name/belt overlaid
+  via a gradient, then bio/toggle, then the feed. Posting is reached via a
+  floating "+" (`position: fixed`, bottom-right, above the bottom nav)
+  rather than an always-open composer — tapping it opens the same
+  body/photo/share-from-schedule composer inside a `Drawer`. The self view
+  (rendered on `Profile.tsx`, above the existing read-only
+  `AthleteSelfProfile` card — tapping the bottom-nav profile icon is still
+  the same `/profile` page, just extended) is fully editable; a non-self
+  view (`app/src/pages/AthleteProfile.tsx` at `/athletes/:id/profile`)
+  shows the same hero read-only plus the feed (no FAB), or a "This profile
+  is private" message if the backend 403s. Reachable from an athlete's
+  name in `Schedule.tsx`'s `AthleteStatusList` (any user sharing a
+  schedule item with them) and from a "View social profile →" link in
+  `Athletes.tsx`'s edit drawer (coach/admin).
 - **Events and itinerary items share one type set**: `EVENT_TYPES` and
   `ITEM_TYPES` are literally the same array (`const ITEM_TYPES =
   EVENT_TYPES`) in both `events.js` and `Schedule.tsx`, covering every
