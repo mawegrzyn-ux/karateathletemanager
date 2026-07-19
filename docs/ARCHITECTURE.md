@@ -513,6 +513,32 @@ coach-run attendance) — this is personal athlete itinerary planning.
   editors of the module library, the page surfaces any save failure (bad
   bounds, network error) via a `Toast`, since every field edit auto-saves
   immediately and previously failed silently.
+  **`AthleteTrainingLog` is today-centered and windowed**, mirroring
+  Schedule.tsx's list view at a smaller scale: entries are grouped into
+  date-headed sections (`groupByDate`/`dateLabel`, both now shared from
+  `app/src/utils/dates.ts` rather than living only in `Schedule.tsx`, so
+  the two views can't drift out of sync) and the initial load is a
+  2-week window — a week back, a week forward (`TRAINING_LOG_WINDOW_DAYS`)
+  — via the same optional `from`/`to` params `GET /api/events` already
+  supports, now added to `/training-log` too (both UNION branches filtered
+  by wrapping the query and applying the range clause once, outside the
+  union, rather than duplicating it per branch). Scrolling toward either
+  edge lazy-loads another week in that direction (`loadMorePast`/
+  `loadMoreFuture`, merged by `source-id` key, capped at a year out) via a
+  real `scroll` listener on `<main>` — not `IntersectionObserver`, for the
+  same reason as `Schedule.tsx` (see that file's comment): a short log
+  would otherwise auto-cascade through months of empty fetches before the
+  user ever scrolls. First load auto-scrolls to today's section exactly
+  like `Schedule.tsx`'s `scrollToToday`. A floating "+" (bottom-right,
+  matching the FAB pattern used for posting to a social profile) opens a
+  `Drawer` with a deliberately minimal quick-add form — title, date,
+  start/end time, notes — that `POST`s a plain `training`-type event with
+  no `athlete_ids` (an athlete caller always self-assigns via
+  `resolveAthleteIds`, so no picker is needed) and prepends the created
+  entry locally. This quick-add is intentionally narrower than
+  `Schedule.tsx`'s full event form (no repeat/venue/module/kata options)
+  since this tab's job is fast personal logging, not full schedule
+  authoring — the complete feature set stays on the Schedule page.
 - **Media uploads**: `video_url`/`image_url` on an exercise item accept
   either a pasted link or an uploaded file, via `MediaField` — a shared
   component in `components/ui.tsx` (also used for athlete/coach photos,

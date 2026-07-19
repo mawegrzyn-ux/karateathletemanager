@@ -19,6 +19,7 @@ import {
 } from "../components/ui";
 import { TrainingModuleView, type TrainingModule } from "../components/TrainingModuleView";
 import { EventCompetitionResults } from "../components/CompetitionResults";
+import { todayStr, addDaysStr, dateLabel, groupByDate } from "../utils/dates";
 
 type CompletionStatus = "pending" | "completed" | "failed";
 
@@ -187,43 +188,9 @@ function toTimeInput(value: string | null) {
 }
 
 function groupEventsByDate(events: Event[]) {
-  const map = new Map<string, Event[]>();
-  for (const e of events) {
-    const date = toDateInput(e.start_date);
-    if (!map.has(date)) map.set(date, []);
-    map.get(date)!.push(e);
-  }
-  return [...map.entries()]
-    .map(([date, events]) => ({ date, events }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
-
-function addDaysStr(dateStr: string, days: number) {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function dateLabel(dateStr: string) {
-  const today = todayStr();
-  if (dateStr === today) return "Today";
-  if (dateStr === addDaysStr(today, 1)) return "Tomorrow";
-  if (dateStr === addDaysStr(today, -1)) return "Yesterday";
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  return groupByDate(events, (e) => toDateInput(e.start_date)).map(
+    ({ date, items }) => ({ date, events: items })
+  );
 }
 
 function startOfWeek(dateStr: string) {

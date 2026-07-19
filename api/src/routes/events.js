@@ -580,7 +580,9 @@ router.post(
 // they're assigned to, each with the linked module (if any), their own
 // status/notes, and enough of the schedule (date/time) for the UI to show
 // "time spent" as the scheduled duration. Registered before "/:id" so it
-// isn't swallowed by that wildcard route.
+// isn't swallowed by that wildcard route. Same optional from/to windowing
+// as GET / (the athlete-facing Training tab only loads a rolling window
+// around today, lazy-loading further like Schedule.tsx's list view).
 router.get(
   "/training-log",
   asyncHandler(async (req, res) => {
@@ -588,33 +590,42 @@ router.get(
       return res.status(403).json({ error: { message: "Athletes only" } });
     }
 
+    const { from, to } = req.query;
+    const hasRange = ISO_DATE_RE.test(from) && ISO_DATE_RE.test(to);
+    const rangeClause = hasRange ? "AND date >= $2 AND date <= $3" : "";
+    const params = hasRange
+      ? [req.user.athlete_id, from, to]
+      : [req.user.athlete_id];
+
     const { rows } = await pool.query(
-      `SELECT 'item' AS source, i.id, i.event_id, i.title,
-              i.item_date AS date, i.start_time, i.end_time,
-              tm.title AS module_title,
-              COALESCE(s.status, 'pending') AS status, s.notes
-       FROM nk_event_items i
-       JOIN nk_event_athletes ea ON ea.event_id = i.event_id
-       LEFT JOIN nk_training_modules tm ON tm.id = i.training_module_id
-       LEFT JOIN nk_event_item_athlete_status s
-         ON s.item_id = i.id AND s.athlete_id = ea.athlete_id
-       WHERE i.item_type = 'training' AND ea.athlete_id = $1
+      `SELECT * FROM (
+         SELECT 'item' AS source, i.id, i.event_id, i.title,
+                i.item_date AS date, i.start_time, i.end_time,
+                tm.title AS module_title,
+                COALESCE(s.status, 'pending') AS status, s.notes
+         FROM nk_event_items i
+         JOIN nk_event_athletes ea ON ea.event_id = i.event_id
+         LEFT JOIN nk_training_modules tm ON tm.id = i.training_module_id
+         LEFT JOIN nk_event_item_athlete_status s
+           ON s.item_id = i.id AND s.athlete_id = ea.athlete_id
+         WHERE i.item_type = 'training' AND ea.athlete_id = $1
 
-       UNION ALL
+         UNION ALL
 
-       SELECT 'event' AS source, e.id, e.id AS event_id, e.title,
-              e.start_date AS date, e.start_time, e.end_time,
-              tm.title AS module_title,
-              COALESCE(s.status, 'pending') AS status, s.notes
-       FROM nk_events e
-       JOIN nk_event_athletes ea ON ea.event_id = e.id
-       LEFT JOIN nk_training_modules tm ON tm.id = e.training_module_id
-       LEFT JOIN nk_event_athlete_status s
-         ON s.event_id = e.id AND s.athlete_id = ea.athlete_id
-       WHERE e.event_type = 'training' AND ea.athlete_id = $1
-
+         SELECT 'event' AS source, e.id, e.id AS event_id, e.title,
+                e.start_date AS date, e.start_time, e.end_time,
+                tm.title AS module_title,
+                COALESCE(s.status, 'pending') AS status, s.notes
+         FROM nk_events e
+         JOIN nk_event_athletes ea ON ea.event_id = e.id
+         LEFT JOIN nk_training_modules tm ON tm.id = e.training_module_id
+         LEFT JOIN nk_event_athlete_status s
+           ON s.event_id = e.id AND s.athlete_id = ea.athlete_id
+         WHERE e.event_type = 'training' AND ea.athlete_id = $1
+       ) entries
+       WHERE 1=1 ${rangeClause}
        ORDER BY date DESC, start_time DESC NULLS LAST`,
-      [req.user.athlete_id]
+      params
     );
 
     res.json({ entries: rows });

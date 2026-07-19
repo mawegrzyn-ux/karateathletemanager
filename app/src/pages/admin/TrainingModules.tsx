@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, useApi } from "../../hooks/useApi";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -17,6 +17,7 @@ import {
   type TrainingModuleItem,
   type TrainingModuleItemType as ItemType,
 } from "../../components/TrainingModuleView";
+import { todayStr, addDaysStr, dateLabel, groupByDate } from "../../utils/dates";
 
 const MAX_SETS = 50;
 const MAX_REPS = 1000;
@@ -546,15 +547,27 @@ function timeSpentLabel(start: string | null, end: string | null) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-function formatLogDate(date: string) {
-  const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+// The athlete's own view of this tab (see `TrainingModules` above): a
+// today-centered log of their training schedule rather than the shared
+// module library coaches/admins manage. Loads a 2-week window (a week
+// back, a week forward - tighter than Schedule.tsx's 4-week window, since
+// this is a single-purpose personal log rather than the whole calendar)
+// and lazy-loads another week in whichever direction the user scrolls
+// toward, via the same real-`scroll`-listener approach Schedule.tsx uses
+// (see that file's comment for why not IntersectionObserver). A floating
+// "+" opens a minimal quick-add form (title/date/times/notes) that POSTs
+// a plain `training`-type event - self-only per `resolveAthleteIds`, so
+// no athlete picker is needed - and prepends the result locally.
+const TRAINING_LOG_WINDOW_DAYS = 7;
+const TRAINING_LOG_MAX_WINDOW_DAYS = 365;
+
+function mergeTrainingLogEntries(
+  prev: TrainingLogEntry[] | null,
+  incoming: TrainingLogEntry[]
+) {
+  const map = new Map((prev ?? []).map((e) => [`${e.source}-${e.id}`, e]));
+  for (const e of incoming) map.set(`${e.source}-${e.id}`, e);
+  return [...map.values()];
 }
 
 function AthleteTrainingLog() {
@@ -562,14 +575,109 @@ function AthleteTrainingLog() {
   const [entries, setEntries] = useState<TrainingLogEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [loadingPast, setLoadingPast] = useState(false);
+  const [loadingFuture, setLoadingFuture] = useState(false);
+  const loadedFromRef = useRef(addDaysStr(todayStr(), -TRAINING_LOG_WINDOW_DAYS));
+  const loadedToRef = useRef(addDaysStr(todayStr(), TRAINING_LOG_WINDOW_DAYS));
+  const loadingPastRef = useRef(false);
+  const loadingFutureRef = useRef(false);
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const hasAutoScrolledRef = useRef(false);
+
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 4000);
+  }
 
   useEffect(() => {
     api
-      .get<{ entries: TrainingLogEntry[] }>("/events/training-log")
+      .get<{ entries: TrainingLogEntry[] }>(
+        `/events/training-log?from=${loadedFromRef.current}&to=${loadedToRef.current}`
+      )
       .then((res) => setEntries(res.entries))
       .catch(() => setError("Failed to load training history"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (entries && !hasAutoScrolledRef.current) {
+      hasAutoScrolledRef.current = true;
+      requestAnimationFrame(() => {
+        const today = todayStr();
+        const groups = groupByDate(entries, (e) => e.date.slice(0, 10));
+        const target =
+          groups.find((g) => g.date >= today) ?? groups[groups.length - 1];
+        if (target) {
+          sectionRefs.current[target.date]?.scrollIntoView({
+            behavior: "auto",
+            block: "start",
+          });
+        }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
+
+  useEffect(() => {
+    const container = document.querySelector("main");
+    if (!container) return;
+
+    function onScroll() {
+      if (!container) return;
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      if (scrollTop < 150) loadMorePast();
+      if (scrollHeight - scrollTop - clientHeight < 150) loadMoreFuture();
+    }
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadMorePast() {
+    const oldestAllowed = addDaysStr(todayStr(), -TRAINING_LOG_MAX_WINDOW_DAYS);
+    if (loadingPastRef.current || loadedFromRef.current <= oldestAllowed) return;
+    loadingPastRef.current = true;
+    setLoadingPast(true);
+    const to = addDaysStr(loadedFromRef.current, -1);
+    let from = addDaysStr(loadedFromRef.current, -TRAINING_LOG_WINDOW_DAYS);
+    if (from < oldestAllowed) from = oldestAllowed;
+    try {
+      const res = await api.get<{ entries: TrainingLogEntry[] }>(
+        `/events/training-log?from=${from}&to=${to}`
+      );
+      setEntries((prev) => mergeTrainingLogEntries(prev, res.entries));
+      loadedFromRef.current = from;
+    } catch {
+      // leave the window as-is; the next scroll near the edge retries
+    } finally {
+      loadingPastRef.current = false;
+      setLoadingPast(false);
+    }
+  }
+
+  async function loadMoreFuture() {
+    const newestAllowed = addDaysStr(todayStr(), TRAINING_LOG_MAX_WINDOW_DAYS);
+    if (loadingFutureRef.current || loadedToRef.current >= newestAllowed) return;
+    loadingFutureRef.current = true;
+    setLoadingFuture(true);
+    const from = addDaysStr(loadedToRef.current, 1);
+    let to = addDaysStr(loadedToRef.current, TRAINING_LOG_WINDOW_DAYS);
+    if (to > newestAllowed) to = newestAllowed;
+    try {
+      const res = await api.get<{ entries: TrainingLogEntry[] }>(
+        `/events/training-log?from=${from}&to=${to}`
+      );
+      setEntries((prev) => mergeTrainingLogEntries(prev, res.entries));
+      loadedToRef.current = to;
+    } catch {
+      // leave the window as-is; the next scroll near the edge retries
+    } finally {
+      loadingFutureRef.current = false;
+      setLoadingFuture(false);
+    }
+  }
 
   if (error) return <div className="p-4 text-red-700">{error}</div>;
   if (!entries)
@@ -595,38 +703,193 @@ function AthleteTrainingLog() {
         className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
 
-      <div className="flex flex-col gap-2">
-        {filtered.map((entry) => (
-          <div
-            key={`${entry.source}-${entry.id}`}
-            className="flex flex-col gap-1 rounded-2xl bg-white px-4 py-3 shadow-card"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium">
-                {entry.module_title ?? entry.title}
-              </span>
-              <span
-                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASSES[entry.status]}`}
-              >
-                {STATUS_LABELS[entry.status]}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-stone-500">
-              <span>{formatLogDate(entry.date)}</span>
-              <span>·</span>
-              <span>{timeSpentLabel(entry.start_time, entry.end_time)}</span>
-            </div>
-            {entry.notes && (
-              <p className="text-sm text-stone-700">{entry.notes}</p>
-            )}
+      <div className="flex flex-col gap-4">
+        {loadingPast && (
+          <div className="flex justify-center py-2">
+            <Spinner />
           </div>
-        ))}
+        )}
+        {groupByDate(filtered, (e) => e.date.slice(0, 10)).map(
+          ({ date, items }) => (
+            <div
+              key={date}
+              ref={(el) => {
+                sectionRefs.current[date] = el;
+              }}
+              className="flex flex-col gap-2"
+            >
+              <h2 className="text-sm font-semibold text-stone-500">
+                {dateLabel(date)}
+              </h2>
+              {items.map((entry) => (
+                <div
+                  key={`${entry.source}-${entry.id}`}
+                  className="flex flex-col gap-1 rounded-2xl bg-white px-4 py-3 shadow-card"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">
+                      {entry.module_title ?? entry.title}
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASSES[entry.status]}`}
+                    >
+                      {STATUS_LABELS[entry.status]}
+                    </span>
+                  </div>
+                  <span className="text-xs text-stone-500">
+                    {timeSpentLabel(entry.start_time, entry.end_time)}
+                  </span>
+                  {entry.notes && (
+                    <p className="text-sm text-stone-700">{entry.notes}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        )}
         {filtered.length === 0 && (
           <p className="px-1 py-2 text-sm text-stone-500">
             No scheduled training sessions yet.
           </p>
         )}
+        {loadingFuture && (
+          <div className="flex justify-center py-2">
+            <Spinner />
+          </div>
+        )}
       </div>
+
+      <button
+        type="button"
+        onClick={() => setComposerOpen(true)}
+        aria-label="Add training"
+        className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-3xl leading-none text-white shadow-lg"
+      >
+        +
+      </button>
+      <Drawer
+        open={composerOpen}
+        onClose={() => setComposerOpen(false)}
+        title="New training"
+      >
+        <TrainingLogComposer
+          onCreated={(entry) => {
+            setEntries((prev) => (prev ? [entry, ...prev] : [entry]));
+            setComposerOpen(false);
+          }}
+          showToast={showToast}
+        />
+      </Drawer>
+      {toast && <Toast message={toast} />}
     </div>
+  );
+}
+
+function TrainingLogComposer({
+  onCreated,
+  showToast,
+}: {
+  onCreated: (entry: TrainingLogEntry) => void;
+  showToast: (message: string) => void;
+}) {
+  const api = useApi();
+  const [title, setTitle] = useState("Training");
+  const [date, setDate] = useState(todayStr());
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!title.trim() || !date || submitting) return;
+    setSubmitting(true);
+    try {
+      const { event } = await api.post<{
+        event: {
+          id: number;
+          title: string;
+          start_date: string;
+          start_time: string | null;
+          end_time: string | null;
+        };
+      }>("/events", {
+        title: title.trim(),
+        event_type: "training",
+        start_date: date,
+        end_date: date,
+        start_time: startTime || undefined,
+        end_time: endTime || undefined,
+        notes: notes.trim() || undefined,
+      });
+      onCreated({
+        source: "event",
+        id: event.id,
+        event_id: event.id,
+        title: event.title,
+        date: event.start_date,
+        start_time: event.start_time,
+        end_time: event.end_time,
+        module_title: null,
+        status: "pending",
+        notes: notes.trim() || null,
+      });
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Failed to add training");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <Field label="Title">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Date">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+          />
+        </Field>
+        <Field label="Start time">
+          <input
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+          />
+        </Field>
+      </div>
+      <Field label="End time">
+        <input
+          type="time"
+          value={endTime}
+          onChange={(e) => setEndTime(e.target.value)}
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+        />
+      </Field>
+      <Field label="Notes">
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          className="min-h-[80px] rounded-xl border border-stone-300 px-3 py-2"
+        />
+      </Field>
+      <button
+        type="submit"
+        disabled={submitting || !title.trim()}
+        className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+      >
+        Add
+      </button>
+    </form>
   );
 }
