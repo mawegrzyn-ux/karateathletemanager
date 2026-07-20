@@ -81,7 +81,7 @@ function ShareBadge({ post }: { post: Post }) {
   if (post.share_kind === "competition_result") {
     if (!post.share_competition_name) return null;
     return (
-      <div className="flex flex-col gap-0.5 rounded-xl bg-stone-100 px-3 py-2 text-sm">
+      <div className="flex flex-col gap-0.5 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm">
         <span className="flex items-center justify-between">
           <span className="font-medium text-stone-700">
             🏆 {post.share_competition_name}
@@ -149,7 +149,10 @@ function PostCard({
   accentColor: string;
 }) {
   return (
-    <div className="relative flex flex-col gap-2 border-b border-stone-200 bg-white p-4">
+    <div
+      className="relative flex flex-col gap-2 border-b-2 bg-white p-4"
+      style={{ borderBottomColor: accentColor }}
+    >
       {(canEdit || canDelete) && (
         <div className="absolute right-2 top-2 flex gap-1">
           {canEdit && (

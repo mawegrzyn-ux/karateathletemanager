@@ -1069,23 +1069,32 @@ coach-run attendance) — this is personal athlete itinerary planning.
 - **Deep swipe left → record a competition result.** `SwipeableRow`'s
   existing swipe-to-complete/fail gesture (`SWIPE_THRESHOLD = 64`) gained
   a second, larger threshold on the same left-drag axis
-  (`DEEP_SWIPE_THRESHOLD = 168`, via an optional `deepSwipeAction: {
-  label, onTrigger }` prop) rather than a separate gesture — dragging
-  past it morphs the row's right-edge hint from the green "✓" to the
-  action's own label/amber styling, so continuing an already-familiar
-  swipe further is what exposes the extra action. The List view's
-  event-level row passes this only for `event_type === "competition"`
-  rows (`item_type` has no competition value, so this never applies to
-  itinerary-item rows), opening `RecordResultDrawer` on trigger. That
-  drawer is a deliberately minimal capture form (rounds won, place, and
-  a "Post this result to my profile" checkbox) rather than reusing
-  `CompetitionResults.tsx`'s fuller name/date/location/notes form — it
-  `POST`s to the existing `/athletes/:id/competition-results` with
-  `event_id` set, then optionally `POST`s to `/athletes/:id/posts` with
-  `share_kind: "competition_result"` when the checkbox is checked. No
-  athlete picker is needed since the deep swipe is only ever reachable
-  on an athlete's own row (`disabled={e.my_status == null}` already
-  gates the whole `SwipeableRow` to `role === "athlete"` viewers).
+  (`DEEP_SWIPE_THRESHOLD = 96`, via an optional `deepSwipeAction: {
+  label, onTrigger }` prop) rather than a separate gesture. Past that
+  threshold the row's right-edge hint snaps from the green "✓" (fixed
+  `SWIPE_THRESHOLD`-wide) straight to the deep action's own label/amber
+  styling at a fixed, wider `DEEP_HINT_WIDTH` — a snap, not a gradual
+  stretch, so the hint reads cleanly at both sizes and the deeper action
+  surfaces after a short, quick drag rather than an unusually long one.
+  The List view's event-level row passes this only for
+  `event_type === "competition"` rows (`item_type` has no competition
+  value, so this never applies to itinerary-item rows), opening
+  `RecordResultDrawer` on trigger. That drawer is a deliberately minimal
+  capture form (rounds won, place, and a "Post this result to my
+  profile" checkbox) rather than reusing `CompetitionResults.tsx`'s
+  fuller name/date/location/notes form — it `POST`s to the existing
+  `/athletes/:id/competition-results` with `event_id` set, then
+  optionally `POST`s to `/athletes/:id/posts` with
+  `share_kind: "competition_result"` when the checkbox is checked.
+  Checking that box also reveals a `MediaField` ("Photo (optional)") so
+  the athlete can attach a photo to the shared post the same way the
+  main post composer does — `image_url` is passed straight through to
+  the `posts` `POST` alongside `share_kind`/`share_id`, no new endpoint
+  needed since that route already accepts `image_url` on any post,
+  shared or not. No athlete picker is needed since the deep swipe is
+  only ever reachable on an athlete's own row
+  (`disabled={e.my_status == null}` already gates the whole
+  `SwipeableRow` to `role === "athlete"` viewers).
 - **`my_result_place` on the event list.** `GET /api/events`' existing
   `attachMyEventStatus` rollup (which computes `my_status` for the
   signed-in athlete) now also attaches `my_result_place`: the athlete's
@@ -1107,9 +1116,22 @@ coach-run attendance) — this is personal athlete itinerary planning.
   green "✓"/red "✗" mirroring `my_status`; a plain pending event with no
   result renders no right segment at all, keeping the row's original
   clean look. The inline ✓/✗ that used to sit next to the title was
-  removed since the right segment now carries that signal.
-
-## Auth & RBAC
+  removed since the right segment now carries that signal. The center
+  content segment is also marginally inset (`my-1`) versus the full-height
+  left/right end caps, plus its own `shadow-sm` — a small raised-card
+  look floating between the two flanking chevrons rather than flush with
+  their full height.
+- **Competition-result share card: white background, accent-color post
+  break.** `ShareBadge`'s `competition_result` card (`AthleteSocialProfile.tsx`)
+  switched from a filled `bg-stone-100` box to `bg-white` with a thin
+  `border-stone-200` for definition, so it doesn't fight visually with
+  the header row's own grey cut-out tab immediately above it. Separately,
+  `PostCard`'s bottom border switched from a plain `border-stone-200`
+  grey line to a 2px border in the profile's own `accentColor` (already
+  computed from the cover photo via `usePhotoPalette`, or the default red)
+  — the same color already used for the post title — so the break
+  between consecutive posts in the feed reads clearly instead of a
+  near-invisible hairline.
 
 Self-service email/password registration, gated by admin approval — not
 third-party OAuth.

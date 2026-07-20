@@ -18,6 +18,8 @@ import {
   Field,
   Badge,
   DateTimeField,
+  MediaField,
+  Toast,
 } from "../components/ui";
 import { TrainingModuleView, type TrainingModule } from "../components/TrainingModuleView";
 import { EventCompetitionResults } from "../components/CompetitionResults";
@@ -1016,7 +1018,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                             )}
                             <button
                               onClick={() => setDrawer(e)}
-                              className={`-ml-3 flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 py-3 pl-5 pr-4 text-left ${
+                              className={`relative my-1 -ml-3 flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 rounded-sm py-3 pl-5 pr-4 text-left shadow-sm ${
                                 e.my_status === "failed"
                                   ? "bg-red-50"
                                   : e.my_status === "completed"
@@ -2716,12 +2718,20 @@ function RecordResultDrawer({
   const [roundsWon, setRoundsWon] = useState("");
   const [place, setPlace] = useState("");
   const [postToProfile, setPostToProfile] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [mediaError, setMediaError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  function showMediaError(message: string) {
+    setMediaError(message);
+    setTimeout(() => setMediaError(null), 4000);
+  }
 
   useEffect(() => {
     setRoundsWon("");
     setPlace("");
     setPostToProfile(false);
+    setPhotoUrl("");
   }, [event?.id]);
 
   async function submit(e: FormEvent) {
@@ -2743,6 +2753,7 @@ function RecordResultDrawer({
         await api.post(`/athletes/${athleteId}/posts`, {
           share_kind: "competition_result",
           share_id: result.id,
+          image_url: photoUrl || undefined,
         });
       }
       onSaved(place.trim() || null);
@@ -2779,6 +2790,15 @@ function RecordResultDrawer({
           />
           Post this result to my profile
         </label>
+        {postToProfile && (
+          <MediaField
+            label="Photo (optional)"
+            kind="image"
+            value={photoUrl}
+            onChange={setPhotoUrl}
+            onError={showMediaError}
+          />
+        )}
         <button
           type="submit"
           disabled={submitting}
@@ -2787,6 +2807,7 @@ function RecordResultDrawer({
           {submitting ? "Saving..." : "Save result"}
         </button>
       </form>
+      {mediaError && <Toast message={mediaError} />}
     </Drawer>
   );
 }
