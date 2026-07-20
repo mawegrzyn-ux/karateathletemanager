@@ -33,11 +33,20 @@ export function groupByDate<T>(
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+function shortMonthDay(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export function dateLabel(dateStr: string) {
   const today = todayStr();
-  if (dateStr === today) return "Today";
-  if (dateStr === addDaysStr(today, 1)) return "Tomorrow";
-  if (dateStr === addDaysStr(today, -1)) return "Yesterday";
+  if (dateStr === today) return `Today (${shortMonthDay(dateStr)})`;
+  if (dateStr === addDaysStr(today, 1)) return `Tomorrow (${shortMonthDay(dateStr)})`;
+  if (dateStr === addDaysStr(today, -1)) return `Yesterday (${shortMonthDay(dateStr)})`;
   const d = new Date(`${dateStr}T00:00:00Z`);
   return d.toLocaleDateString(undefined, {
     weekday: "short",
