@@ -171,14 +171,17 @@ function PostCard({
           )}
         </div>
       )}
-      <div className="relative isolate -mx-4 -mt-4 flex items-center gap-2 px-4 pb-3 pt-4">
+      <div className="relative isolate -mx-4 -mt-4 flex items-center gap-2 px-4 pb-2 pt-2">
         {/* A cut-out tab behind the author/date, echoing the diagonal
             accent shapes used elsewhere (cover photo edge, nav wedge) -
             tapers off well before the edit/delete icons' corner so it
             never runs under them. `isolate` gives this row its own
             stacking context so the `-z-10` shape stays scoped here
             instead of sinking behind unrelated page content (the parent
-            `relative` alone doesn't create one). */}
+            `relative` alone doesn't create one). Padding matches the
+            edit/delete icons' own top-2 offset so the smaller avatar
+            here lines up with that 32px icon row instead of sitting
+            noticeably lower. */}
         <div
           aria-hidden
           className="absolute inset-0 -z-10 bg-stone-100"
@@ -187,10 +190,10 @@ function PostCard({
         <Avatar
           name={`${profile.first_name} ${profile.last_name}`}
           url={profile.photo_url}
-          size={32}
+          size={24}
         />
         <div className="flex items-baseline gap-2">
-          <span className="text-sm font-medium">
+          <span className="text-xs font-medium">
             {profile.first_name} {profile.last_name}
           </span>
           <span className="text-xs text-stone-500">
@@ -798,7 +801,7 @@ export function AthleteSocialProfile({
         </svg>
       </div>
 
-      <div className="flex flex-col gap-3 p-4">
+      <div className="flex flex-col gap-3 bg-stone-100 p-4">
         {isSelf && editing && (
           <MediaField
             label="Cover photo"

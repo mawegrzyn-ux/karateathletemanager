@@ -38,6 +38,8 @@ const DEFAULT_TABS = [
   { to: "/more", label: "More", icon: "⚙️" },
 ];
 
+const OSU_TAB = { to: "/osu", label: "Osu", icon: "🤖", end: false };
+
 const tabClassName = ({ isActive }: { isActive: boolean }) =>
   `my-2 flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl py-2 text-xs font-medium transition-colors ${
     isActive ? "bg-red-50 text-red-600" : "text-stone-500"
@@ -52,7 +54,10 @@ const PROFILE_LABELS: Record<string, string> = {
 
 function Shell() {
   const { user } = useAuth();
-  const tabs = user?.role === "athlete" ? ATHLETE_TABS : DEFAULT_TABS;
+  const baseTabs = user?.role === "athlete" ? ATHLETE_TABS : DEFAULT_TABS;
+  const tabs = user?.is_admin
+    ? [...baseTabs.slice(0, -1), OSU_TAB, baseTabs[baseTabs.length - 1]]
+    : baseTabs;
   const activeProfileName =
     user?.role === "athlete"
       ? user.athlete_name
