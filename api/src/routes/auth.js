@@ -360,6 +360,31 @@ router.get(
   })
 );
 
+// Parent-initiated unlink - the athlete-side equivalent lives at
+// DELETE /athletes/:id/parents/:userId, deleting the same nk_parent_athletes
+// row from the other direction.
+router.delete(
+  "/my-children/:athleteId",
+  asyncHandler(async (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ error: { message: "Not authenticated" } });
+    }
+
+    const { rowCount } = await pool.query(
+      `DELETE FROM nk_parent_athletes WHERE user_id = $1 AND athlete_id = $2`,
+      [req.user.id, req.params.athleteId]
+    );
+    if (rowCount === 0) {
+      return res.status(404).json({ error: { message: "Link not found" } });
+    }
+    const { rows: userRows } = await pool.query(
+      `SELECT ${USER_SELECT_FIELDS} FROM nk_users WHERE id = $1`,
+      [req.user.id]
+    );
+    res.json({ user: userRows[0] });
+  })
+);
+
 router.post(
   "/link-child",
   asyncHandler(async (req, res) => {

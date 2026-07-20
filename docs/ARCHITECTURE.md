@@ -1226,6 +1226,19 @@ athletes (GDPR — no directory of children's names is ever exposed):
   now also accepts `'parent'`, valid only when `is_parent` is true). The
   switcher shows a pill for each identity the account actually has
   whenever 2 or more of {athlete, coach, parent} apply.
+- **Unlinking** is symmetric, self-service from either side, and just
+  deletes the one `nk_parent_athletes` row - no admin needed. `DELETE
+  /api/auth/my-children/:athleteId` (parent-initiated, `auth.js`) checks
+  only that the row belongs to the calling user, then returns the
+  refreshed `user` (so `is_parent` flips to `false` immediately once
+  their last child is unlinked). `DELETE
+  /api/athletes/:id/parents/:userId` (athlete-initiated, `athletes.js`)
+  uses the same self-or-coach-or-admin access check as
+  `generate-pin`/`:id/styles`. Both are `DeleteButton`-confirmed: a 🗑
+  next to each name in `Profile.tsx`'s "Your children" list, and in a
+  new "Linked parents" section (`LinkedParents` in
+  `AthleteSelfProfile.tsx`, fetched via `GET /api/athletes/:id/parents`)
+  shown just above "Link a parent" on the athlete's own profile.
 
 ### Club join links
 

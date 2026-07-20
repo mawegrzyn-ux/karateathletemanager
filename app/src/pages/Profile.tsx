@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, type Child, type Profile as ProfileRecord } from "../context/AuthContext";
 import { ApiError, useApi } from "../hooks/useApi";
-import { Field, Drawer, MediaField, Toast } from "../components/ui";
+import { Field, Drawer, MediaField, Toast, DeleteButton } from "../components/ui";
 import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
 import { StaffSelfProfile } from "../components/StaffSelfProfile";
 import { AthleteSocialProfile } from "../components/AthleteSocialProfile";
@@ -305,7 +305,7 @@ function ProfilePicker({
 
 function LinkChild() {
   const api = useApi();
-  const { linkChild } = useAuth();
+  const { linkChild, unlinkChild } = useAuth();
   const [children, setChildren] = useState<Child[] | null>(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -337,6 +337,15 @@ function LinkChild() {
     }
   }
 
+  async function handleUnlink(child: Child) {
+    try {
+      await unlinkChild(child.id);
+      setChildren((prev) => (prev ? prev.filter((c) => c.id !== child.id) : prev));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong");
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-card">
       <h2 className="font-semibold">Link a child</h2>
@@ -351,9 +360,20 @@ function LinkChild() {
             Your children
           </span>
           {children.map((c) => (
-            <span key={c.id} className="text-sm text-stone-600">
-              {c.first_name} {c.last_name}
-            </span>
+            <div
+              key={c.id}
+              className="flex items-center justify-between gap-2"
+            >
+              <span className="text-sm text-stone-600">
+                {c.first_name} {c.last_name}
+              </span>
+              <DeleteButton
+                onClick={() => handleUnlink(c)}
+                itemLabel={`${c.first_name} ${c.last_name}`}
+                label="Unlink"
+                iconOnly
+              />
+            </div>
           ))}
         </div>
       )}

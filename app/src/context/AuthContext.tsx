@@ -75,6 +75,7 @@ interface AuthContextValue {
     profileId?: number
   ) => Promise<void>;
   linkChild: (pin: string) => Promise<Child>;
+  unlinkChild: (athleteId: number) => Promise<void>;
   fetchMyProfiles: () => Promise<{
     athletes: Profile[];
     coaches: Profile[];
@@ -173,6 +174,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const unlinkChild = useCallback(async (athleteId: number) => {
+    const { user } = await api.del<{ user: User }>(
+      `/auth/my-children/${athleteId}`
+    );
+    setUser(user);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -184,6 +193,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         updateProfile,
         switchRole,
         linkChild,
+        unlinkChild,
         fetchMyProfiles,
       }}
     >
