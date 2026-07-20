@@ -495,52 +495,21 @@ coach-run attendance) — this is personal athlete itinerary planning.
   authenticated user (used by the Schedule item picker),
   `POST`/`PATCH`/`DELETE` require `authorize("coach")` (coach or admin).
   A `training` item can optionally link to one module via
-  `training_module_id`. `admin/TrainingModules.tsx`'s default export
-  branches on role: `admin`/`coach` get `TrainingModulesManager` (library
-  management, `TrainingModuleView`,
+  `training_module_id`. `admin/TrainingModules.tsx`'s default export is
+  `TrainingModulesManager` (library management, `TrainingModuleView`,
   `app/src/components/TrainingModuleView.tsx` — shared with the Schedule
   reading view below, so a linked module looks identical whether you're
-  viewing it from the library or from a training event/item), while
-  `athlete` gets `AthleteTrainingLog` instead — the module *library*
-  isn't athlete-facing at all; an athlete's bottom-nav "Training" tab
-  (route `roles={["coach", "athlete"]}` in `App.tsx`, same URL for both)
-  shows their own scheduled training history: `GET /api/events/training-log`
-  (athlete-only, self-scoped) flattens every `training`-type itinerary
-  item and every simple direct-linked `training`-type event they're
-  assigned to into one list — exercise group (the linked module's title,
-  falling back to the item/event's own title if unlinked), their own
-  status (pending/completed/failed, reusing the per-athlete status model
-  above), date, and "time spent" (the scheduled `end_time - start_time`
-  duration, not actual tracked time — there's no stopwatch feature). For
-  editors of the module library, the page surfaces any save failure (bad
-  bounds, network error) via a `Toast`, since every field edit auto-saves
-  immediately and previously failed silently.
-  **`AthleteTrainingLog` is today-centered and windowed**, mirroring
-  Schedule.tsx's list view at a smaller scale: entries are grouped into
-  date-headed sections (`groupByDate`/`dateLabel`, both now shared from
-  `app/src/utils/dates.ts` rather than living only in `Schedule.tsx`, so
-  the two views can't drift out of sync) and the initial load is a
-  2-week window — a week back, a week forward (`TRAINING_LOG_WINDOW_DAYS`)
-  — via the same optional `from`/`to` params `GET /api/events` already
-  supports, now added to `/training-log` too (both UNION branches filtered
-  by wrapping the query and applying the range clause once, outside the
-  union, rather than duplicating it per branch). Scrolling toward either
-  edge lazy-loads another week in that direction (`loadMorePast`/
-  `loadMoreFuture`, merged by `source-id` key, capped at a year out) via a
-  real `scroll` listener on `<main>` — not `IntersectionObserver`, for the
-  same reason as `Schedule.tsx` (see that file's comment): a short log
-  would otherwise auto-cascade through months of empty fetches before the
-  user ever scrolls. First load auto-scrolls to today's section exactly
-  like `Schedule.tsx`'s `scrollToToday`. A floating "+" (bottom-right,
-  matching the FAB pattern used for posting to a social profile) opens a
-  `Drawer` with a deliberately minimal quick-add form — title, date,
-  start/end time, notes — that `POST`s a plain `training`-type event with
-  no `athlete_ids` (an athlete caller always self-assigns via
-  `resolveAthleteIds`, so no picker is needed) and prepends the created
-  entry locally. This quick-add is intentionally narrower than
-  `Schedule.tsx`'s full event form (no repeat/venue/module/kata options)
-  since this tab's job is fast personal logging, not full schedule
-  authoring — the complete feature set stays on the Schedule page.
+  viewing it from the library or from a training event/item) - coach/
+  admin only (`roles={["coach"]}` in `App.tsx`, `is_admin` bypasses as
+  usual); the module *library* isn't athlete-facing. There used to also
+  be an athlete-facing `AthleteTrainingLog` (a bottom-nav "Training" tab
+  showing a personal, today-centered log with its own quick-add
+  composer that just `POST`ed a plain `training`-type event) - removed
+  since it only duplicated what the Schedule page already does; training
+  is now entered exclusively through Schedule, same as everything else.
+  For editors of the module library, the page surfaces any save failure
+  (bad bounds, network error) via a `Toast`, since every field edit
+  auto-saves immediately and previously failed silently.
 - **Media uploads**: `video_url`/`image_url` on an exercise item accept
   either a pasted link or an uploaded file, via `MediaField` — a shared
   component in `components/ui.tsx` (also used for athlete/coach photos,
@@ -786,27 +755,17 @@ coach-run attendance) — this is personal athlete itinerary planning.
   competition-type item. Capturing a result for someone else (coach/admin)
   shows an athlete `<select>`; capturing your own (self-athlete) skips it
   and prefills your own profile automatically.
-- **Competitions page**: `app/src/pages/Competitions.tsx` (`/competitions`,
-  linked from `More.tsx` for admin/coach/athlete) is the cross-cutting
-  "see every competition result in one place" list+drawer view, distinct
-  from the athlete-scoped/event-scoped sections above (those stay for
-  capturing a result in the context of one athlete's profile or one
-  schedule item). `GET /api/competition-results`
-  (`api/src/routes/competitionResults.js`) backs it: a coach/admin gets
-  every athlete's results (with an `?q=` athlete-name filter, matching
-  `Athletes.tsx`'s list-search convention), an athlete gets just their
-  own, without needing their own `athlete_id` in the URL. Creating/
-  editing/deleting still goes through the existing athlete-scoped
-  endpoints - this route is a read-only rollup. The list row reuses
-  `ResultSummary` (now exported from `CompetitionResults.tsx`, alongside
-  `ResultFields`/`resultPayload`/`EMPTY_RESULT_FORM`, for reuse here);
-  tapping a row opens a fully editable detail drawer (onBlur-per-field
-  PATCH, matching the standard entity-page convention, unlike the
-  view-then-delete-only accordion rows elsewhere) plus a `DeleteButton`.
-  The create drawer's athlete picker (coach/admin only; skipped for a
-  self-athlete, who can only ever record for themselves) is a search-box
-  single-select, per the app's picker convention, rather than a
-  `<select>`.
+- **No standalone Competitions page.** There used to be a cross-cutting
+  `Competitions.tsx` (`/competitions`) - a "see every competition result
+  in one place" list+drawer view backed by a read-only rollup route
+  (`GET /api/competition-results`, `api/src/routes/competitionResults.js`).
+  Removed for the same reason as `AthleteTrainingLog` above: it was a
+  second way to enter/browse results alongside Schedule, and everything
+  now goes through Schedule exclusively. The athlete-scoped/event-scoped
+  sections below (`CompetitionResultsSection`/`EventCompetitionResults`)
+  are what's left - capturing or viewing a result in the context of one
+  athlete's profile or one schedule item, via the existing
+  `/athletes/:id/competition-results` endpoints.
 - **Athlete social profile**: `nk_athletes.bio` (text) and
   `is_public_profile` (boolean, default false) plus `nk_athlete_posts` — a
   Facebook-style feed an athlete can post freeform notes to (`body`/
@@ -1026,7 +985,7 @@ coach-run attendance) — this is personal athlete itinerary planning.
 - **Combined date+time picker**: `DateTimeField` (`components/ui.tsx`)
   replaces the old side-by-side date-`<input>` + time-`<input>` pair
   everywhere both are edited together (event create/edit, itinerary item
-  create/edit, the athlete Training tab's quick-add composer) with one
+  create/edit) with one
   tappable field showing both values together ("Sat, Jul 25, 2026 ·
   14:30"), opening a `Modal` with a Date/Time pill toggle so the user can
   flip between adjusting either value without closing and reopening

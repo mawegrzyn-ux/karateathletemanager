@@ -790,10 +790,7 @@ export function AthleteSocialProfile({
         </svg>
       </div>
 
-      <div
-        className="flex flex-col gap-3 p-4"
-        style={palette ? { backgroundColor: palette.primaryLight } : undefined}
-      >
+      <div className="flex flex-col gap-3 p-4">
         {isSelf && editing && (
           <MediaField
             label="Cover photo"
