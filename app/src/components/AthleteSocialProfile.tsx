@@ -602,6 +602,17 @@ function PostsFeed({
 // same composer used to create posts, now supporting an optional title
 // and a minimal Bold/Italic toolbar that wraps the textarea selection in
 // safe **/* markers rendered back into <strong>/<em> (never raw HTML).
+// The cover photo's bottom edge - two flat "levels" (a taller left plateau,
+// a shorter right plateau) joined by one short diagonal, rather than a
+// single corner-to-corner diagonal. COVER_HEIGHT_PX must match the h-64
+// (256px) applied to the cover photo box below, since the accent line's
+// SVG viewBox uses it to keep the y-axis unscaled (only x stretches to
+// the box's width) so the stroke width renders at its literal pixel size.
+const COVER_HEIGHT_PX = 256;
+const COVER_RIGHT_Y = COVER_HEIGHT_PX * 0.8;
+const COVER_CLIP_PATH = `polygon(0 0, 100% 0, 100% 80%, 58% 80%, 42% 100%, 0 100%)`;
+const COVER_EDGE_POINTS = `100,${COVER_RIGHT_Y} 58,${COVER_RIGHT_Y} 42,${COVER_HEIGHT_PX} 0,${COVER_HEIGHT_PX}`;
+
 export function AthleteSocialProfile({
   athleteId,
   isSelf,
@@ -673,71 +684,94 @@ export function AthleteSocialProfile({
       </div>
     );
 
+  const accentColor = palette?.accentText ?? "#dc2626";
+
   return (
     <div className="flex flex-col">
-      <div
-        className="relative flex h-64 w-full flex-col justify-end bg-stone-800 bg-cover bg-center"
-        style={{
-          ...(profile.photo_url ? { backgroundImage: `url(${profile.photo_url})` } : {}),
-          clipPath: "polygon(0 0, 100% 0, 100% 82%, 0 100%)",
-        }}
-      >
-        {!profile.photo_url && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Avatar
-              name={`${profile.first_name} ${profile.last_name}`}
-              size={96}
-            />
-          </div>
-        )}
+      <div className="relative h-64 w-full">
         <div
-          className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent"
-          style={
-            palette
-              ? {
-                  background: `linear-gradient(to top, ${palette.primaryDark}f2 0%, ${palette.primaryDark}59 55%, transparent 100%)`,
-                }
-              : undefined
-          }
-        />
-        {isSelf && (
-          <div className="absolute right-4 top-4 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => togglePublic(!profile.is_public_profile)}
-              aria-label={
-                profile.is_public_profile
-                  ? "Make profile private"
-                  : "Make profile public"
-              }
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur"
-            >
-              {profile.is_public_profile ? "🌐" : "🔒"}
-            </button>
-            <button
-              type="button"
-              onClick={onToggleEdit}
-              aria-label={editing ? "Done editing" : "Edit profile"}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur"
-            >
-              {editing ? "✓" : "✏️"}
-            </button>
-          </div>
-        )}
-        <div
-          className="relative flex max-w-[75%] flex-col gap-1 p-4 text-white"
-          style={palette ? { color: palette.textOnPrimaryDark } : undefined}
+          className="absolute inset-0 flex flex-col justify-end bg-stone-800 bg-cover bg-center"
+          style={{
+            ...(profile.photo_url ? { backgroundImage: `url(${profile.photo_url})` } : {}),
+            clipPath: COVER_CLIP_PATH,
+          }}
         >
-          <span className="font-display text-2xl uppercase tracking-wide [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
-            {profile.first_name} {profile.last_name}
-          </span>
-          {profile.grade_name && (
-            <span className="flex items-center gap-1 text-sm [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
-              {profile.belt_color && <BeltSwatch color={profile.belt_color} />}
-              {profile.grade_name}
-            </span>
+          {!profile.photo_url && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Avatar
+                name={`${profile.first_name} ${profile.last_name}`}
+                size={96}
+              />
+            </div>
           )}
+          <div
+            className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent"
+            style={
+              palette
+                ? {
+                    background: `linear-gradient(to top, ${palette.primaryDark}f2 0%, ${palette.primaryDark}59 55%, transparent 100%)`,
+                  }
+                : undefined
+            }
+          />
+          {isSelf && (
+            <div className="absolute right-4 top-4 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => togglePublic(!profile.is_public_profile)}
+                aria-label={
+                  profile.is_public_profile
+                    ? "Make profile private"
+                    : "Make profile public"
+                }
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur"
+              >
+                {profile.is_public_profile ? "🌐" : "🔒"}
+              </button>
+              <button
+                type="button"
+                onClick={onToggleEdit}
+                aria-label={editing ? "Done editing" : "Edit profile"}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur"
+              >
+                {editing ? "✓" : "✏️"}
+              </button>
+            </div>
+          )}
+          <div
+            className="relative flex max-w-[75%] flex-col gap-1 p-4 text-white"
+            style={palette ? { color: palette.textOnPrimaryDark } : undefined}
+          >
+            <span className="font-display text-2xl uppercase tracking-wide [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
+              {profile.first_name} {profile.last_name}
+            </span>
+            {profile.grade_name && (
+              <span className="flex items-center gap-1 text-sm [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
+                {profile.belt_color && <BeltSwatch color={profile.belt_color} />}
+                {profile.grade_name}
+              </span>
+            )}
+          </div>
         </div>
+        {/* Traces the same two-level step the clip-path above cuts into the
+            photo, unclipped itself so the stroke isn't cut off mid-line -
+            colored from the photo's own palette so it reads as an accent
+            of the image rather than a fixed brand color. */}
+        <svg
+          aria-hidden
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          viewBox={`0 0 100 ${COVER_HEIGHT_PX}`}
+          preserveAspectRatio="none"
+        >
+          <polyline
+            points={COVER_EDGE_POINTS}
+            fill="none"
+            stroke={accentColor}
+            strokeWidth={4}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        </svg>
       </div>
 
       <div
