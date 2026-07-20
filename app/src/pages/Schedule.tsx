@@ -16,6 +16,7 @@ import {
   DeleteButton,
   Field,
   Badge,
+  DateTimeField,
 } from "../components/ui";
 import { TrainingModuleView, type TrainingModule } from "../components/TrainingModuleView";
 import { EventCompetitionResults } from "../components/CompetitionResults";
@@ -27,6 +28,7 @@ interface Event {
   id: number;
   title: string;
   event_type: string;
+  club_id: number | null;
   start_date: string;
   end_date: string;
   start_time: string | null;
@@ -92,27 +94,31 @@ interface AthleteGroup {
   athlete_ids: number[];
 }
 
+interface Club {
+  id: number;
+  name: string;
+}
+
+interface EventTypeRow {
+  id: number;
+  club_id: number;
+  key: string;
+  label: string;
+  icon: string;
+  bg_color: string;
+  is_standard: boolean;
+}
+
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-// Events and itinerary items share the exact same type set - a lone event
-// can be a rest day, a one-off note, or a kata performance just like an
-// itinerary item can, and vice versa.
-const EVENT_TYPES = [
-  "competition",
-  "squad_session",
-  "training",
-  "travel",
-  "time_off",
-  "seminar",
-  "training_camp",
-  "grading",
-  "rest",
-  "other",
-  "kata_performance",
-];
-const ITEM_TYPES = EVENT_TYPES;
-
-const TYPE_LABELS: Record<string, string> = {
+// event_type/item_type used to be a fixed global enum (this exact list);
+// now each club has its own nk_event_types library (standard + custom,
+// with its own icon/bg_color), fetched into `eventTypes` and looked up via
+// `typeInfo` below. This list survives only as the final fallback if a
+// key doesn't resolve against any fetched row at all (fetch failure, or a
+// legacy event whose club couldn't be determined and whose key somehow
+// isn't seeded as standard anywhere).
+const FALLBACK_TYPE_LABELS: Record<string, string> = {
   competition: "Competition",
   squad_session: "Squad session",
   training: "Training",
@@ -125,8 +131,7 @@ const TYPE_LABELS: Record<string, string> = {
   other: "Other",
   kata_performance: "Kata performance",
 };
-
-const TYPE_ICONS: Record<string, string> = {
+const FALLBACK_TYPE_ICONS: Record<string, string> = {
   competition: "🏆",
   squad_session: "👥",
   training: "💪",
@@ -140,9 +145,27 @@ const TYPE_ICONS: Record<string, string> = {
   kata_performance: "🥋",
 };
 
+// Resolves a (club_id, key) pair to display info: prefer that exact
+// club's row, fall back to any is_standard row sharing the key (covers a
+// legacy event with no determinable club_id), then the hardcoded
+// fallback maps above (covers a fetch failure) so the UI never shows a
+// blank icon/label.
+function typeInfo(eventTypes: EventTypeRow[], clubId: number | null, key: string) {
+  const match =
+    eventTypes.find((t) => t.club_id === clubId && t.key === key) ??
+    eventTypes.find((t) => t.key === key && t.is_standard) ??
+    eventTypes.find((t) => t.key === key);
+  return {
+    label: match?.label ?? FALLBACK_TYPE_LABELS[key] ?? key,
+    icon: match?.icon ?? FALLBACK_TYPE_ICONS[key] ?? "📌",
+    bg_color: match?.bg_color ?? "#78716c",
+  };
+}
+
 const EMPTY_FORM = {
   title: "",
   event_type: "training",
+  club_id: null as number | null,
   start_date: "",
   end_date: "",
   start_time: "",
@@ -331,6 +354,8 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [squads, setSquads] = useState<AthleteGroup[]>([]);
   const [groups, setGroups] = useState<AthleteGroup[]>([]);
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [eventTypes, setEventTypes] = useState<EventTypeRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [drawer, setDrawer] = useState<"closed" | "create" | Event>("closed");
@@ -483,12 +508,21 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
         .get<{ groups: AthleteGroup[] }>("/groups")
         .then((res) => setGroups(res.groups))
         .catch(() => setGroups([]));
+      api
+        .get<{ clubs: Club[] }>("/admin/clubs")
+        .then((res) => setClubs(res.clubs))
+        .catch(() => setClubs([]));
     }
+
+    api
+      .get<{ types: EventTypeRow[] }>("/event-types")
+      .then((res) => setEventTypes(res.types))
+      .catch(() => setEventTypes([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }
 
   function openCreate() {
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, club_id: clubs[0]?.id ?? null });
     setFormAthleteIds([]);
     setDrawer("create");
   }
@@ -540,6 +574,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     setForm({
       title: event.title,
       event_type: event.event_type,
+      club_id: event.club_id,
       start_date: toDateInput(event.start_date),
       end_date: toDateInput(event.end_date),
       start_time: toTimeInput(event.start_time),
@@ -613,7 +648,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
 
   const q = query.trim().toLowerCase();
   const filteredEvents = events.filter((e) =>
-    `${e.title} ${TYPE_LABELS[e.event_type] ?? e.event_type}`
+    `${e.title} ${typeInfo(eventTypes, e.club_id, e.event_type).label}`
       .toLowerCase()
       .includes(q)
   );
@@ -677,51 +712,66 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                   onSwipeComplete={() => swipeEventStatus(e, "completed")}
                   onSwipeFailed={() => swipeEventStatus(e, "failed")}
                 >
-                  <div className="flex overflow-hidden rounded-2xl shadow-card">
-                    {isOverdue(e) && (
-                      <div
-                        aria-hidden
-                        className="flex w-12 shrink-0 items-center justify-center bg-red-600 text-5xl font-black leading-none text-red-50"
-                      >
-                        !
-                      </div>
-                    )}
-                    <button
-                      onClick={() => setDrawer(e)}
-                      className="flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 bg-white px-4 py-3 text-left"
-                    >
-                      <div className="flex w-full items-center justify-between gap-2">
-                        <span
-                          className={`font-medium ${
-                            e.my_status === "completed"
-                              ? "line-through text-stone-400"
-                              : e.my_status === "failed"
-                              ? "text-red-700"
-                              : ""
+                  {(() => {
+                    const info = typeInfo(eventTypes, e.club_id, e.event_type);
+                    return (
+                      <div className="flex overflow-hidden rounded-2xl shadow-card">
+                        {isOverdue(e) ? (
+                          <div
+                            aria-hidden
+                            className="flex w-12 shrink-0 items-center justify-center bg-red-600 text-5xl font-black leading-none text-red-50"
+                          >
+                            !
+                          </div>
+                        ) : (
+                          <div
+                            aria-hidden
+                            className="flex w-12 shrink-0 items-center justify-center text-xl"
+                            style={{ backgroundColor: info.bg_color }}
+                          >
+                            {info.icon}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => setDrawer(e)}
+                          className={`flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 px-4 py-3 text-left ${
+                            e.my_status === "failed" ? "bg-red-50" : "bg-white"
                           }`}
                         >
-                          {TYPE_ICONS[e.event_type] ?? ""} {e.title}
-                        </span>
-                        {e.my_status === "completed" && (
-                          <span className="shrink-0 text-green-600">✓</span>
-                        )}
-                        {e.my_status === "failed" && (
-                          <span className="shrink-0 text-red-600">✗</span>
-                        )}
+                          <div className="flex w-full items-center justify-between gap-2">
+                            <span
+                              className={`font-medium ${
+                                e.my_status === "completed"
+                                  ? "line-through text-stone-400"
+                                  : e.my_status === "failed"
+                                  ? "text-red-700"
+                                  : ""
+                              }`}
+                            >
+                              {e.title}
+                            </span>
+                            {e.my_status === "completed" && (
+                              <span className="shrink-0 text-green-600">✓</span>
+                            )}
+                            {e.my_status === "failed" && (
+                              <span className="shrink-0 text-red-600">✗</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge>{info.label}</Badge>
+                            <span className="text-xs text-stone-500">
+                              {toDateInput(e.start_date)}
+                              {e.end_date !== e.start_date
+                                ? ` – ${toDateInput(e.end_date)}`
+                                : ""}
+                              {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
+                              {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
+                            </span>
+                          </div>
+                        </button>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge>{TYPE_LABELS[e.event_type] ?? e.event_type}</Badge>
-                        <span className="text-xs text-stone-500">
-                          {toDateInput(e.start_date)}
-                          {e.end_date !== e.start_date
-                            ? ` – ${toDateInput(e.end_date)}`
-                            : ""}
-                          {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
-                          {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
-                        </span>
-                      </div>
-                    </button>
-                  </div>
+                    );
+                  })()}
                 </SwipeableRow>
               ))}
             </div>
@@ -744,6 +794,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           focusedDate={focusedDate}
           setFocusedDate={setFocusedDate}
           events={filteredEvents}
+          eventTypes={eventTypes}
           onGoToDay={(date) => {
             setFocusedDate(date);
             setViewMode("day");
@@ -756,6 +807,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           focusedDate={focusedDate}
           setFocusedDate={setFocusedDate}
           events={filteredEvents}
+          eventTypes={eventTypes}
           onOpenEvent={setDrawer}
         />
       )}
@@ -765,6 +817,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           focusedDate={focusedDate}
           setFocusedDate={setFocusedDate}
           events={filteredEvents}
+          eventTypes={eventTypes}
           onOpenEvent={setDrawer}
           onReschedule={(event, start_time, end_time) =>
             updateEventTime(event, start_time, end_time)
@@ -796,61 +849,60 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
+          {clubs.length > 1 && (
+            <Field label="Club">
+              <select
+                value={form.club_id ?? ""}
+                onChange={(e) => {
+                  const newClubId = e.target.value ? Number(e.target.value) : null;
+                  const firstType = eventTypes.find((t) => t.club_id === newClubId);
+                  setForm({
+                    ...form,
+                    club_id: newClubId,
+                    event_type: firstType?.key ?? form.event_type,
+                  });
+                }}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              >
+                {clubs.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label="Type">
             <select
               value={form.event_type}
               onChange={(e) => setForm({ ...form, event_type: e.target.value })}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             >
-              {EVENT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {TYPE_LABELS[t]}
-                </option>
-              ))}
+              {eventTypes
+                .filter((t) => t.club_id === form.club_id)
+                .map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.icon} {t.label}
+                  </option>
+                ))}
             </select>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Start date">
-              <input
-                required
-                type="date"
-                value={form.start_date}
-                onChange={(e) =>
-                  setForm({ ...form, start_date: e.target.value })
-                }
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-            <Field label="Start time">
-              <input
-                type="time"
-                value={form.start_time}
-                onChange={(e) =>
-                  setForm({ ...form, start_time: e.target.value })
-                }
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="End date">
-              <input
-                required
-                type="date"
-                value={form.end_date}
-                onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-            <Field label="End time">
-              <input
-                type="time"
-                value={form.end_time}
-                onChange={(e) => setForm({ ...form, end_time: e.target.value })}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-          </div>
+          <DateTimeField
+            label="Start"
+            required
+            date={form.start_date}
+            time={form.start_time}
+            onDateChange={(v) => setForm({ ...form, start_date: v })}
+            onTimeChange={(v) => setForm({ ...form, start_time: v })}
+          />
+          <DateTimeField
+            label="End"
+            required
+            date={form.end_date}
+            time={form.end_time}
+            onDateChange={(v) => setForm({ ...form, end_date: v })}
+            onTimeChange={(v) => setForm({ ...form, end_time: v })}
+          />
           <Field label="Location">
             <input
               value={form.location}
@@ -1097,6 +1149,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             venues={venues}
             squads={squads}
             groups={groups}
+            eventTypes={eventTypes}
             hasSeries={
               editing.recurrence_id != null &&
               events.filter((e) => e.recurrence_id === editing.recurrence_id)
@@ -1122,6 +1175,7 @@ function EventDetail({
   venues,
   squads,
   groups,
+  eventTypes,
   hasSeries,
   onUpdated,
   onDeleted,
@@ -1136,6 +1190,7 @@ function EventDetail({
   venues: Venue[];
   squads: AthleteGroup[];
   groups: AthleteGroup[];
+  eventTypes: EventTypeRow[];
   hasSeries: boolean;
   onUpdated: (event: Event) => void;
   onDeleted: () => void;
@@ -1278,53 +1333,29 @@ function EventDetail({
               onChange={(e) => updateEvent({ event_type: e.target.value })}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             >
-              {EVENT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {TYPE_LABELS[t]}
-                </option>
-              ))}
+              {eventTypes
+                .filter((t) => t.club_id === event.club_id)
+                .map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.icon} {t.label}
+                  </option>
+                ))}
             </select>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Start date">
-              <input
-                type="date"
-                defaultValue={toDateInput(event.start_date)}
-                onChange={(e) => updateEvent({ start_date: e.target.value })}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-            <Field label="Start time">
-              <input
-                type="time"
-                defaultValue={toTimeInput(event.start_time)}
-                onChange={(e) =>
-                  updateEvent({ start_time: e.target.value || null })
-                }
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="End date">
-              <input
-                type="date"
-                defaultValue={toDateInput(event.end_date)}
-                onChange={(e) => updateEvent({ end_date: e.target.value })}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-            <Field label="End time">
-              <input
-                type="time"
-                defaultValue={toTimeInput(event.end_time)}
-                onChange={(e) =>
-                  updateEvent({ end_time: e.target.value || null })
-                }
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-          </div>
+          <DateTimeField
+            label="Start"
+            date={toDateInput(event.start_date)}
+            time={toTimeInput(event.start_time)}
+            onDateChange={(v) => updateEvent({ start_date: v })}
+            onTimeChange={(v) => updateEvent({ start_time: v || null })}
+          />
+          <DateTimeField
+            label="End"
+            date={toDateInput(event.end_date)}
+            time={toTimeInput(event.end_time)}
+            onDateChange={(v) => updateEvent({ end_date: v })}
+            onTimeChange={(v) => updateEvent({ end_time: v || null })}
+          />
           <Field label="Location">
             <input
               defaultValue={event.location ?? ""}
@@ -1426,7 +1457,10 @@ function EventDetail({
       ) : (
         <>
           <div className="flex items-center gap-2">
-            <Badge>{TYPE_LABELS[event.event_type] ?? event.event_type}</Badge>
+            <Badge>
+              {typeInfo(eventTypes, event.club_id, event.event_type).icon}{" "}
+              {typeInfo(eventTypes, event.club_id, event.event_type).label}
+            </Badge>
             <span className="text-sm text-stone-500">
               {toDateInput(event.start_date)}
               {event.end_date !== event.start_date
@@ -1502,6 +1536,8 @@ function EventDetail({
         eventAthletes={athleteNames}
         eventStartDate={toDateInput(event.start_date)}
         eventEndDate={toDateInput(event.end_date)}
+        eventTypes={eventTypes}
+        clubId={event.club_id}
       />
     </div>
   );
@@ -1698,11 +1734,13 @@ function MonthView({
   focusedDate,
   setFocusedDate,
   events,
+  eventTypes,
   onGoToDay,
 }: {
   focusedDate: string;
   setFocusedDate: (date: string) => void;
   events: Event[];
+  eventTypes: EventTypeRow[];
   onGoToDay: (date: string) => void;
 }) {
   const monthStart = startOfMonth(focusedDate);
@@ -1749,7 +1787,7 @@ function MonthView({
               <div className="flex flex-wrap justify-center gap-0.5 leading-none">
                 {dayEvents.slice(0, 3).map((e) => (
                   <span key={e.id} title={e.title}>
-                    {TYPE_ICONS[e.event_type] ?? "•"}
+                    {typeInfo(eventTypes, e.club_id, e.event_type).icon}
                   </span>
                 ))}
                 {dayEvents.length > 3 && (
@@ -1770,11 +1808,13 @@ function WeekView({
   focusedDate,
   setFocusedDate,
   events,
+  eventTypes,
   onOpenEvent,
 }: {
   focusedDate: string;
   setFocusedDate: (date: string) => void;
   events: Event[];
+  eventTypes: EventTypeRow[];
   onOpenEvent: (event: Event) => void;
 }) {
   const weekStart = startOfWeek(focusedDate);
@@ -1825,16 +1865,21 @@ function WeekView({
           if (allDay.length === 0) return <span key={date} />;
           return (
             <div key={date} className="flex flex-col gap-0.5">
-              {allDay.slice(0, 2).map((e) => (
-                <button
-                  key={e.id}
-                  onClick={() => onOpenEvent(e)}
-                  className="truncate rounded bg-stone-100 px-1 py-0.5 text-left text-[10px]"
-                  title={e.title}
-                >
-                  {TYPE_ICONS[e.event_type] ?? ""} {e.title}
-                </button>
-              ))}
+              {allDay.slice(0, 2).map((e) => {
+                const info = typeInfo(eventTypes, e.club_id, e.event_type);
+                return (
+                  <button
+                    key={e.id}
+                    onClick={() => onOpenEvent(e)}
+                    className={`truncate rounded px-1 py-0.5 text-left text-[10px] ${
+                      e.my_status === "failed" ? "bg-red-50" : "bg-stone-100"
+                    }`}
+                    title={e.title}
+                  >
+                    {info.icon} {e.title}
+                  </button>
+                );
+              })}
             </div>
           );
         })}
@@ -1871,14 +1916,19 @@ function WeekView({
                 const end = timeToMinutes(e.end_time) ?? start + 30;
                 const top = ((start - DAY_START_HOUR * 60) / 60) * HOUR_HEIGHT;
                 const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, 20);
+                const info = typeInfo(eventTypes, e.club_id, e.event_type);
                 return (
                   <button
                     key={e.id}
                     onClick={() => onOpenEvent(e)}
-                    className="absolute inset-x-0.5 overflow-hidden rounded bg-red-50 px-1 text-left text-[10px] text-red-800"
-                    style={{ top, height }}
+                    className={`absolute inset-x-0.5 overflow-hidden rounded border-l-4 px-1 text-left text-[10px] ${
+                      e.my_status === "failed"
+                        ? "bg-red-50 text-red-800"
+                        : "bg-white text-stone-700"
+                    }`}
+                    style={{ top, height, borderLeftColor: info.bg_color }}
                   >
-                    {TYPE_ICONS[e.event_type] ?? ""} {e.title}
+                    {info.icon} {e.title}
                   </button>
                 );
               })}
@@ -1894,12 +1944,14 @@ function DayView({
   focusedDate,
   setFocusedDate,
   events,
+  eventTypes,
   onOpenEvent,
   onReschedule,
 }: {
   focusedDate: string;
   setFocusedDate: (date: string) => void;
   events: Event[];
+  eventTypes: EventTypeRow[];
   onOpenEvent: (event: Event) => void;
   onReschedule: (event: Event, start_time: string, end_time: string) => void;
 }) {
@@ -2013,16 +2065,27 @@ function DayView({
 
       {allDayEvents.length > 0 && (
         <div className="flex flex-col gap-1">
-          {allDayEvents.map((e) => (
-            <button
-              key={e.id}
-              onClick={() => onOpenEvent(e)}
-              className="flex min-h-[36px] items-center gap-2 rounded-xl bg-stone-100 px-3 text-left text-sm"
-            >
-              <Badge>{TYPE_ICONS[e.event_type] ?? ""} {TYPE_LABELS[e.event_type] ?? e.event_type}</Badge>
-              <span className="truncate">{e.title}</span>
-            </button>
-          ))}
+          {allDayEvents.map((e) => {
+            const info = typeInfo(eventTypes, e.club_id, e.event_type);
+            return (
+              <button
+                key={e.id}
+                onClick={() => onOpenEvent(e)}
+                className={`flex min-h-[36px] items-center gap-2 rounded-xl px-3 text-left text-sm ${
+                  e.my_status === "failed" ? "bg-red-50" : "bg-stone-100"
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm"
+                  style={{ backgroundColor: info.bg_color }}
+                >
+                  {info.icon}
+                </span>
+                <span className="truncate">{e.title}</span>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -2065,6 +2128,8 @@ function DayView({
               ((start - DAY_START_HOUR * 60) / 60) * HOUR_HEIGHT +
               (isDragging ? (drag.offsetMin / 60) * HOUR_HEIGHT : 0);
             const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, 32);
+            const info = typeInfo(eventTypes, e.club_id, e.event_type);
+            const overdue = isOverdue(e);
             return (
               <div
                 key={e.id}
@@ -2079,29 +2144,47 @@ function DayView({
                   }
                   onOpenEvent(e);
                 }}
-                className={`absolute inset-x-1 flex cursor-grab flex-col overflow-hidden rounded-xl px-2 py-1 text-left shadow-card active:cursor-grabbing ${
-                  isDragging ? "z-10 bg-red-100" : "bg-red-50"
-                }`}
+                className={`absolute inset-x-1 flex cursor-grab overflow-hidden rounded-xl shadow-card active:cursor-grabbing ${
+                  isDragging ? "z-10 ring-2 ring-stone-400" : ""
+                } ${e.my_status === "failed" ? "bg-red-50" : "bg-white"}`}
                 style={{ top, height, touchAction: "none" }}
               >
-                <span className="truncate text-xs font-medium text-red-900">
-                  {TYPE_ICONS[e.event_type] ?? ""} {e.title}
-                </span>
-                <span className="text-[10px] text-red-700">
-                  {toTimeInput(
-                    minutesToTime(
-                      isDragging ? drag.origStartMin + drag.offsetMin : start
-                    )
-                  )}
-                  –
-                  {toTimeInput(
-                    minutesToTime(
-                      isDragging
-                        ? drag.origStartMin + drag.offsetMin + (end - start)
-                        : end
-                    )
-                  )}
-                </span>
+                {overdue ? (
+                  <div
+                    aria-hidden
+                    className="flex w-6 shrink-0 items-center justify-center bg-red-600 text-base font-black leading-none text-red-50"
+                  >
+                    !
+                  </div>
+                ) : (
+                  <div
+                    aria-hidden
+                    className="flex w-6 shrink-0 items-center justify-center text-xs"
+                    style={{ backgroundColor: info.bg_color }}
+                  >
+                    {info.icon}
+                  </div>
+                )}
+                <div className="flex min-w-0 flex-1 flex-col justify-center px-2 py-0.5 text-left">
+                  <span className="truncate text-xs font-medium text-stone-800">
+                    {e.title}
+                  </span>
+                  <span className="text-[10px] text-stone-500">
+                    {toTimeInput(
+                      minutesToTime(
+                        isDragging ? drag.origStartMin + drag.offsetMin : start
+                      )
+                    )}
+                    –
+                    {toTimeInput(
+                      minutesToTime(
+                        isDragging
+                          ? drag.origStartMin + drag.offsetMin + (end - start)
+                          : end
+                      )
+                    )}
+                  </span>
+                </div>
               </div>
             );
           })}
@@ -2339,6 +2422,8 @@ function ItemsSection({
   eventAthletes,
   eventStartDate,
   eventEndDate,
+  eventTypes,
+  clubId,
 }: {
   eventId: number;
   items: EventItem[];
@@ -2349,6 +2434,8 @@ function ItemsSection({
   eventAthletes: Person[];
   eventStartDate: string;
   eventEndDate: string;
+  eventTypes: EventTypeRow[];
+  clubId: number | null;
 }) {
   const api = useApi();
   const { user } = useAuth();
@@ -2590,7 +2677,7 @@ function ItemsSection({
                         {item.title}
                       </span>
                       <div className="flex items-center gap-2">
-                        <Badge>{TYPE_LABELS[item.item_type] ?? item.item_type}</Badge>
+                        <Badge>{typeInfo(eventTypes, clubId, item.item_type).label}</Badge>
                         <span className="text-xs text-stone-500">
                           {toDateInput(item.item_date)}
                         </span>
@@ -2654,40 +2741,27 @@ function ItemsSection({
                       }
                       className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                     >
-                      {ITEM_TYPES.map((t) => (
-                        <option key={t} value={t}>
-                          {TYPE_LABELS[t]}
-                        </option>
-                      ))}
+                      {eventTypes
+                        .filter((t) => t.club_id === clubId)
+                        .map((t) => (
+                          <option key={t.key} value={t.key}>
+                            {t.icon} {t.label}
+                          </option>
+                        ))}
                     </select>
                   </Field>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Date">
-                      <input
-                        type="date"
-                        min={eventStartDate}
-                        max={eventEndDate}
-                        defaultValue={toDateInput(item.item_date)}
-                        onChange={(e) =>
-                          updateItem(item.id, { item_date: e.target.value })
-                        }
-                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                      />
-                    </Field>
-                    <Field label="Start time">
-                      <input
-                        required
-                        type="time"
-                        defaultValue={toTimeInput(item.start_time)}
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            updateItem(item.id, { start_time: e.target.value });
-                          }
-                        }}
-                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                      />
-                    </Field>
-                  </div>
+                  <DateTimeField
+                    label="Start"
+                    required
+                    date={toDateInput(item.item_date)}
+                    time={toTimeInput(item.start_time)}
+                    min={eventStartDate}
+                    max={eventEndDate}
+                    onDateChange={(v) => updateItem(item.id, { item_date: v })}
+                    onTimeChange={(v) => {
+                      if (v) updateItem(item.id, { start_time: v });
+                    }}
+                  />
                   <Field label="End time">
                     <input
                       required
@@ -2823,39 +2897,25 @@ function ItemsSection({
               }
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             >
-              {ITEM_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {TYPE_LABELS[t]}
-                </option>
-              ))}
+              {eventTypes
+                .filter((t) => t.club_id === clubId)
+                .map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.icon} {t.label}
+                  </option>
+                ))}
             </select>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Date">
-              <input
-                required
-                type="date"
-                min={eventStartDate}
-                max={eventEndDate}
-                value={addForm.item_date}
-                onChange={(e) =>
-                  setAddForm({ ...addForm, item_date: e.target.value })
-                }
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-            <Field label="Start time">
-              <input
-                required
-                type="time"
-                value={addForm.start_time}
-                onChange={(e) =>
-                  setAddForm({ ...addForm, start_time: e.target.value })
-                }
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-          </div>
+          <DateTimeField
+            label="Start"
+            required
+            date={addForm.item_date}
+            time={addForm.start_time}
+            min={eventStartDate}
+            max={eventEndDate}
+            onDateChange={(v) => setAddForm({ ...addForm, item_date: v })}
+            onTimeChange={(v) => setAddForm({ ...addForm, start_time: v })}
+          />
           <Field label="End time">
             <input
               required

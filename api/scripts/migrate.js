@@ -902,6 +902,77 @@ const migrations = [
   // Post editing: a title field alongside the existing body, plus the
   // PATCH endpoint needed to edit a post after it's created.
   `ALTER TABLE nk_athlete_posts ADD COLUMN IF NOT EXISTS title VARCHAR(200)`,
+
+  // Custom + standard schedule types, per club: each club gets its own
+  // editable library of event/item types (icon + bg_color, shown in the
+  // Day view the same way the overdue "!" marker is), seeded with the
+  // previously-hardcoded standard set (is_standard = true, protected from
+  // deletion but still restylable) so every existing club starts with the
+  // same defaults it already had, then customizable per club from there.
+  `CREATE TABLE IF NOT EXISTS nk_event_types (
+     id          SERIAL PRIMARY KEY,
+     club_id     INTEGER NOT NULL REFERENCES nk_clubs(id) ON DELETE CASCADE,
+     key         VARCHAR(50) NOT NULL,
+     label       VARCHAR(100) NOT NULL,
+     icon        VARCHAR(10) NOT NULL DEFAULT '📌',
+     bg_color    VARCHAR(20) NOT NULL DEFAULT '#78716c',
+     is_standard BOOLEAN NOT NULL DEFAULT FALSE,
+     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     UNIQUE (club_id, key)
+  )`,
+  `INSERT INTO nk_event_types (club_id, key, label, icon, bg_color, is_standard)
+   SELECT c.id, t.key, t.label, t.icon, t.bg_color, true
+   FROM nk_clubs c
+   CROSS JOIN (VALUES
+     ('competition','Competition','🏆','#b91c1c'),
+     ('squad_session','Squad session','👥','#2563eb'),
+     ('training','Training','💪','#ea580c'),
+     ('travel','Travel','✈️','#0891b2'),
+     ('time_off','Time off','🌴','#16a34a'),
+     ('seminar','Seminar','🎓','#7c3aed'),
+     ('training_camp','Training camp','⛺','#a16207'),
+     ('grading','Grading','🎖️','#b45309'),
+     ('rest','Rest','😴','#64748b'),
+     ('other','Other','📌','#78716c'),
+     ('kata_performance','Kata performance','🥋','#be185d')
+   ) AS t(key, label, icon, bg_color)
+   ON CONFLICT (club_id, key) DO NOTHING`,
+
+  // Events now carry the club_id they were scheduled for - needed to know
+  // whose type library (standard + custom) an event_type/item_type key
+  // resolves against, since the same key string can mean different things
+  // (or just look different) at different clubs. Backfilled best-effort
+  // from the first assigned athlete's first club for pre-existing events;
+  // left NULL where that can't be determined (falls back to matching any
+  // is_standard row by key at read time).
+  `ALTER TABLE nk_events ADD COLUMN IF NOT EXISTS club_id INTEGER REFERENCES nk_clubs(id) ON DELETE SET NULL`,
+  `UPDATE nk_events e SET club_id = sub.club_id
+   FROM (
+     SELECT DISTINCT ON (ea.event_id) ea.event_id, ac.club_id
+     FROM nk_event_athletes ea
+     JOIN nk_athlete_clubs ac ON ac.athlete_id = ea.athlete_id
+     ORDER BY ea.event_id, ac.club_id
+   ) sub
+   WHERE e.id = sub.event_id AND e.club_id IS NULL`,
+
+  // event_type/item_type are no longer a fixed global enum now that types
+  // are per-club and custom ones can be added - the CHECK constraints are
+  // superseded by application-level validation against nk_event_types.
+  `ALTER TABLE nk_events DROP CONSTRAINT IF EXISTS nk_events_event_type_check`,
+  `ALTER TABLE nk_event_items DROP CONSTRAINT IF EXISTS nk_event_items_item_type_check`,
+
+  // Real referential integrity for events (which do carry club_id): the
+  // pair must resolve to a row in nk_event_types, enforced by the DB
+  // rather than just at the API layer - and skipped automatically by
+  // Postgres for any event whose club_id is still NULL (pre-existing rows
+  // the backfill above couldn't attribute to a club). Itinerary items
+  // don't get the equivalent constraint since they don't carry their own
+  // club_id (only their parent event does); deleting a type still
+  // referenced by an item degrades gracefully to the generic default
+  // icon/color at read time rather than being blocked.
+  `ALTER TABLE nk_events DROP CONSTRAINT IF EXISTS nk_events_type_fk;
+   ALTER TABLE nk_events ADD CONSTRAINT nk_events_type_fk
+     FOREIGN KEY (club_id, event_type) REFERENCES nk_event_types (club_id, key)`,
 ];
 
 async function migrate() {

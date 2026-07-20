@@ -750,10 +750,11 @@ coach-run attendance) — this is personal athlete itinerary planning.
   passed checkbox, next grade due). `AthleteSelfProfile.tsx` shows the
   same history read-only (no recording action) alongside the athlete's
   current grade.
-- **Grading event type**: `"grading"` was added to `EVENT_TYPES` in both
-  `events.js` and `Schedule.tsx` — a plain event/item type like any other,
-  no dedicated fields of its own; the actual grading result is recorded
-  separately via the athlete's Grading history, not on the event.
+- **Grading event type**: `"grading"` is one of the 11 standard
+  `nk_event_types` keys (see the per-club schedule types section below) —
+  a plain event/item type like any other, no dedicated fields of its own;
+  the actual grading result is recorded separately via the athlete's
+  Grading history, not on the event.
 - **Competition results**: `nk_competition_results` — one row per
   recorded performance, tying an `athlete_id` to `competition_name`,
   `competition_date`, `location`, `rounds_completed`, `final_position`
@@ -892,15 +893,62 @@ coach-run attendance) — this is personal athlete itinerary planning.
   at render time by parsing the two known patterns into React elements
   (never `dangerouslySetInnerHTML`, so a post body can't inject arbitrary
   markup).
-- **Events and itinerary items share one type set**: `EVENT_TYPES` and
-  `ITEM_TYPES` are literally the same array (`const ITEM_TYPES =
-  EVENT_TYPES`) in both `events.js` and `Schedule.tsx`, covering every
-  type either could need (`rest`/`other`/`kata_performance` used to be
-  item-only; a lone event can now be any of them too). A `kata_performance`
-  event gets the same treatment a `kata_performance` item already had:
-  `nk_events.kata_id` (mirrors `training_module_id`) plus a Kata
-  `SingleSelectPicker` in both the create form and `EventDetail` edit
-  mode that auto-fills the (still-editable) title.
+- **Events and itinerary items share one type set**: no more hardcoded
+  `EVENT_TYPES`/`ITEM_TYPES` arrays — event and item types are now the
+  per-club `nk_event_types` rows described below, and both event and item
+  `type_` selects are populated from the same `eventTypes` list, filtered
+  to the relevant `club_id`. A `kata_performance` event gets the same
+  treatment a `kata_performance` item already had: `nk_events.kata_id`
+  (mirrors `training_module_id`) plus a Kata `SingleSelectPicker` in both
+  the create form and `EventDetail` edit mode that auto-fills the
+  (still-editable) title.
+- **Per-club custom + standard schedule types**: `nk_event_types`
+  (`club_id` FK→`nk_clubs` `ON DELETE CASCADE`, `key`, `label`, `icon`,
+  `bg_color`, `is_standard`, `UNIQUE(club_id, key)`) replaces the old
+  hardcoded type enum entirely — every club gets its own editable list,
+  seeded with 11 standard types (competition, squad_session, training,
+  travel, time_off, seminar, training_camp, grading, rest, other,
+  kata_performance) both historically (a one-time migration seed for
+  every existing club) and going forward (`seedStandardEventTypes` util,
+  called from `POST /admin/clubs` right after a new club is created).
+  Standard rows can't be deleted (`DELETE /api/event-types/:id` 400s) but
+  their `label`/`icon`/`bg_color` are freely editable; custom rows
+  (`is_standard: false`) support full CRUD, gated by `isClubAdmin`
+  (`POST`/`PATCH`/`DELETE`) — `GET` is open to any authenticated user
+  since athletes need it to render their own schedule's colors/icons.
+  `nk_events.club_id` (nullable FK→`nk_clubs` `ON DELETE SET NULL`) is
+  resolved server-side on create (`resolveEventClubId`): an explicit
+  `club_id` in the request body (validated against the requester's
+  admin/coach-club permission), else derived from the first assigned
+  athlete's own club membership — so the common single-club case never
+  needs an explicit club picker in the UI. `isValidEventType(clubId,
+  key)` gates every event/item type-touching write (event create/patch,
+  item create/patch): checks that club's own `nk_event_types` row, or
+  (when `clubId` is null — legacy/undetermined-club data) any
+  `is_standard` row sharing the key, so old events keep rendering
+  correctly. Events get a real DB-level composite FK
+  (`nk_events_type_fk FOREIGN KEY (club_id, event_type) REFERENCES
+  nk_event_types (club_id, key)`, automatically skipped by Postgres when
+  `club_id IS NULL`); itinerary items don't carry their own `club_id`, so
+  their type is validated at the app level only (via a join through the
+  parent event), with graceful fallback rather than hard-blocking if a
+  referenced type is later deleted.
+  Managed from **More → Schedule types** (`admin/EventTypes.tsx`,
+  `roles={["coach"]}` — `is_admin` bypass covers admins), the standard
+  list+drawer page with a club switcher (hidden for single-club coaches,
+  a search-`Drawer` `ClubPicker` for multi-club ones) and an Icon
+  (emoji text input) + Color (`<input type="color">`) pair per type.
+  `typeInfo(eventTypes, clubId, key)` (`Schedule.tsx`) is the shared
+  lookup every view uses to render a type's icon/label/bg_color: exact
+  `(club_id, key)` match → any `is_standard` row sharing `key` → a small
+  hardcoded `FALLBACK_TYPE_LABELS`/`FALLBACK_TYPE_ICONS` map, so a fetch
+  failure or fully-undetermined-club event never renders blank.
+  **Icon+bg strip**: every view (List, Day, Week, Month) renders a
+  type's `icon` on its `bg_color` as a small leading strip/badge — the
+  same visual language the overdue `!` marker already used (a colored
+  block occupying part of the tile) — with the overdue marker taking
+  priority over the type strip whenever both would apply to the same
+  event.
 - **Events can recur, the same way itinerary items already did**:
   `nk_events.recurrence_id` (mirrors `nk_event_items.recurrence_id`) plus
   a `repeat` object accepted by `POST /api/events`, reusing the exact
@@ -950,6 +998,28 @@ coach-run attendance) — this is personal athlete itinerary planning.
   (`setItemsAndSync`, wrapping the `setItems` passed to `ItemsSection`)
   and the event-level one (`updateEventAthleteStatus`, for events with no
   itemized itinerary).
+- **Failed tint on the top-level List/Day/Week row**: alongside the
+  existing itinerary-item tint described above, the Schedule List view's
+  event row and Day/Week view's timed blocks now also get `bg-red-50`
+  when `event.my_status === "failed"` (plain white otherwise) — the same
+  reddish background an item row gets, just applied one level up, at the
+  event row itself.
+- **Combined date+time picker**: `DateTimeField` (`components/ui.tsx`)
+  replaces the old side-by-side date-`<input>` + time-`<input>` pair
+  everywhere both are edited together (event create/edit, itinerary item
+  create/edit, the athlete Training tab's quick-add composer) with one
+  tappable field showing both values together ("Sat, Jul 25, 2026 ·
+  14:30"), opening a `Modal` with a Date/Time pill toggle so the user can
+  flip between adjusting either value without closing and reopening
+  separate inputs — picking a date auto-advances to the Time tab. It
+  intentionally does *not* wrap itself in `Field` (which renders a
+  `<label>`): nesting the Modal's own buttons inside the same `<label>`
+  as the trigger button caused the browser's implicit label-click-
+  forwarding to *also* re-fire the trigger's click on every tap inside
+  the modal (reopening it immediately after "Done"), so `DateTimeField`
+  renders its own label `<span>` instead. Where a field only has a time
+  (no separate date, e.g. an itinerary item's "End time") it stays a
+  plain time `<input>`.
 
 ## Auth & RBAC
 

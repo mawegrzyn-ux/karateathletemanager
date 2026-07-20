@@ -4,6 +4,7 @@ import {
   type ChangeEvent,
   type PropsWithChildren,
 } from "react";
+import { dateLabel } from "../utils/dates";
 
 export function Avatar({
   name,
@@ -276,6 +277,120 @@ export function Modal({
         </button>
         {children}
       </div>
+    </div>
+  );
+}
+
+// Single combined date+time experience: one tappable field shows both
+// values together, and opens a lightweight Modal (not a stacked Drawer -
+// this sits inside forms that are often already inside a Drawer) with a
+// Date/Time pill toggle so the user can flip between adjusting either
+// value without closing and reopening separate inputs.
+export function DateTimeField({
+  label,
+  date,
+  time,
+  onDateChange,
+  onTimeChange,
+  min,
+  max,
+  required = false,
+}: {
+  label: string;
+  date: string;
+  time: string;
+  onDateChange: (value: string) => void;
+  onTimeChange: (value: string) => void;
+  min?: string;
+  max?: string;
+  required?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"date" | "time">("date");
+
+  const display = date && time
+    ? `${dateLabel(date)} · ${time}`
+    : date
+      ? dateLabel(date)
+      : time || "Set date & time";
+
+  return (
+    // Not <Field> here: Modal's own buttons must not live inside the same
+    // <label> as the trigger button, or clicking them also re-fires the
+    // label's implicit click-forwarding onto the trigger (reopening it).
+    <div className="flex flex-col gap-1">
+      <span className="text-sm font-medium text-stone-700">{label}</span>
+      <button
+        type="button"
+        onClick={() => {
+          setTab("date");
+          setOpen(true);
+        }}
+        className="flex min-h-[44px] items-center justify-between rounded-xl border border-stone-300 px-3 text-left"
+      >
+        <span className={date && time ? "" : "text-stone-400"}>{display}</span>
+        <span aria-hidden>📅</span>
+      </button>
+
+      <Modal open={open} onClose={() => setOpen(false)}>
+        <div className="flex flex-col gap-4">
+          <div className="flex rounded-full bg-stone-100 p-1">
+            <button
+              type="button"
+              onClick={() => setTab("date")}
+              className={`flex-1 rounded-full py-2 text-sm font-medium transition-colors ${
+                tab === "date" ? "bg-white text-stone-900 shadow-card" : "text-stone-500"
+              }`}
+            >
+              Date
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("time")}
+              className={`flex-1 rounded-full py-2 text-sm font-medium transition-colors ${
+                tab === "time" ? "bg-white text-stone-900 shadow-card" : "text-stone-500"
+              }`}
+            >
+              Time
+            </button>
+          </div>
+
+          {tab === "date" ? (
+            <input
+              key="date"
+              type="date"
+              autoFocus
+              required={required}
+              min={min}
+              max={max}
+              value={date}
+              onChange={(e) => {
+                onDateChange(e.target.value);
+                setTab("time");
+              }}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
+            />
+          ) : (
+            <input
+              key="time"
+              type="time"
+              autoFocus
+              required={required}
+              value={time}
+              onChange={(e) => onTimeChange(e.target.value)}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
+            />
+          )}
+
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
+          >
+            Done
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
