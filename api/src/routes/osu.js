@@ -9,7 +9,7 @@ const Anthropic = require("@anthropic-ai/sdk");
 const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
 const asyncHandler = require("../utils/asyncHandler");
-const { tools, callTool } = require("../mcp/tools");
+const { tools, callTool, todayInfo } = require("../mcp/tools");
 
 const router = Router();
 router.use(authorize.requireAdmin);
@@ -40,13 +40,23 @@ async function getClient() {
   return cachedClient;
 }
 
-const SYSTEM_PROMPT = `You are Osu, the admin assistant built into the Nada Karate Athlete Manager.
+// Built fresh per request (rather than a module-level constant) so today's
+// date is always current - it's stated up front here rather than left for
+// Osu to figure out via get_current_date, so the common "today"/"this week"
+// case doesn't cost a tool round-trip; the tool itself stays available for
+// precision (exact time) or if a conversation runs long enough to cross
+// midnight.
+function buildSystemPrompt() {
+  const { date, weekday, time } = todayInfo();
+  return `You are Osu, the admin assistant built into the Nada Karate Athlete Manager.
+Today is ${weekday}, ${date} (current time ${time} UTC).
 You help club/association admins look up and manage clubs, athletes, pending
 sign-ups, and schedule events using the tools available to you. Be concise.
 Before taking an action that creates or changes a record, briefly state what
 you're about to do; after tool results come back, summarize what happened in
 plain language rather than dumping raw data. If a request is ambiguous or
 could affect the wrong record, ask a clarifying question instead of guessing.`;
+}
 
 const CLAUDE_TOOLS = tools.map(({ name, description, input_schema }) => ({
   name,
@@ -96,7 +106,7 @@ router.post(
       const response = await client.messages.create({
         model: MODEL,
         max_tokens: 8192,
-        system: SYSTEM_PROMPT,
+        system: buildSystemPrompt(),
         thinking: { type: "adaptive" },
         tools: CLAUDE_TOOLS,
         messages: conversation,

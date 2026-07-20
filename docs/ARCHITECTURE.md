@@ -1157,7 +1157,15 @@ coach-run attendance) — this is personal athlete itinerary planning.
   content segment is also marginally inset (`my-1`) versus the full-height
   left/right end caps, plus its own `shadow-sm` — a small raised-card
   look floating between the two flanking chevrons rather than flush with
-  their full height.
+  their full height. The two end caps get a shadow of their own too, but
+  as `filter: drop-shadow(...)` (a shared `sideShadow` constant) rather
+  than `box-shadow`/Tailwind's `shadow-*` utilities — both end caps are
+  `clipPath`'d into their chevron shape, and `box-shadow` paints outside
+  the element's box, which clip-path then clips away along with
+  everything else, so a `shadow-*` class there would render nothing.
+  `drop-shadow` operates on the actual painted (post-clip) alpha shape
+  instead, so it correctly follows the chevron's diagonal cut and reads
+  as a soft shadow beneath the shape rather than a rectangular ghost.
 - **Competition-result share card: plain text, soft accent-color post
   break.** `ShareBadge`'s `competition_result` card
   (`AthleteSocialProfile.tsx`) has no background/border/frame of its
@@ -1468,15 +1476,21 @@ never drift apart on what a tool does or what it's called:
   Zod/validation-library shape), reusable as-is for both Claude's tool-use
   API and MCP's `tools/list`. Handlers talk to the database directly
   (`pool`/`activateUser`), the same way `activateUser.js` does, rather than
-  going through the HTTP routes. Current tools: `list_clubs`,
-  `create_club`, `list_athletes`, `list_pending_users`, `approve_user`
-  (wraps `activateUser`, same auto-provisioning as the admin Users page),
-  `list_events`, `create_event` (single, non-repeating, no athletes
-  assigned — a deliberately narrower slice of what `POST /api/events`
-  supports, kept simple for a first cut), `web_search` (calls the Brave
-  Search API directly with its own `nk_settings`-backed key lookup, since
-  the handler runs outside `osu.js`; returns up to 8 `{title, url,
-  snippet}` results).
+  going through the HTTP routes. Current tools: `get_current_date`
+  (returns today's UTC date, weekday name, and time - no input; exists
+  for Osu to re-check or compute a relative date like "next Tuesday"
+  mid-conversation), `list_clubs`, `create_club`, `list_athletes`,
+  `list_pending_users`, `approve_user` (wraps `activateUser`, same
+  auto-provisioning as the admin Users page), `list_events`,
+  `create_event` (single, non-repeating, no athletes assigned — a
+  deliberately narrower slice of what `POST /api/events` supports, kept
+  simple for a first cut), `web_search` (calls the Brave Search API
+  directly with its own `nk_settings`-backed key lookup, since the
+  handler runs outside `osu.js`; returns up to 8 `{title, url, snippet}`
+  results). `tools.js` also exports `todayInfo()` directly (the same
+  function `get_current_date`'s handler calls) so `osu.js` can state
+  today's date up front in the system prompt (see below) without
+  spending a tool round-trip on the common case.
 - `api/src/mcp/server.js` is a standalone MCP server (stdio transport, the
   low-level `@modelcontextprotocol/sdk` `Server` class — not the
   Zod-based `McpServer` convenience wrapper, precisely so it can reuse the
@@ -1497,7 +1511,12 @@ never drift apart on what a tool does or what it's called:
   guard) directly against `tools.js`'s `callTool`, returning
   `{reply, actions}` where `actions` is every tool call made this turn
   (name/input/output or error) so the UI can show what Osu actually did,
-  not just what it said.
+  not just what it said. Its system prompt is built fresh per request
+  (`buildSystemPrompt()`, not a module-level constant) so it can open
+  with "Today is Monday, 2026-07-20 (current time HH:MM UTC)" using
+  `tools.js`'s `todayInfo()` — the date is already in the model's context
+  from the very first turn rather than something it has to ask about or
+  spend a tool call discovering for the common "today"/"this week" case.
 - `Osu.tsx` (route `/osu`, `RequireAuth adminOnly`, tile in `More.tsx`'s
   Admin section) is a plain chat UI — message bubbles plus small "🔧
   tool_name" chips under each assistant reply for any tool calls made,
