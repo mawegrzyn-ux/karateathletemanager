@@ -2557,7 +2557,8 @@ function venueLabel(v: Venue) {
 }
 
 const SWIPE_THRESHOLD = 64;
-const DEEP_SWIPE_THRESHOLD = 168;
+const DEEP_SWIPE_THRESHOLD = 96;
+const DEEP_HINT_WIDTH = 140;
 const DISABLED_SWIPE_MAX = 180;
 
 // Wraps a row with horizontal swipe-to-flag: swipe left calls onSwipeComplete,
@@ -2570,10 +2571,14 @@ const DISABLED_SWIPE_MAX = 180;
 //
 // `deepSwipeAction` (competition events only, see the List view) adds a
 // second, deeper zone on the same left-swipe gesture: past
-// DEEP_SWIPE_THRESHOLD the ✓/complete hint morphs into the deep action's own
-// label/color, and releasing there fires it instead of onSwipeComplete -
-// exposed progressively as the user keeps dragging rather than as a
-// separate gesture, so there's nothing to discover except "keep swiping".
+// DEEP_SWIPE_THRESHOLD the ✓/complete hint snaps straight to the deep
+// action's own label/color at a fixed, wider width (DEEP_HINT_WIDTH) - a
+// snap rather than a gradual stretch, so the hint reads cleanly at both
+// sizes instead of an in-between smear - and releasing there fires it
+// instead of onSwipeComplete. It's exposed as an extension of the same
+// gesture rather than a separate one, so there's nothing to discover
+// except "keep swiping" - kept close to SWIPE_THRESHOLD so that discovery
+// doesn't require an unusually long drag.
 function SwipeableRow({
   children,
   onSwipeComplete,
@@ -2605,7 +2610,7 @@ function SwipeableRow({
     if (startXRef.current == null) return;
     const delta = e.clientX - startXRef.current;
     if (Math.abs(delta) > 8) draggedRef.current = true;
-    const max = deepSwipeAction ? DEEP_SWIPE_THRESHOLD + 40 : Infinity;
+    const max = deepSwipeAction ? DEEP_HINT_WIDTH : Infinity;
     setDragX(
       disabled
         ? Math.max(-DISABLED_SWIPE_MAX, Math.min(DISABLED_SWIPE_MAX, delta))
@@ -2631,8 +2636,8 @@ function SwipeableRow({
   const pastDeep = !!deepSwipeAction && dragX <= -DEEP_SWIPE_THRESHOLD;
   const hintWidth = disabled
     ? Math.abs(dragX)
-    : deepSwipeAction && dragX < 0
-    ? Math.min(Math.abs(dragX), DEEP_SWIPE_THRESHOLD + 40)
+    : pastDeep
+    ? DEEP_HINT_WIDTH
     : SWIPE_THRESHOLD;
   const hintOpacity = disabled
     ? Math.min(1, Math.abs(dragX) / 40)
@@ -2645,7 +2650,7 @@ function SwipeableRow({
           the ✓/complete hint - the action that fires for dragX<0 - lives at
           right-0 (and vice versa for ✗/failed at left-0). */}
       <div
-        className={`pointer-events-none absolute inset-y-0 right-0 flex items-center justify-center overflow-hidden px-2 text-center text-xs font-medium ${
+        className={`pointer-events-none absolute inset-y-0 right-0 flex items-center justify-center overflow-hidden whitespace-nowrap px-2 text-center text-xs font-medium transition-[width] duration-150 ease-out ${
           disabled
             ? "bg-stone-200 text-stone-600"
             : pastDeep
