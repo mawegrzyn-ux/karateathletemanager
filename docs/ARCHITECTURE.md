@@ -1021,16 +1021,20 @@ coach-run attendance) — this is personal athlete itinerary planning.
   (no separate date, e.g. an itinerary item's "End time") it stays a
   plain time `<input>`.
 - **List view: type filter, and multi-day events on every spanned day**:
-  a `<select>` next to the search input filters by `event_type` (options
-  built from whichever keys are actually present in the loaded window,
-  labeled via `typeInfo`) — combined with the existing text search in one
-  `filteredEvents` memo. A multi-day event used to render only once,
-  under its `start_date` — `expandEventsForList`/`groupOccurrencesByDate`
-  now expand each event into one occurrence per date it spans before
-  grouping, so it shows up under every day in its range, each tagged
-  "Day n of x" (e.g. "Day 2 of 4") appended to its date/time line.
-  Swiping any one day's row still flags the whole event (the swipe
-  handlers operate on the occurrence's underlying `event`, not the date).
+  a small icon button (🏷️, badge-counted when active) next to the search
+  input opens a `Drawer` of type tiles (icon + label, `TileGrid`-style,
+  options built from whichever `event_type` keys are actually present in
+  the loaded window) — tapping a tile toggles it in/out of a
+  `typeFilters: Set<string>`, so multiple types can be selected at once;
+  an empty set shows everything. Combined with the existing text search
+  in one `filteredEvents` memo. A multi-day event used to render only
+  once, under its `start_date` — `expandEventsForList`/
+  `groupOccurrencesByDate` now expand each event into one occurrence per
+  date it spans before grouping, so it shows up under every day in its
+  range, each tagged "Day n of x" (e.g. "Day 2 of 4") appended to its
+  date/time line. Swiping any one day's row still flags the whole event
+  (the swipe handlers operate on the occurrence's underlying `event`,
+  not the date).
 - **Fixed: "jump to today" not landing on today from far in the future.**
   The floating ↑ button's `scrollToToday` computes its target from the
   same `filteredEvents` the list actually renders (previously used the
