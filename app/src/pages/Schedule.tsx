@@ -992,6 +992,12 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                         const info = typeInfo(eventTypes, e.club_id, e.event_type);
                         const showTrophy =
                           e.event_type === "competition" && e.my_result_place;
+                        // filter: drop-shadow (not box-shadow) since these
+                        // segments are clip-path'd into chevrons - box-shadow
+                        // draws outside the box and gets clipped away with
+                        // it, while drop-shadow follows the actual painted
+                        // (post-clip) shape.
+                        const sideShadow = "drop-shadow(0 2px 1.5px rgba(28,25,23,0.25))";
                         return (
                           <div className="isolate flex overflow-hidden rounded-md shadow-card">
                             {isOverdue(e) ? (
@@ -1000,6 +1006,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                 className="relative z-10 flex w-12 shrink-0 items-center justify-center bg-red-600 text-5xl font-black leading-none text-red-50"
                                 style={{
                                   clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
+                                  filter: sideShadow,
                                 }}
                               >
                                 !
@@ -1011,6 +1018,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                 style={{
                                   backgroundColor: info.bg_color,
                                   clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
+                                  filter: sideShadow,
                                 }}
                               >
                                 {info.icon}
@@ -1075,6 +1083,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                 }`}
                                 style={{
                                   clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%)",
+                                  filter: sideShadow,
                                 }}
                               >
                                 {showTrophy ? (

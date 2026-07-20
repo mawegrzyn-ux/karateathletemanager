@@ -12,7 +12,33 @@
 const pool = require("../db/pool");
 const { activateUser } = require("../utils/activateUser");
 
+// Server "today" - UTC-based, same convention the rest of the backend uses
+// for date strings (see events.js) and that the frontend's todayStr() mirrors.
+// Exported separately from the tool so Osu's system prompt (osu.js) can also
+// state today's date up front without a tool round-trip, while the tool
+// itself stays available for Osu to re-check it (or fetch the current time)
+// mid-conversation.
+function todayInfo() {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    timeZone: "UTC",
+  }).format(now);
+  const time = now.toISOString().slice(11, 16);
+  return { date, weekday, time };
+}
+
 const tools = [
+  {
+    name: "get_current_date",
+    description:
+      "Returns today's date (YYYY-MM-DD), day of week, and current time (UTC, HH:MM). Use this whenever a request depends on 'today', 'this week', 'upcoming', or similar relative dates, or to compute an actual date from one (e.g. 'next Tuesday').",
+    input_schema: { type: "object", properties: {} },
+    async handler() {
+      return todayInfo();
+    },
+  },
   {
     name: "list_clubs",
     description:
@@ -287,4 +313,4 @@ async function callTool(name, input) {
   return tool.handler(input ?? {});
 }
 
-module.exports = { tools, callTool };
+module.exports = { tools, callTool, todayInfo };
