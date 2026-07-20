@@ -412,8 +412,20 @@ export function Drawer({
   useEffect(() => {
     if (open) {
       setMounted(true);
-      const raf = requestAnimationFrame(() => setVisible(true));
-      return () => cancelAnimationFrame(raf);
+      // A single requestAnimationFrame isn't reliably enough to guarantee
+      // the browser has painted the off-screen starting frame before the
+      // transform flips - depending on what else is rendering that tick,
+      // both can land in the same paint and the transition has nothing to
+      // interpolate from, so it just pops in. Nesting two rAFs forces a
+      // full paint to land in between.
+      let raf2 = 0;
+      const raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setVisible(true));
+      });
+      return () => {
+        cancelAnimationFrame(raf1);
+        cancelAnimationFrame(raf2);
+      };
     }
     setVisible(false);
     const timeout = setTimeout(() => setMounted(false), 300);

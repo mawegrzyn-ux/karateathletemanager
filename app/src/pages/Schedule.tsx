@@ -442,6 +442,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [loadingPast, setLoadingPast] = useState(false);
   const [loadingFuture, setLoadingFuture] = useState(false);
   const suppressLazyLoadRef = useRef(false);
+  const suppressLazyLoadTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const filteredEvents = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -494,11 +495,18 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       // past the near-top lazy-load threshold on the way there; without
       // this guard that fires loadMorePast() mid-animation, prepending
       // more days above and throwing off where the in-progress smooth
-      // scroll actually lands.
+      // scroll actually lands. Lifted by the scroll-idle detector in the
+      // effect below once the animation actually settles (a native
+      // smooth scroll's duration isn't fixed - it scales with distance -
+      // so a flat timeout here would either cut in too early on a long
+      // jump or hold the lazy-load thresholds off for no reason on a
+      // short one); the timeout is just a safety net in case scroll
+      // events stop arriving for some other reason.
       suppressLazyLoadRef.current = true;
-      window.setTimeout(() => {
+      window.clearTimeout(suppressLazyLoadTimeoutRef.current);
+      suppressLazyLoadTimeoutRef.current = window.setTimeout(() => {
         suppressLazyLoadRef.current = false;
-      }, 800);
+      }, 4000);
     }
     el.scrollIntoView({ behavior, block: "start" });
   }
@@ -530,14 +538,30 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     const container = document.querySelector("main");
     if (!container) return;
 
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+
     function onScroll() {
-      if (!container || suppressLazyLoadRef.current) return;
+      if (!container) return;
+      if (suppressLazyLoadRef.current) {
+        // Still mid-jump from scrollToToday's programmatic scroll; a
+        // native smooth scroll's duration scales with distance, so
+        // rather than guessing when it's done, treat "no more scroll
+        // events for a beat" as done and resume the thresholds then.
+        window.clearTimeout(idleTimer);
+        idleTimer = window.setTimeout(() => {
+          suppressLazyLoadRef.current = false;
+        }, 150);
+        return;
+      }
       const { scrollTop, scrollHeight, clientHeight } = container;
       if (scrollTop < 150) loadMorePast();
       if (scrollHeight - scrollTop - clientHeight < 150) loadMoreFuture();
     }
     container.addEventListener("scroll", onScroll, { passive: true });
-    return () => container.removeEventListener("scroll", onScroll);
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      window.clearTimeout(idleTimer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode]);
 
