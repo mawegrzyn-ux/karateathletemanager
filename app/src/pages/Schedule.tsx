@@ -424,7 +424,8 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [eventTypes, setEventTypes] = useState<EventTypeRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set());
+  const [typeFilterDrawerOpen, setTypeFilterDrawerOpen] = useState(false);
   const [drawer, setDrawer] = useState<"closed" | "create" | Event>("closed");
   const [form, setForm] = useState(EMPTY_FORM);
   const [formAthleteIds, setFormAthleteIds] = useState<number[]>([]);
@@ -450,20 +451,36 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       }`
         .toLowerCase()
         .includes(q);
-      const matchesType = !typeFilter || e.event_type === typeFilter;
+      const matchesType = typeFilters.size === 0 || typeFilters.has(e.event_type);
       return matchesQuery && matchesType;
     });
-  }, [events, query, typeFilter, eventTypes]);
+  }, [events, query, typeFilters, eventTypes]);
 
   const typeFilterOptions = useMemo(() => {
-    const seen = new Map<string, string>();
+    const seen = new Map<string, { label: string; icon: string; bg_color: string }>();
     for (const e of events ?? []) {
       if (!seen.has(e.event_type)) {
-        seen.set(e.event_type, typeInfo(eventTypes, e.club_id, e.event_type).label);
+        const info = typeInfo(eventTypes, e.club_id, e.event_type);
+        seen.set(e.event_type, {
+          label: info.label,
+          icon: info.icon,
+          bg_color: info.bg_color,
+        });
       }
     }
-    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    return [...seen.entries()]
+      .map(([key, info]) => ({ key, ...info }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [events, eventTypes]);
+
+  function toggleTypeFilter(key: string) {
+    setTypeFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   function scrollToToday(behavior: ScrollBehavior = "smooth") {
     const today = todayStr();
@@ -772,19 +789,19 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             placeholder="Search schedule..."
             className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
           />
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+          <button
+            type="button"
+            onClick={() => setTypeFilterDrawerOpen(true)}
             aria-label="Filter by type"
-            className="min-h-[44px] rounded-xl border border-stone-300 px-2 text-sm"
+            className="relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg"
           >
-            <option value="">All types</option>
-            {typeFilterOptions.map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
+            🏷️
+            {typeFilters.size > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-semibold text-white">
+                {typeFilters.size}
+              </span>
+            )}
+          </button>
         </div>
 
         <div className="flex gap-1 rounded-full bg-stone-200 p-1">
@@ -803,6 +820,57 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           ))}
         </div>
       </div>
+
+      <Drawer
+        open={typeFilterDrawerOpen}
+        onClose={() => setTypeFilterDrawerOpen(false)}
+        title="Filter by type"
+      >
+        <div className="flex flex-col gap-4">
+          {typeFilters.size > 0 && (
+            <button
+              type="button"
+              onClick={() => setTypeFilters(new Set())}
+              className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700"
+            >
+              Clear filters
+            </button>
+          )}
+          <div className="grid grid-cols-3 gap-3">
+            {typeFilterOptions.map((t) => {
+              const selected = typeFilters.has(t.key);
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => toggleTypeFilter(t.key)}
+                  className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl p-2 text-center shadow-card ${
+                    selected ? "ring-2 ring-red-600" : ""
+                  }`}
+                  style={{ backgroundColor: selected ? t.bg_color : "white" }}
+                >
+                  <span
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-lg"
+                    style={{ backgroundColor: selected ? "rgba(255,255,255,0.5)" : t.bg_color }}
+                  >
+                    {t.icon}
+                  </span>
+                  <span
+                    className={`text-xs font-medium ${
+                      selected ? "text-white" : "text-stone-700"
+                    }`}
+                  >
+                    {t.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {typeFilterOptions.length === 0 && (
+            <p className="px-1 py-2 text-sm text-stone-500">No types yet.</p>
+          )}
+        </div>
+      </Drawer>
 
       {viewMode === "list" && (
         <div className="flex flex-col gap-4">
