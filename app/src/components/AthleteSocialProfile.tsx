@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useApi } from "../hooks/useApi";
+import { usePhotoPalette } from "../lib/colorPalette";
 import { Avatar, BeltSwatch, DeleteButton, Drawer, MediaField, Spinner, Toast } from "./ui";
 
 export interface SocialProfile {
@@ -617,6 +618,7 @@ export function AthleteSocialProfile({
   const [bio, setBio] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const palette = usePhotoPalette(profile?.photo_url);
 
   function showToast(message: string) {
     setToast(message);
@@ -688,7 +690,16 @@ export function AthleteSocialProfile({
             />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+        <div
+          className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent"
+          style={
+            palette
+              ? {
+                  background: `linear-gradient(to top, ${palette.primaryDark}f2 0%, ${palette.primaryDark}59 55%, transparent 100%)`,
+                }
+              : undefined
+          }
+        />
         {isSelf && (
           <div className="absolute right-4 top-4 flex items-center gap-2">
             <button
@@ -713,7 +724,10 @@ export function AthleteSocialProfile({
             </button>
           </div>
         )}
-        <div className="relative flex max-w-[75%] flex-col gap-1 p-4 text-white">
+        <div
+          className="relative flex max-w-[75%] flex-col gap-1 p-4 text-white"
+          style={palette ? { color: palette.textOnPrimaryDark } : undefined}
+        >
           <span className="font-display text-2xl uppercase tracking-wide [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
             {profile.first_name} {profile.last_name}
           </span>
@@ -726,7 +740,10 @@ export function AthleteSocialProfile({
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 p-4">
+      <div
+        className="flex flex-col gap-3 p-4"
+        style={palette ? { backgroundColor: palette.primaryLight } : undefined}
+      >
         {isSelf && editing && (
           <MediaField
             label="Cover photo"
@@ -749,7 +766,10 @@ export function AthleteSocialProfile({
             />
           </label>
         ) : (
-          <p className="text-sm text-stone-700">
+          <p
+            className="text-sm text-stone-700"
+            style={palette ? { color: palette.accentText } : undefined}
+          >
             {profile.bio ||
               (isSelf ? "No bio yet. Tap ✏️ to add one." : null)}
           </p>
