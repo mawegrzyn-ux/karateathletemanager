@@ -1441,14 +1441,22 @@ never drift apart on what a tool does or what it's called:
   /api/admin/settings/anthropic-key` (also `settings.js`) manage it — GET
   only ever reports `{configured: boolean}`, never the key itself, so the
   admin UI can detect "needs setup" without displaying or re-requesting a
-  live secret. `Osu.tsx` checks that on load and renders a one-field setup
-  form (`ApiKeySetup`) instead of the chat UI when unconfigured, with an
-  "Update key" link once configured to return to it (e.g. to rotate a
-  revoked key); a `409` from `/osu/chat` itself (key removed after the
-  page already loaded) falls back to the same form as a defensive
+  live secret. Configuration lives at its own route,
+  `admin/OsuApiKey.tsx` (`/admin/osu-api-key`, tile under More's
+  "Configuration" section — a new grouping, separate from "Admin",
+  reserved for this kind of server-wide setting rather than an
+  entity to manage), not inline on the chat page itself, so it's
+  discoverable independent of ever landing on `/osu` first; it shows a
+  "✓ Configured"/"Not configured" status line, a field to set or replace
+  the key, and (once configured) a `DeleteButton`-confirmed "Remove key".
+  `Osu.tsx` checks configuration status on load and shows a short message
+  linking to that page instead of the chat UI when unconfigured, with an
+  "Update key" link back to it once configured (e.g. to rotate a revoked
+  key); a `409` from `/osu/chat` itself (key removed after the page
+  already loaded) falls back to the same message as a defensive
   backstop, distinct from any other chat error (a bad/expired key still
   reaches Claude's API and surfaces as a normal request failure, not a
-  bounce back to setup).
+  bounce back to the unconfigured state).
 - Needs `ANTHROPIC_API_KEY` set in `api/.env` (see Environment Variables
   below) — the Anthropic SDK's default client reads it directly from the
   environment, no extra plumbing.
