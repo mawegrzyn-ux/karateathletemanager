@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApi } from "../hooks/useApi";
 import { usePhotoPalette } from "../lib/colorPalette";
+import { renderFormattedText } from "../utils/formatText";
 import { Avatar, BeltSwatch, DeleteButton, Drawer, MediaField, Spinner, Toast } from "./ui";
 
 export interface SocialProfile {
@@ -106,31 +107,6 @@ function ShareBadge({ post }: { post: Post }) {
   return null;
 }
 
-// Minimal, safe "WYSIWYG-lite" formatting: the composer's Bold/Italic
-// toolbar wraps selected text in **/*  markers, and this turns those
-// markers back into <strong>/<em> at render time - never raw HTML, so
-// there's no injection risk from a post body.
-function renderFormattedBody(text: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  const regex = /\*\*(.+?)\*\*|\*(.+?)\*/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-  while ((match = regex.exec(text))) {
-    if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
-    }
-    if (match[1] !== undefined) {
-      nodes.push(<strong key={key++}>{match[1]}</strong>);
-    } else if (match[2] !== undefined) {
-      nodes.push(<em key={key++}>{match[2]}</em>);
-    }
-    lastIndex = regex.lastIndex;
-  }
-  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
-  return nodes;
-}
-
 function PostCard({
   post,
   profile,
@@ -154,7 +130,7 @@ function PostCard({
       style={{ borderBottomColor: `${accentColor}40` }}
     >
       {(canEdit || canDelete) && (
-        <div className="absolute right-2 top-2 flex gap-1">
+        <div className="absolute right-2 top-2 z-10 flex gap-1">
           {canEdit && (
             <button
               type="button"
@@ -213,7 +189,7 @@ function PostCard({
         </h3>
       )}
       {post.body && (
-        <p className="whitespace-pre-wrap text-sm">{renderFormattedBody(post.body)}</p>
+        <p className="whitespace-pre-wrap text-sm">{renderFormattedText(post.body)}</p>
       )}
       {post.image_url && (
         <img src={post.image_url} alt="" className="max-h-80 w-full object-cover" />

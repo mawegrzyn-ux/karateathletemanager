@@ -70,12 +70,14 @@ export function MediaField({
   value,
   onChange,
   onError,
+  onUploadingChange,
 }: {
   label: string;
   kind: "video" | "image";
   value: string;
   onChange: (url: string) => void;
   onError: (message: string) => void;
+  onUploadingChange?: (uploading: boolean) => void;
 }) {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,12 +87,14 @@ export function MediaField({
     e.target.value = "";
     if (!file) return;
     setUploading(true);
+    onUploadingChange?.(true);
     try {
       onChange(await uploadFile(file));
     } catch (err) {
       onError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
     }
   }
 

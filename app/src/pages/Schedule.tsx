@@ -2719,6 +2719,7 @@ function RecordResultDrawer({
   const [place, setPlace] = useState("");
   const [postToProfile, setPostToProfile] = useState(false);
   const [photoUrl, setPhotoUrl] = useState("");
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -2732,11 +2733,12 @@ function RecordResultDrawer({
     setPlace("");
     setPostToProfile(false);
     setPhotoUrl("");
+    setUploadingPhoto(false);
   }, [event?.id]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!event || !athleteId || submitting) return;
+    if (!event || !athleteId || submitting || uploadingPhoto) return;
     setSubmitting(true);
     try {
       const { result } = await api.post<{ result: { id: number } }>(
@@ -2797,14 +2799,19 @@ function RecordResultDrawer({
             value={photoUrl}
             onChange={setPhotoUrl}
             onError={showMediaError}
+            onUploadingChange={setUploadingPhoto}
           />
         )}
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || uploadingPhoto}
           className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
         >
-          {submitting ? "Saving..." : "Save result"}
+          {uploadingPhoto
+            ? "Uploading photo..."
+            : submitting
+            ? "Saving..."
+            : "Save result"}
         </button>
       </form>
       {mediaError && <Toast message={mediaError} />}
