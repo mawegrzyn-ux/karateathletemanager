@@ -4,7 +4,6 @@ import { Avatar } from "./components/ui";
 import Schedule from "./pages/Schedule";
 import Athletes from "./pages/Athletes";
 import Grades from "./pages/Grades";
-import Competitions from "./pages/Competitions";
 import More from "./pages/More";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -30,7 +29,6 @@ import RequireLogin from "./components/RequireLogin";
 
 const ATHLETE_TABS = [
   { to: "/", label: "Schedule", icon: "📅", end: true },
-  { to: "/admin/training-modules", label: "Training", icon: "💪" },
   { to: "/more", label: "More", icon: "⚙️" },
 ];
 
@@ -139,14 +137,6 @@ export default function App() {
         <Route path="/athletes" element={<Athletes />} />
         <Route path="/athletes/:id/profile" element={<AthleteProfile />} />
         <Route path="/grades" element={<Grades />} />
-        <Route
-          path="/competitions"
-          element={
-            <RequireAuth roles={["coach", "athlete"]}>
-              <Competitions />
-            </RequireAuth>
-          }
-        />
         <Route path="/more" element={<More />} />
         <Route
           path="/admin/users"
@@ -191,7 +181,7 @@ export default function App() {
         <Route
           path="/admin/training-modules"
           element={
-            <RequireAuth roles={["coach", "athlete"]}>
+            <RequireAuth roles={["coach"]}>
               <AdminTrainingModules />
             </RequireAuth>
           }
