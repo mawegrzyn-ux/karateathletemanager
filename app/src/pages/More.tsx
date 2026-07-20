@@ -78,6 +78,7 @@ export default function More() {
           </span>
           <TileGrid>
             <Tile to="/admin/osu-api-key" icon="🔑" label="Osu API key" />
+            <Tile to="/admin/brave-api-key" icon="🔍" label="Web search key" />
           </TileGrid>
         </div>
       )}

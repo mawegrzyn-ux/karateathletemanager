@@ -1398,7 +1398,10 @@ never drift apart on what a tool does or what it's called:
   (wraps `activateUser`, same auto-provisioning as the admin Users page),
   `list_events`, `create_event` (single, non-repeating, no athletes
   assigned — a deliberately narrower slice of what `POST /api/events`
-  supports, kept simple for a first cut).
+  supports, kept simple for a first cut), `web_search` (calls the Brave
+  Search API directly with its own `nk_settings`-backed key lookup, since
+  the handler runs outside `osu.js`; returns up to 8 `{title, url,
+  snippet}` results).
 - `api/src/mcp/server.js` is a standalone MCP server (stdio transport, the
   low-level `@modelcontextprotocol/sdk` `Server` class — not the
   Zod-based `McpServer` convenience wrapper, precisely so it can reuse the
@@ -1456,10 +1459,24 @@ never drift apart on what a tool does or what it's called:
   already loaded) falls back to the same message as a defensive
   backstop, distinct from any other chat error (a bad/expired key still
   reaches Claude's API and surfaces as a normal request failure, not a
-  bounce back to the unconfigured state).
+  bounce back to the unconfigured state). `settings.js` factors the
+  GET/PATCH/DELETE triple into a `registerSecretRoutes(path, settingsKey,
+  envFallback)` helper, since the Anthropic key was the first of what are
+  now two near-identical secrets.
+- **Web search** (`web_search` tool, above) needs its own key the same
+  way: a Brave Search API key, stored under `nk_settings` key
+  `brave_api_key`, managed via `GET`/`PATCH`/`DELETE
+  /api/admin/settings/brave-key` (same `registerSecretRoutes` helper) and
+  configured at `admin/BraveApiKey.tsx` (`/admin/brave-api-key`, tile
+  under More's "Configuration" section, alongside the Osu key). Unlike
+  the Anthropic key, an unconfigured Brave key doesn't block the rest of
+  Osu — the tool itself throws a descriptive error that surfaces as a
+  normal failed tool call, since chat still works for everything else.
 - Needs `ANTHROPIC_API_KEY` set in `api/.env` (see Environment Variables
   below) — the Anthropic SDK's default client reads it directly from the
-  environment, no extra plumbing.
+  environment, no extra plumbing. `BRAVE_API_KEY` is the equivalent
+  `.env` fallback for web search, both optional given the in-app
+  configuration pages above.
 
 ## Database
 
@@ -1813,6 +1830,7 @@ DB_USER=nadakarate
 DB_PASSWORD=
 NODE_ENV=production
 ANTHROPIC_API_KEY=
+BRAVE_API_KEY=
 ```
 
 ## Git Conventions

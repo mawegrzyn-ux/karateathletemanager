@@ -112,8 +112,8 @@ export default function Osu() {
           </Link>
         </div>
         <p className="text-sm text-stone-600">
-          Ask about clubs, athletes, pending sign-ups, or the schedule - or
-          ask Osu to make a change for you.
+          Ask about clubs, athletes, pending sign-ups, or the schedule, search
+          the web - or ask Osu to make a change for you.
         </p>
       </div>
 
