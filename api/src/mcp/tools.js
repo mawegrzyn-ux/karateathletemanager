@@ -231,6 +231,52 @@ const tools = [
       return { event: rows[0] };
     },
   },
+  {
+    name: "web_search",
+    description:
+      "Search the public web (via Brave Search) and return the top results' titles, URLs, and snippets. Use for anything outside this app's own data - current events, rules/regulations, opponent research, etc.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+      },
+      required: ["query"],
+    },
+    async handler({ query }) {
+      if (!query || !query.trim()) throw new Error("query is required");
+
+      const { rows } = await pool.query(
+        `SELECT value FROM nk_settings WHERE key = 'brave_api_key'`
+      );
+      const apiKey = rows[0]?.value || process.env.BRAVE_API_KEY;
+      if (!apiKey) {
+        throw new Error(
+          "Web search isn't configured yet - add a Brave Search API key under More > Configuration."
+        );
+      }
+
+      const url = new URL("https://api.search.brave.com/res/v1/web/search");
+      url.searchParams.set("q", query);
+      url.searchParams.set("count", "8");
+
+      const res = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          "X-Subscription-Token": apiKey,
+        },
+      });
+      if (!res.ok) {
+        throw new Error(`Brave Search request failed (${res.status})`);
+      }
+      const data = await res.json();
+      const results = (data.web?.results ?? []).map((r) => ({
+        title: r.title,
+        url: r.url,
+        snippet: r.description,
+      }));
+      return { results };
+    },
+  },
 ];
 
 const toolsByName = new Map(tools.map((t) => [t.name, t]));

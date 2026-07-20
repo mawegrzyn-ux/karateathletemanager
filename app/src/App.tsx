@@ -23,6 +23,7 @@ import AdminVenues from "./pages/admin/Venues";
 import AdminCoachRoles from "./pages/admin/CoachRoles";
 import AdminAppIcon from "./pages/admin/AppIcon";
 import AdminOsuApiKey from "./pages/admin/OsuApiKey";
+import AdminBraveApiKey from "./pages/admin/BraveApiKey";
 import Osu from "./pages/Osu";
 import RequireAuth from "./components/RequireAuth";
 import RequireLogin from "./components/RequireLogin";
@@ -256,6 +257,14 @@ export default function App() {
           element={
             <RequireAuth adminOnly>
               <AdminOsuApiKey />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/brave-api-key"
+          element={
+            <RequireAuth adminOnly>
+              <AdminBraveApiKey />
             </RequireAuth>
           }
         />
