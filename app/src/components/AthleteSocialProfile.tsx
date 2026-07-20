@@ -138,6 +138,7 @@ function PostCard({
   canDelete,
   onEdit,
   onDelete,
+  accentColor,
 }: {
   post: Post;
   profile: SocialProfile;
@@ -145,6 +146,7 @@ function PostCard({
   canDelete: boolean;
   onEdit: (post: Post) => void;
   onDelete: (id: number) => void;
+  accentColor: string;
 }) {
   return (
     <div className="relative flex flex-col gap-2 border-b border-stone-200 bg-white p-4">
@@ -187,17 +189,20 @@ function PostCard({
           url={profile.photo_url}
           size={32}
         />
-        <div className="flex flex-col">
+        <div className="flex items-baseline gap-2">
           <span className="text-sm font-medium">
             {profile.first_name} {profile.last_name}
           </span>
           <span className="text-xs text-stone-500">
-            {new Date(post.created_at).toLocaleString()}
+            {new Date(post.created_at).toLocaleDateString()}
           </span>
         </div>
       </div>
       {post.title && (
-        <h3 className="font-display text-lg uppercase tracking-wide">
+        <h3
+          className="font-display text-lg uppercase tracking-wide"
+          style={{ color: accentColor }}
+        >
           {post.title}
         </h3>
       )}
@@ -497,12 +502,14 @@ function PostsFeed({
   canPost,
   canModerate,
   showToast,
+  accentColor,
 }: {
   athleteId: number;
   profile: SocialProfile;
   canPost: boolean;
   canModerate: boolean;
   showToast: (message: string) => void;
+  accentColor: string;
 }) {
   const api = useApi();
   const [posts, setPosts] = useState<Post[] | null>(null);
@@ -540,6 +547,7 @@ function PostsFeed({
               canDelete={canPost || canModerate}
               onEdit={setEditingPost}
               onDelete={remove}
+              accentColor={accentColor}
             />
           ))}
         </div>
@@ -827,6 +835,7 @@ export function AthleteSocialProfile({
           canPost={isSelf}
           canModerate={false}
           showToast={showToast}
+          accentColor={accentColor}
         />
       </div>
       {toast && <Toast message={toast} />}
