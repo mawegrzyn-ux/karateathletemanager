@@ -968,7 +968,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                       {(() => {
                         const info = typeInfo(eventTypes, e.club_id, e.event_type);
                         return (
-                          <div className="flex overflow-hidden rounded-2xl shadow-card">
+                          <div className="flex overflow-hidden rounded-md shadow-card">
                             {isOverdue(e) ? (
                               <div
                                 aria-hidden
@@ -988,7 +988,11 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                             <button
                               onClick={() => setDrawer(e)}
                               className={`flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 px-4 py-3 text-left ${
-                                e.my_status === "failed" ? "bg-red-50" : "bg-white"
+                                e.my_status === "failed"
+                                  ? "bg-red-50"
+                                  : e.my_status === "completed"
+                                  ? "bg-green-50"
+                                  : "bg-white"
                               }`}
                             >
                               <div className="flex w-full items-center justify-between gap-2">
@@ -2544,7 +2548,7 @@ function SwipeableRow({
     : Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD);
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl ${className ?? ""}`}>
+    <div className={`relative overflow-hidden rounded-md ${className ?? ""}`}>
       {/* Positioned on the side the slide actually exposes: dragging left
           (dragX<0) slides content left, uncovering the row's right edge, so
           the ✓/complete hint - the action that fires for dragX<0 - lives at
