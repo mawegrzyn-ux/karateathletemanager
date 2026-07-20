@@ -1066,6 +1066,48 @@ coach-run attendance) — this is personal athlete itinerary planning.
   clamped into the parent event's `start_date`/`end_date` range if "now"
   falls outside it). Duplicating an existing event/item still copies its
   original date/time instead, unaffected by this default.
+- **Deep swipe left → record a competition result.** `SwipeableRow`'s
+  existing swipe-to-complete/fail gesture (`SWIPE_THRESHOLD = 64`) gained
+  a second, larger threshold on the same left-drag axis
+  (`DEEP_SWIPE_THRESHOLD = 168`, via an optional `deepSwipeAction: {
+  label, onTrigger }` prop) rather than a separate gesture — dragging
+  past it morphs the row's right-edge hint from the green "✓" to the
+  action's own label/amber styling, so continuing an already-familiar
+  swipe further is what exposes the extra action. The List view's
+  event-level row passes this only for `event_type === "competition"`
+  rows (`item_type` has no competition value, so this never applies to
+  itinerary-item rows), opening `RecordResultDrawer` on trigger. That
+  drawer is a deliberately minimal capture form (rounds won, place, and
+  a "Post this result to my profile" checkbox) rather than reusing
+  `CompetitionResults.tsx`'s fuller name/date/location/notes form — it
+  `POST`s to the existing `/athletes/:id/competition-results` with
+  `event_id` set, then optionally `POST`s to `/athletes/:id/posts` with
+  `share_kind: "competition_result"` when the checkbox is checked. No
+  athlete picker is needed since the deep swipe is only ever reachable
+  on an athlete's own row (`disabled={e.my_status == null}` already
+  gates the whole `SwipeableRow` to `role === "athlete"` viewers).
+- **`my_result_place` on the event list.** `GET /api/events`' existing
+  `attachMyEventStatus` rollup (which computes `my_status` for the
+  signed-in athlete) now also attaches `my_result_place`: the athlete's
+  own most recently recorded `final_position` for that event, via
+  `SELECT DISTINCT ON (event_id) ... FROM nk_competition_results ...
+  ORDER BY event_id, created_at DESC` scoped to just that event's
+  competition rows — `null` for non-competition events, non-athlete
+  viewers, or a competition with no recorded result yet. Displayed as a
+  small 🏆 badge on the Schedule List tile.
+- **Three-segment chevron tile layout.** The List view's event row was
+  reshaped from a plain icon-square + content bar into three overlapping
+  chevron-cut segments (left type icon, center content — the largest of
+  the three, right result indicator), each clipped with a `clipPath`
+  polygon and pulled together with negative margins under a `isolate`
+  stacking context on the row (the same technique already used for the
+  bottom-nav profile tab's cut corner). The right segment only renders
+  when there's something to show — a 🏆 + place badge for a recorded
+  competition result (taking priority since it's more specific), else a
+  green "✓"/red "✗" mirroring `my_status`; a plain pending event with no
+  result renders no right segment at all, keeping the row's original
+  clean look. The inline ✓/✗ that used to sit next to the title was
+  removed since the right segment now carries that signal.
 
 ## Auth & RBAC
 

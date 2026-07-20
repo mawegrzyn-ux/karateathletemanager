@@ -316,7 +316,7 @@ async function attachEventAthleteStatus(user, event, eventAthletes) {
 // else's behalf isn't a supported gesture.
 async function attachMyEventStatus(user, events) {
   if (user.role !== "athlete" || !user.athlete_id || events.length === 0) {
-    return events.map((e) => ({ ...e, my_status: null }));
+    return events.map((e) => ({ ...e, my_status: null, my_result_place: null }));
   }
 
   const eventIds = events.map((e) => e.id);
@@ -341,6 +341,25 @@ async function attachMyEventStatus(user, events) {
   );
   const eventStatusByEvent = new Map(eventStatusRows.map((r) => [r.event_id, r.status]));
 
+  // The athlete's own most recent recorded place for a competition-type
+  // event, surfaced as a badge on the Schedule List view's tile (see the
+  // deep-swipe "Record result" gesture on that row) - only competition
+  // events carry one, and only ever the current athlete's own result.
+  const competitionEventIds = events
+    .filter((e) => e.event_type === "competition")
+    .map((e) => e.id);
+  const placeByEvent = new Map();
+  if (competitionEventIds.length > 0) {
+    const { rows: resultRows } = await pool.query(
+      `SELECT DISTINCT ON (event_id) event_id, final_position
+       FROM nk_competition_results
+       WHERE athlete_id = $1 AND event_id = ANY($2::int[])
+       ORDER BY event_id, created_at DESC`,
+      [user.athlete_id, competitionEventIds]
+    );
+    for (const r of resultRows) placeByEvent.set(r.event_id, r.final_position);
+  }
+
   return events.map((e) => {
     const agg = itemAggByEvent.get(e.id);
     let my_status = "pending";
@@ -350,7 +369,11 @@ async function attachMyEventStatus(user, events) {
     } else {
       my_status = eventStatusByEvent.get(e.id) ?? "pending";
     }
-    return { ...e, my_status };
+    return {
+      ...e,
+      my_status,
+      my_result_place: placeByEvent.get(e.id) ?? null,
+    };
   });
 }
 
