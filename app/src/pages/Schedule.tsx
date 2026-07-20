@@ -34,6 +34,7 @@ interface Event {
   end_date: string;
   start_time: string | null;
   end_time: string | null;
+  daily_times: boolean;
   location: string | null;
   venue_id: number | null;
   kata_id: number | null;
@@ -171,6 +172,7 @@ const EMPTY_FORM = {
   end_date: "",
   start_time: "",
   end_time: "",
+  daily_times: false,
   location: "",
   venue_id: null as number | null,
   notes: "",
@@ -209,6 +211,24 @@ function toDateInput(value: string) {
 
 function toTimeInput(value: string | null) {
   return value ? value.slice(0, 5) : "";
+}
+
+// Splits a JS Date into the same local date/time string shapes the
+// date/time inputs use, so a "now" (or "now + N hours") default can be
+// dropped straight into form state - used to pre-fill new event/item
+// start+end fields instead of leaving them blank.
+function splitLocalDateTime(d: Date) {
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+  const time = `${String(d.getHours()).padStart(2, "0")}:${String(
+    d.getMinutes()
+  ).padStart(2, "0")}`;
+  return { date, time };
+}
+
+function nowPlusHours(hours: number) {
+  return splitLocalDateTime(new Date(Date.now() + hours * 60 * 60 * 1000));
 }
 
 interface EventOccurrence {
@@ -301,6 +321,19 @@ function eventOverlapsDate(event: Event, dateStr: string) {
   return (
     toDateInput(event.start_date) <= dateStr && dateStr <= toDateInput(event.end_date)
   );
+}
+
+// Whether `event` should render as a timed block on `dateStr` (vs. an
+// all-day bar): always true for a same-day event with both times set;
+// for a multi-day event only when daily_times is on, since otherwise
+// start_time/end_time mark the boundaries of one continuous span rather
+// than a time slot repeated on every day it covers.
+function isTimedOnDate(event: Event, dateStr: string) {
+  if (!event.start_time || !event.end_time) return false;
+  if (toDateInput(event.start_date) === dateStr && toDateInput(event.end_date) === dateStr) {
+    return true;
+  }
+  return event.daily_times && eventOverlapsDate(event, dateStr);
 }
 
 // An event is overdue when the athlete never marked it complete/failed and
@@ -588,7 +621,16 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   }
 
   function openCreate() {
-    setForm({ ...EMPTY_FORM, club_id: clubs[0]?.id ?? null });
+    const start = splitLocalDateTime(new Date());
+    const end = nowPlusHours(2);
+    setForm({
+      ...EMPTY_FORM,
+      club_id: clubs[0]?.id ?? null,
+      start_date: start.date,
+      start_time: start.time,
+      end_date: end.date,
+      end_time: end.time,
+    });
     setFormAthleteIds([]);
     setDrawer("create");
   }
@@ -645,6 +687,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       end_date: toDateInput(event.end_date),
       start_time: toTimeInput(event.start_time),
       end_time: toTimeInput(event.end_time),
+      daily_times: event.daily_times,
       location: event.location ?? "",
       venue_id: event.venue_id,
       notes: event.notes ?? "",
@@ -841,8 +884,23 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                   {e.end_date !== e.start_date
                                     ? ` – ${toDateInput(e.end_date)}`
                                     : ""}
-                                  {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
-                                  {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
+                                  {occ.totalDays === 1 || e.daily_times ? (
+                                    <>
+                                      {e.start_time
+                                        ? ` ${toTimeInput(e.start_time)}`
+                                        : ""}
+                                      {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
+                                    </>
+                                  ) : (
+                                    <>
+                                      {occ.dayIndex === 1 && e.start_time
+                                        ? ` from ${toTimeInput(e.start_time)}`
+                                        : ""}
+                                      {occ.dayIndex === occ.totalDays && e.end_time
+                                        ? ` until ${toTimeInput(e.end_time)}`
+                                        : ""}
+                                    </>
+                                  )}
                                   {occ.totalDays > 1
                                     ? ` · Day ${occ.dayIndex} of ${occ.totalDays}`
                                     : ""}
@@ -985,6 +1043,18 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             onDateChange={(v) => setForm({ ...form, end_date: v })}
             onTimeChange={(v) => setForm({ ...form, end_time: v })}
           />
+          {form.start_date && form.end_date && form.start_date !== form.end_date && (
+            <label className="flex min-h-[44px] items-center gap-2 rounded-xl bg-stone-50 px-3 text-sm text-stone-700">
+              <input
+                type="checkbox"
+                checked={form.daily_times}
+                onChange={(e) =>
+                  setForm({ ...form, daily_times: e.target.checked })
+                }
+              />
+              Same start/end time every day (instead of one continuous span)
+            </label>
+          )}
           <Field label="Location">
             <input
               value={form.location}
@@ -1438,6 +1508,16 @@ function EventDetail({
             onDateChange={(v) => updateEvent({ end_date: v })}
             onTimeChange={(v) => updateEvent({ end_time: v || null })}
           />
+          {toDateInput(event.start_date) !== toDateInput(event.end_date) && (
+            <label className="flex min-h-[44px] items-center gap-2 rounded-xl bg-stone-50 px-3 text-sm text-stone-700">
+              <input
+                type="checkbox"
+                checked={event.daily_times}
+                onChange={(e) => updateEvent({ daily_times: e.target.checked })}
+              />
+              Same start/end time every day (instead of one continuous span)
+            </label>
+          )}
           <Field label="Location">
             <input
               defaultValue={event.location ?? ""}
@@ -1903,21 +1983,11 @@ function WeekView({
   const days = Array.from({ length: 7 }, (_, i) => addDaysStr(weekStart, i));
 
   function timedEventsFor(date: string) {
-    return events.filter(
-      (e) =>
-        toDateInput(e.start_date) === date &&
-        toDateInput(e.end_date) === date &&
-        e.start_time &&
-        e.end_time
-    );
+    return events.filter((e) => isTimedOnDate(e, date));
   }
 
   function allDayEventsFor(date: string) {
-    return events.filter(
-      (e) =>
-        eventOverlapsDate(e, date) &&
-        !(toDateInput(e.start_date) === date && toDateInput(e.end_date) === date && e.start_time && e.end_time)
-    );
+    return events.filter((e) => eventOverlapsDate(e, date) && !isTimedOnDate(e, date));
   }
 
   const gridHeight = (DAY_END_HOUR - DAY_START_HOUR + 1) * HOUR_HEIGHT;
@@ -2050,22 +2120,9 @@ function DayView({
     offsetMin: number;
   } | null>(null);
 
-  const timedEvents = events.filter(
-    (e) =>
-      toDateInput(e.start_date) === focusedDate &&
-      toDateInput(e.end_date) === focusedDate &&
-      e.start_time &&
-      e.end_time
-  );
+  const timedEvents = events.filter((e) => isTimedOnDate(e, focusedDate));
   const allDayEvents = events.filter(
-    (e) =>
-      eventOverlapsDate(e, focusedDate) &&
-      !(
-        toDateInput(e.start_date) === focusedDate &&
-        toDateInput(e.end_date) === focusedDate &&
-        e.start_time &&
-        e.end_time
-      )
+    (e) => eventOverlapsDate(e, focusedDate) && !isTimedOnDate(e, focusedDate)
   );
 
   const gridHeight = (DAY_END_HOUR - DAY_START_HOUR + 1) * HOUR_HEIGHT;
@@ -3218,7 +3275,23 @@ function ItemsSection({
       ) : (
         <button
           type="button"
-          onClick={() => setAdding(true)}
+          onClick={() => {
+            const start = splitLocalDateTime(new Date());
+            const end = nowPlusHours(2);
+            const itemDate =
+              start.date < eventStartDate
+                ? eventStartDate
+                : start.date > eventEndDate
+                  ? eventEndDate
+                  : start.date;
+            setAddForm({
+              ...EMPTY_ITEM_FORM,
+              item_date: itemDate,
+              start_time: start.time,
+              end_time: end.time,
+            });
+            setAdding(true);
+          }}
           className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700"
         >
           + Add itinerary item

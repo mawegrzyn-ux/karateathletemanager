@@ -15,7 +15,7 @@ const REPEAT_FREQS = ["daily", "weekly", "monthly"];
 const MAX_REPEAT_OCCURRENCES = 60;
 const STATUS_VALUES = ["pending", "completed", "failed"];
 
-const EVENT_FIELDS = `id, title, event_type, club_id, start_date, end_date, start_time, end_time, location, venue_id, kata_id, notes, training_module_id, recurrence_id, created_at`;
+const EVENT_FIELDS = `id, title, event_type, club_id, start_date, end_date, start_time, end_time, daily_times, location, venue_id, kata_id, notes, training_module_id, recurrence_id, created_at`;
 const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id, recurrence_id`;
 
 router.use(authorize());
@@ -501,6 +501,7 @@ router.post(
       end_date,
       start_time,
       end_time,
+      daily_times,
       location,
       venue_id,
       notes,
@@ -567,9 +568,9 @@ router.post(
         const occurrenceEnd = toDateStr(addUTCDays(occurrenceStart, spanDays));
         const { rows } = await client.query(
           `INSERT INTO nk_events
-             (title, event_type, club_id, start_date, end_date, start_time, end_time, location,
+             (title, event_type, club_id, start_date, end_date, start_time, end_time, daily_times, location,
               venue_id, kata_id, notes, training_module_id, recurrence_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
            RETURNING ${EVENT_FIELDS}`,
           [
             title,
@@ -579,6 +580,7 @@ router.post(
             occurrenceEnd,
             start_time ?? null,
             end_time ?? null,
+            daily_times === true,
             location,
             venue_id ?? null,
             event_type === "kata_performance" ? kata_id ?? null : null,
@@ -753,6 +755,7 @@ router.patch(
       end_date,
       start_time,
       end_time,
+      daily_times,
       location,
       venue_id,
       notes,
@@ -780,6 +783,7 @@ router.patch(
       end_date,
       start_time,
       end_time,
+      daily_times,
       location,
       venue_id,
       notes,

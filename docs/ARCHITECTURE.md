@@ -1046,6 +1046,33 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `suppressLazyLoadRef` guard for the duration of the jump, which the
   scroll-triggered `loadMorePast`/`loadMoreFuture` effect checks and
   skips while it's set.
+- **Multi-day events: one continuous span vs. daily-repeated times.**
+  `nk_events.daily_times` (boolean, default `false`) distinguishes the
+  two ways a multi-day event's `start_time`/`end_time` can be read: by
+  default they mark the boundaries of one continuous span (e.g. a
+  competition running Friday 9am straight through to Sunday 5pm) — List
+  view shows `start_time` only on day 1 ("from 09:00") and `end_time`
+  only on the last day ("until 17:00"), nothing on the days between, and
+  Day/Week view only ever renders it as an all-day bar, never a timed
+  block. Checking "Same start/end time every day" (shown in the create/
+  edit form only once `start_date !== end_date`) instead treats the same
+  `start_time`/`end_time` as an identical slot repeated on every day in
+  the range — List view shows the full time range on every occurrence,
+  and Day/Week view renders it as its own timed block each day (dragging
+  to reschedule on any one day still moves the shared `start_time`/
+  `end_time`, so it shifts identically on every day, since there's only
+  one pair of times stored for the whole event). `isTimedOnDate(event,
+  date)` is the single predicate every view's timed/all-day split now
+  goes through: true for a same-day event with both times set, or for a
+  multi-day one when `daily_times` is on and the date falls in its
+  range.
+- **New event/item forms pre-fill Start with now, End with now + 2h**
+  (`splitLocalDateTime`/`nowPlusHours` in `Schedule.tsx`) instead of
+  leaving the date/time fields blank — both the "New event" drawer and
+  an itinerary item's "+ Add itinerary item" form (the latter's date
+  clamped into the parent event's `start_date`/`end_date` range if "now"
+  falls outside it). Duplicating an existing event/item still copies its
+  original date/time instead, unaffected by this default.
 
 ## Auth & RBAC
 
