@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 import { ApiError, useApi } from "../hooks/useApi";
 import { Spinner } from "../components/ui";
 
@@ -18,12 +17,13 @@ interface ChatMessage {
 
 // Osu needs an Anthropic API key to actually talk to Claude - configured
 // from More > Configuration > Osu API key (see admin/OsuApiKey.tsx), not
-// here, so it's discoverable independent of ever landing on this page
-// first. `configured` starts undefined (loading) then flips to a real
-// boolean once GET .../anthropic-key resolves; the chat UI only renders
-// once it's true. A 409 from the chat endpoint itself (e.g. a key that
-// was removed after this page loaded) falls back to the same "not
-// configured" message as a defensive backstop.
+// here; this page only points there in text, it doesn't link to it, since
+// key management now lives solely under Configuration. `configured` starts
+// undefined (loading) then flips to a real boolean once GET
+// .../anthropic-key resolves; the chat UI only renders once it's true. A
+// 409 from the chat endpoint itself (e.g. a key that was removed after
+// this page loaded) falls back to the same "not configured" message as a
+// defensive backstop.
 export default function Osu() {
   const api = useApi();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -89,14 +89,9 @@ export default function Osu() {
         <h1 className="text-2xl font-bold tracking-tight">Osu 🥋</h1>
         <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-card">
           <p className="text-sm text-stone-600">
-            Osu needs an Anthropic API key before it can chat.
+            Osu needs an Anthropic API key before it can chat. Configure it
+            under More → Configuration → Osu API key.
           </p>
-          <Link
-            to="/admin/osu-api-key"
-            className="min-h-[44px] rounded-full bg-red-600 px-4 text-center font-medium leading-[44px] text-white"
-          >
-            Configure Osu API key
-          </Link>
         </div>
       </div>
     );
@@ -105,12 +100,7 @@ export default function Osu() {
   return (
     <div className="flex min-h-full flex-col">
       <div className="p-4 pb-0">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">Osu 🥋</h1>
-          <Link to="/admin/osu-api-key" className="text-sm font-medium text-red-700">
-            Update key
-          </Link>
-        </div>
+        <h1 className="text-2xl font-bold tracking-tight">Osu 🥋</h1>
         <p className="text-sm text-stone-600">
           Ask about clubs, athletes, pending sign-ups, or the schedule, search
           the web - or ask Osu to make a change for you.
