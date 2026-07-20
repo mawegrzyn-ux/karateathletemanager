@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { useApi } from "../hooks/useApi";
-import { Spinner, Avatar, BeltSwatch } from "./ui";
+import { Spinner, Avatar, BeltSwatch, DeleteButton } from "./ui";
 import { CompetitionResultsSection } from "./CompetitionResults";
+
+interface Parent {
+  id: number;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+}
 
 interface Athlete {
   id: number;
@@ -113,6 +120,51 @@ export function LinkParentPin({ athleteId }: { athleteId: number }) {
       >
         {pin ? "Generate new PIN" : "Generate PIN"}
       </button>
+    </div>
+  );
+}
+
+export function LinkedParents({ athleteId }: { athleteId: number }) {
+  const api = useApi();
+  const [parents, setParents] = useState<Parent[] | null>(null);
+
+  useEffect(() => {
+    api
+      .get<{ parents: Parent[] }>(`/athletes/${athleteId}/parents`)
+      .then((res) => setParents(res.parents))
+      .catch(() => setParents([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [athleteId]);
+
+  async function handleUnlink(parent: Parent) {
+    await api.del(`/athletes/${athleteId}/parents/${parent.id}`);
+    setParents((prev) => (prev ? prev.filter((p) => p.id !== parent.id) : prev));
+  }
+
+  if (!parents || parents.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-3">
+      <span className="text-sm font-medium text-stone-700">
+        Linked parents
+      </span>
+      {parents.map((p) => {
+        const name =
+          p.first_name || p.last_name
+            ? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim()
+            : p.email;
+        return (
+          <div key={p.id} className="flex items-center justify-between gap-2">
+            <span className="text-sm text-stone-600">{name}</span>
+            <DeleteButton
+              onClick={() => handleUnlink(p)}
+              itemLabel={name}
+              label="Unlink"
+              iconOnly
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -238,6 +290,7 @@ export function AthleteSelfProfile({ athleteId }: { athleteId: number }) {
 
       <CompetitionResultsSection athleteId={athlete.id} />
 
+      <LinkedParents athleteId={athlete.id} />
       <LinkParentPin athleteId={athlete.id} />
     </div>
   );

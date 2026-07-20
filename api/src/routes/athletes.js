@@ -246,6 +246,52 @@ router.post(
 );
 
 router.get(
+  "/:id/parents",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!req.user.is_admin && req.user.role !== "coach" && !isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT u.id, u.first_name, u.last_name, u.email
+       FROM nk_parent_athletes pa
+       JOIN nk_users u ON u.id = pa.user_id
+       WHERE pa.athlete_id = $1
+       ORDER BY u.last_name, u.first_name`,
+      [req.params.id]
+    );
+    res.json({ parents: rows });
+  })
+);
+
+// Athlete-initiated unlink - the parent-side equivalent lives at
+// DELETE /auth/my-children/:athleteId, deleting the same
+// nk_parent_athletes row from the other direction.
+router.delete(
+  "/:id/parents/:userId",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!req.user.is_admin && req.user.role !== "coach" && !isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rowCount } = await pool.query(
+      `DELETE FROM nk_parent_athletes WHERE athlete_id = $1 AND user_id = $2`,
+      [req.params.id, req.params.userId]
+    );
+    if (rowCount === 0) {
+      return res.status(404).json({ error: { message: "Link not found" } });
+    }
+    res.status(204).end();
+  })
+);
+
+router.get(
   "/:id/styles",
   asyncHandler(async (req, res) => {
     const isSelf =
