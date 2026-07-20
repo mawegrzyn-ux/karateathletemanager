@@ -6,6 +6,7 @@
 // behind authorize.requireAdmin.
 const { Router } = require("express");
 const Anthropic = require("@anthropic-ai/sdk");
+const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
 const asyncHandler = require("../utils/asyncHandler");
 const { tools, callTool } = require("../mcp/tools");
@@ -13,10 +14,31 @@ const { tools, callTool } = require("../mcp/tools");
 const router = Router();
 router.use(authorize.requireAdmin);
 
-const client = new Anthropic();
-
 const MODEL = "claude-opus-4-8";
 const MAX_TOOL_ITERATIONS = 8;
+
+// The key can be set at runtime via the admin "Configure Osu" form (stored
+// in nk_settings) rather than requiring a server redeploy with a new
+// api/.env - that's the whole reason this constructs the client lazily
+// per request instead of once at module load. Cached by key value so a
+// saved/rotated key takes effect on the very next request without a
+// restart, but repeat requests with the same key don't pay the DB round
+// trip.
+let cachedKey = null;
+let cachedClient = null;
+
+async function getClient() {
+  const { rows } = await pool.query(
+    `SELECT value FROM nk_settings WHERE key = 'anthropic_api_key'`
+  );
+  const key = rows[0]?.value || process.env.ANTHROPIC_API_KEY || null;
+  if (!key) return null;
+  if (key !== cachedKey) {
+    cachedKey = key;
+    cachedClient = new Anthropic({ apiKey: key });
+  }
+  return cachedClient;
+}
 
 const SYSTEM_PROMPT = `You are Osu, the admin assistant built into the Nada Karate Athlete Manager.
 You help club/association admins look up and manage clubs, athletes, pending
@@ -52,6 +74,16 @@ router.post(
           .status(400)
           .json({ error: { message: "Invalid message content" } });
       }
+    }
+
+    const client = await getClient();
+    if (!client) {
+      return res.status(409).json({
+        error: {
+          code: "not_configured",
+          message: "Osu isn't configured yet - add an Anthropic API key to get started.",
+        },
+      });
     }
 
     const conversation = messages.map((m) => ({
