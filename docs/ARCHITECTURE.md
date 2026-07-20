@@ -848,6 +848,23 @@ coach-run attendance) — this is personal athlete itinerary planning.
   reached via a floating "+" (`position: fixed`, bottom-right, above the
   bottom nav) rather than an always-open composer — tapping it opens the
   composer inside a `Drawer`.
+  **The hero scrim and bio section pick up a color theme sampled from the
+  athlete's own cover photo** (`app/src/lib/colorPalette.ts`,
+  `usePhotoPalette(photoUrl)`): a `<canvas>`-based extraction (no added
+  dependency) downscales the photo, converts pixels to HSL, and buckets
+  them into 24 hue buckets weighted by saturation (favoring vivid belt/gi/
+  background colors over skin tones and white gi fabric) to find the
+  dominant hue, falling back to the plain average when the photo is too
+  neutral/grayscale to have one. From that hue it derives a small, always-
+  readable palette — a dark shade for the hero gradient (with a WCAG-
+  contrast-picked white/black for the name/grade text over it), a light
+  tint for the bio section's background, and a darkened, readably-
+  saturated shade for the bio text color — rather than using the raw
+  extracted color directly, since a photo-sampled color has no contrast
+  guarantee on its own. Extraction is cached per photo URL (module-level
+  `Map`) and fails soft to the original neutral black-scrim look (no
+  theming) if the photo host doesn't send CORS headers (tainted canvas) or
+  there's no photo at all.
   **The athlete's own profile is view-only by default, and view mode
   shows only the hero photo, bio, and feed** — nothing else. A pencil
   button overlaid on the hero's top-right corner (shown only for
