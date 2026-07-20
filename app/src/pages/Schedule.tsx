@@ -354,6 +354,38 @@ function mergeEvents(prev: Event[] | null, incoming: Event[]) {
   return [...map.values()];
 }
 
+// Drives the "jump to today" scroll ourselves (repeatedly assigning
+// scrollTop across a rAF loop) instead of Element.scrollIntoView({behavior:
+// "smooth"}) - that native API has long-standing WebKit/iOS Safari bugs
+// where it silently no-ops or gets fought by in-progress momentum
+// scrolling, which is exactly the "arrow does nothing" failure mode this
+// replaces. Resolves once the animation completes so the caller knows
+// precisely when it's safe to resume lazy-loading, rather than having to
+// guess from scroll-idle heuristics.
+function animateScrollTop(
+  container: HTMLElement,
+  targetTop: number,
+  duration = 450
+): Promise<void> {
+  const startTop = container.scrollTop;
+  const delta = targetTop - startTop;
+  if (Math.abs(delta) < 1) {
+    container.scrollTop = targetTop;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const startTime = performance.now();
+    function step(now: number) {
+      const t = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      container.scrollTop = startTop + delta * eased;
+      if (t < 1) requestAnimationFrame(step);
+      else resolve();
+    }
+    requestAnimationFrame(step);
+  });
+}
+
 function timeToMinutes(t: string | null) {
   if (!t) return null;
   const [h, m] = t.slice(0, 5).split(":").map(Number);
@@ -442,7 +474,6 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [loadingPast, setLoadingPast] = useState(false);
   const [loadingFuture, setLoadingFuture] = useState(false);
   const suppressLazyLoadRef = useRef(false);
-  const suppressLazyLoadTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const filteredEvents = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -483,32 +514,52 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     });
   }
 
+  const scrollAnimationIdRef = useRef(0);
+
+  // The section's scroll-mt-[190px] (below) keeps the sticky search/filter
+  // header from covering the target when the browser itself drives the
+  // scroll (e.g. focus scrolling); doing it manually here needs the same
+  // offset applied by hand since a raw scrollTop assignment doesn't consult
+  // CSS scroll-margin.
+  const STICKY_HEADER_OFFSET = 190;
+
   function scrollToToday(behavior: ScrollBehavior = "smooth") {
     const today = todayStr();
     const groups = groupOccurrencesByDate(expandEventsForList(filteredEvents));
     const target =
       groups.find((g) => g.date >= today) ?? groups[groups.length - 1];
     const el = target && sectionRefs.current[target.date];
-    if (!el) return;
-    if (behavior === "smooth") {
-      // Jumping back to today from far in the future has to scroll back
-      // past the near-top lazy-load threshold on the way there; without
-      // this guard that fires loadMorePast() mid-animation, prepending
-      // more days above and throwing off where the in-progress smooth
-      // scroll actually lands. Lifted by the scroll-idle detector in the
-      // effect below once the animation actually settles (a native
-      // smooth scroll's duration isn't fixed - it scales with distance -
-      // so a flat timeout here would either cut in too early on a long
-      // jump or hold the lazy-load thresholds off for no reason on a
-      // short one); the timeout is just a safety net in case scroll
-      // events stop arriving for some other reason.
-      suppressLazyLoadRef.current = true;
-      window.clearTimeout(suppressLazyLoadTimeoutRef.current);
-      suppressLazyLoadTimeoutRef.current = window.setTimeout(() => {
-        suppressLazyLoadRef.current = false;
-      }, 4000);
+    const container = document.querySelector("main");
+    if (!el || !container) return;
+
+    const targetTop = Math.max(
+      0,
+      Math.min(
+        container.scrollTop +
+          (el.getBoundingClientRect().top - container.getBoundingClientRect().top) -
+          STICKY_HEADER_OFFSET,
+        container.scrollHeight - container.clientHeight
+      )
+    );
+
+    if (behavior === "auto") {
+      container.scrollTop = targetTop;
+      return;
     }
-    el.scrollIntoView({ behavior, block: "start" });
+
+    // Jumping back to today from far in the future has to scroll back past
+    // the near-top lazy-load threshold on the way there; without this guard
+    // that fires loadMorePast() mid-animation, prepending more days above
+    // and throwing off where the in-progress scroll actually lands. Cleared
+    // as soon as our own animation (below) reports it's finished, rather
+    // than guessing from scroll-idle heuristics.
+    const animationId = ++scrollAnimationIdRef.current;
+    suppressLazyLoadRef.current = true;
+    animateScrollTop(container, targetTop).then(() => {
+      if (scrollAnimationIdRef.current === animationId) {
+        suppressLazyLoadRef.current = false;
+      }
+    });
   }
 
   useEffect(() => {
@@ -538,21 +589,12 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     const container = document.querySelector("main");
     if (!container) return;
 
-    let idleTimer: ReturnType<typeof setTimeout> | undefined;
-
     function onScroll() {
       if (!container) return;
-      if (suppressLazyLoadRef.current) {
-        // Still mid-jump from scrollToToday's programmatic scroll; a
-        // native smooth scroll's duration scales with distance, so
-        // rather than guessing when it's done, treat "no more scroll
-        // events for a beat" as done and resume the thresholds then.
-        window.clearTimeout(idleTimer);
-        idleTimer = window.setTimeout(() => {
-          suppressLazyLoadRef.current = false;
-        }, 150);
-        return;
-      }
+      // Still mid-jump from scrollToToday's own animation - it clears this
+      // flag itself the instant that animation finishes, so there's no
+      // timing to guess here.
+      if (suppressLazyLoadRef.current) return;
       const { scrollTop, scrollHeight, clientHeight } = container;
       if (scrollTop < 150) loadMorePast();
       if (scrollHeight - scrollTop - clientHeight < 150) loadMoreFuture();
@@ -560,7 +602,6 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     container.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       container.removeEventListener("scroll", onScroll);
-      window.clearTimeout(idleTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode]);

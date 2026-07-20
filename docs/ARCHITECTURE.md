@@ -471,9 +471,11 @@ coach-run attendance) — this is personal athlete itinerary planning.
     + the all-day strip sit in normal flow *above* a separately bounded
     hour-grid box (`max-h-[60vh] overflow-auto`) — only that inner box
     scrolls, so the nav and headers never need their own `sticky` offset
-    math. List-view date-section elements carry `scroll-mt-[190px]` so
-    `scrollToToday`'s `scrollIntoView` lands below the sticky bar instead
-    of underneath it.
+    math. List-view date-section elements carry `scroll-mt-[190px]` (also
+    replicated by hand as `scrollToToday`'s `STICKY_HEADER_OFFSET`, since
+    its own scroll animation sets `scrollTop` directly rather than going
+    through a native API that would read `scroll-margin` for it) so
+    jumping to today lands below the sticky bar instead of underneath it.
 - **Training modules**: `nk_training_modules` (`title`, `explanation`) is
   a reusable library of session plans a coach or admin authors. Each
   plan is an ordered sequence of `nk_training_module_items`
@@ -1056,17 +1058,28 @@ coach-run attendance) — this is personal athlete itinerary planning.
   The floating ↑ button's `scrollToToday` computes its target from the
   same `filteredEvents` the list actually renders (previously used the
   unfiltered `events`, which could disagree with the rendered section
-  refs when a search/type filter was active). More importantly: jumping
-  back to today from deep in the future has to smooth-scroll back past
-  the list's own near-top lazy-load threshold on the way there, which
-  fired `loadMorePast()` mid-animation — prepending more days above and
-  throwing off where the in-progress scroll actually landed. (This is
-  why it "worked" when already viewing past events: scrolling forward
-  toward today only crosses the near-*bottom* threshold, which is far
-  away and never triggers.) `scrollToToday` now sets a
-  `suppressLazyLoadRef` guard for the duration of the jump, which the
-  scroll-triggered `loadMorePast`/`loadMoreFuture` effect checks and
-  skips while it's set.
+  refs when a search/type filter was active). It also no longer uses
+  `Element.scrollIntoView({behavior: "smooth"})` — that native API has
+  long-standing WebKit/iOS Safari bugs where it silently no-ops or gets
+  fought by in-progress momentum scrolling, which is consistent with
+  reports of the button doing nothing on a real phone despite working in
+  every desktop-browser repro. `animateScrollTop` (module-level helper)
+  drives the scroll itself instead: a plain `requestAnimationFrame` loop
+  that repeatedly assigns `container.scrollTop` toward a manually
+  computed target (the section's offset from the container, minus the
+  sticky header's height, clamped to the container's actual scroll
+  range) — no native smooth-scroll API involved, so nothing to silently
+  fail. It also resolves a promise the instant the animation actually
+  finishes, which `scrollToToday` uses to clear its
+  `suppressLazyLoadRef` guard precisely on completion instead of via a
+  scroll-idle heuristic — that guard still exists because jumping back
+  to today from deep in the future has to cross the list's own near-top
+  lazy-load threshold on the way there, which would otherwise fire
+  `loadMorePast()` mid-animation and throw off where the in-progress
+  scroll lands. (This is also why it only ever affected the
+  future-to-today direction: scrolling forward toward today only
+  crosses the near-*bottom* threshold, which is far away and never
+  triggers.)
 - **Multi-day events: one continuous span vs. daily-repeated times.**
   `nk_events.daily_times` (boolean, default `false`) distinguishes the
   two ways a multi-day event's `start_time`/`end_time` can be read: by
