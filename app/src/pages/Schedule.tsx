@@ -43,6 +43,7 @@ interface Event {
   recurrence_id: string | null;
   athlete_status: AthleteStatus[];
   my_status: CompletionStatus | null;
+  my_result_place: string | null;
 }
 
 interface AthleteStatus {
@@ -445,6 +446,7 @@ export default function Schedule() {
 
 function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const api = useApi();
+  const { user } = useAuth();
   const [events, setEvents] = useState<Event[] | null>(null);
   const [athletes, setAthletes] = useState<Person[]>([]);
   const [modules, setModules] = useState<TrainingModule[]>([]);
@@ -459,6 +461,9 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set());
   const [typeFilterDrawerOpen, setTypeFilterDrawerOpen] = useState(false);
   const [drawer, setDrawer] = useState<"closed" | "create" | Event>("closed");
+  const [resultDrawerEvent, setResultDrawerEvent] = useState<Event | null>(
+    null
+  );
   const [form, setForm] = useState(EMPTY_FORM);
   const [formAthleteIds, setFormAthleteIds] = useState<number[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "day" | "week" | "month">(
@@ -972,30 +977,46 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                       disabled={e.my_status == null}
                       onSwipeComplete={() => swipeEventStatus(e, "completed")}
                       onSwipeFailed={() => swipeEventStatus(e, "failed")}
+                      deepSwipeAction={
+                        e.event_type === "competition"
+                          ? {
+                              label: "🏆 Record result",
+                              onTrigger: () => setResultDrawerEvent(e),
+                            }
+                          : undefined
+                      }
                     >
                       {(() => {
                         const info = typeInfo(eventTypes, e.club_id, e.event_type);
+                        const showTrophy =
+                          e.event_type === "competition" && e.my_result_place;
                         return (
-                          <div className="flex overflow-hidden rounded-md shadow-card">
+                          <div className="isolate flex overflow-hidden rounded-md shadow-card">
                             {isOverdue(e) ? (
                               <div
                                 aria-hidden
-                                className="flex w-12 shrink-0 items-center justify-center bg-red-600 text-5xl font-black leading-none text-red-50"
+                                className="relative z-10 flex w-12 shrink-0 items-center justify-center bg-red-600 text-5xl font-black leading-none text-red-50"
+                                style={{
+                                  clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
+                                }}
                               >
                                 !
                               </div>
                             ) : (
                               <div
                                 aria-hidden
-                                className="flex w-12 shrink-0 items-center justify-center text-xl"
-                                style={{ backgroundColor: info.bg_color }}
+                                className="relative z-10 flex w-12 shrink-0 items-center justify-center text-xl"
+                                style={{
+                                  backgroundColor: info.bg_color,
+                                  clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
+                                }}
                               >
                                 {info.icon}
                               </div>
                             )}
                             <button
                               onClick={() => setDrawer(e)}
-                              className={`flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 px-4 py-3 text-left ${
+                              className={`-ml-3 flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 py-3 pl-5 pr-4 text-left ${
                                 e.my_status === "failed"
                                   ? "bg-red-50"
                                   : e.my_status === "completed"
@@ -1003,25 +1024,17 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                   : "bg-white"
                               }`}
                             >
-                              <div className="flex w-full items-center justify-between gap-2">
-                                <span
-                                  className={`font-medium ${
-                                    e.my_status === "completed"
-                                      ? "line-through text-stone-400"
-                                      : e.my_status === "failed"
-                                      ? "text-red-700"
-                                      : ""
-                                  }`}
-                                >
-                                  {e.title}
-                                </span>
-                                {e.my_status === "completed" && (
-                                  <span className="shrink-0 text-green-600">✓</span>
-                                )}
-                                {e.my_status === "failed" && (
-                                  <span className="shrink-0 text-red-600">✗</span>
-                                )}
-                              </div>
+                              <span
+                                className={`font-medium ${
+                                  e.my_status === "completed"
+                                    ? "line-through text-stone-400"
+                                    : e.my_status === "failed"
+                                    ? "text-red-700"
+                                    : ""
+                                }`}
+                              >
+                                {e.title}
+                              </span>
                               <div className="flex items-center gap-2">
                                 <Badge>{info.label}</Badge>
                                 <span className="text-xs text-stone-500">
@@ -1046,6 +1059,36 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                 </span>
                               </div>
                             </button>
+                            {(showTrophy ||
+                              e.my_status === "completed" ||
+                              e.my_status === "failed") && (
+                              <div
+                                aria-hidden
+                                className={`relative z-10 -ml-3 flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 text-center ${
+                                  showTrophy
+                                    ? "bg-amber-100 text-amber-800"
+                                    : e.my_status === "completed"
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-red-100 text-red-700"
+                                }`}
+                                style={{
+                                  clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%)",
+                                }}
+                              >
+                                {showTrophy ? (
+                                  <>
+                                    <span className="text-base leading-none">🏆</span>
+                                    <span className="text-[10px] font-semibold leading-none">
+                                      {e.my_result_place}
+                                    </span>
+                                  </>
+                                ) : e.my_status === "completed" ? (
+                                  <span className="text-xl leading-none">✓</span>
+                                ) : (
+                                  <span className="text-xl leading-none">✗</span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })()}
@@ -1453,6 +1496,25 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           />
         )}
       </Drawer>
+
+      <RecordResultDrawer
+        event={resultDrawerEvent}
+        athleteId={user?.athlete_id ?? null}
+        onClose={() => setResultDrawerEvent(null)}
+        onSaved={(place) => {
+          if (resultDrawerEvent) {
+            const savedId = resultDrawerEvent.id;
+            setEvents((prev) =>
+              prev
+                ? prev.map((e) =>
+                    e.id === savedId ? { ...e, my_result_place: place } : e
+                  )
+                : prev
+            );
+          }
+          setResultDrawerEvent(null);
+        }}
+      />
     </div>
   );
 }
@@ -2495,6 +2557,7 @@ function venueLabel(v: Venue) {
 }
 
 const SWIPE_THRESHOLD = 64;
+const DEEP_SWIPE_THRESHOLD = 168;
 const DISABLED_SWIPE_MAX = 180;
 
 // Wraps a row with horizontal swipe-to-flag: swipe left calls onSwipeComplete,
@@ -2504,6 +2567,13 @@ const DISABLED_SWIPE_MAX = 180;
 // still tracks and reveals `disabledMessage` behind the row instead of the
 // ✓/✗ hint, growing with drag distance so the message can be read - but
 // releasing never fires onSwipeComplete/onSwipeFailed.
+//
+// `deepSwipeAction` (competition events only, see the List view) adds a
+// second, deeper zone on the same left-swipe gesture: past
+// DEEP_SWIPE_THRESHOLD the ✓/complete hint morphs into the deep action's own
+// label/color, and releasing there fires it instead of onSwipeComplete -
+// exposed progressively as the user keeps dragging rather than as a
+// separate gesture, so there's nothing to discover except "keep swiping".
 function SwipeableRow({
   children,
   onSwipeComplete,
@@ -2511,6 +2581,7 @@ function SwipeableRow({
   disabled,
   disabledMessage = "Only athletes can swipe",
   className,
+  deepSwipeAction,
 }: {
   children: ReactNode;
   onSwipeComplete: () => void;
@@ -2518,6 +2589,7 @@ function SwipeableRow({
   disabled?: boolean;
   disabledMessage?: string;
   className?: string;
+  deepSwipeAction?: { label: string; onTrigger: () => void };
 }) {
   const [dragX, setDragX] = useState(0);
   const startXRef = useRef<number | null>(null);
@@ -2533,24 +2605,35 @@ function SwipeableRow({
     if (startXRef.current == null) return;
     const delta = e.clientX - startXRef.current;
     if (Math.abs(delta) > 8) draggedRef.current = true;
+    const max = deepSwipeAction ? DEEP_SWIPE_THRESHOLD + 40 : Infinity;
     setDragX(
       disabled
         ? Math.max(-DISABLED_SWIPE_MAX, Math.min(DISABLED_SWIPE_MAX, delta))
-        : delta
+        : Math.max(-max, Math.min(max, delta))
     );
   }
 
   function onPointerUp() {
     if (startXRef.current == null) return;
     if (!disabled) {
-      if (dragX <= -SWIPE_THRESHOLD) onSwipeComplete();
-      else if (dragX >= SWIPE_THRESHOLD) onSwipeFailed();
+      if (deepSwipeAction && dragX <= -DEEP_SWIPE_THRESHOLD) {
+        deepSwipeAction.onTrigger();
+      } else if (dragX <= -SWIPE_THRESHOLD) {
+        onSwipeComplete();
+      } else if (dragX >= SWIPE_THRESHOLD) {
+        onSwipeFailed();
+      }
     }
     setDragX(0);
     startXRef.current = null;
   }
 
-  const hintWidth = disabled ? Math.abs(dragX) : SWIPE_THRESHOLD;
+  const pastDeep = !!deepSwipeAction && dragX <= -DEEP_SWIPE_THRESHOLD;
+  const hintWidth = disabled
+    ? Math.abs(dragX)
+    : deepSwipeAction && dragX < 0
+    ? Math.min(Math.abs(dragX), DEEP_SWIPE_THRESHOLD + 40)
+    : SWIPE_THRESHOLD;
   const hintOpacity = disabled
     ? Math.min(1, Math.abs(dragX) / 40)
     : Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD);
@@ -2563,11 +2646,15 @@ function SwipeableRow({
           right-0 (and vice versa for ✗/failed at left-0). */}
       <div
         className={`pointer-events-none absolute inset-y-0 right-0 flex items-center justify-center overflow-hidden px-2 text-center text-xs font-medium ${
-          disabled ? "bg-stone-200 text-stone-600" : "bg-green-100 text-green-700"
+          disabled
+            ? "bg-stone-200 text-stone-600"
+            : pastDeep
+            ? "bg-amber-100 text-amber-800"
+            : "bg-green-100 text-green-700"
         }`}
         style={{ opacity: dragX < 0 ? hintOpacity : 0, width: hintWidth }}
       >
-        {disabled ? disabledMessage : "✓"}
+        {disabled ? disabledMessage : pastDeep ? deepSwipeAction!.label : "✓"}
       </div>
       <div
         className={`pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center overflow-hidden px-2 text-center text-xs font-medium ${
@@ -2598,6 +2685,104 @@ function SwipeableRow({
         {children}
       </div>
     </div>
+  );
+}
+
+// The deep-swipe "Record result" quick composer for a competition-type
+// event, opened from its List view row (see SwipeableRow's deepSwipeAction
+// above). Deliberately minimal - just rounds won and place, not the full
+// EventCompetitionResults form - since this is meant as a fast one-tap
+// capture right after the swipe; a fuller record (location/notes) can
+// still be added from the event's own detail drawer. Posting to the
+// athlete's profile is a separate explicit opt-in, not the default,
+// mirroring how sharing works everywhere else in the app.
+function RecordResultDrawer({
+  event,
+  athleteId,
+  onClose,
+  onSaved,
+}: {
+  event: Event | null;
+  athleteId: number | null;
+  onClose: () => void;
+  onSaved: (place: string | null) => void;
+}) {
+  const api = useApi();
+  const [roundsWon, setRoundsWon] = useState("");
+  const [place, setPlace] = useState("");
+  const [postToProfile, setPostToProfile] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setRoundsWon("");
+    setPlace("");
+    setPostToProfile(false);
+  }, [event?.id]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!event || !athleteId || submitting) return;
+    setSubmitting(true);
+    try {
+      const { result } = await api.post<{ result: { id: number } }>(
+        `/athletes/${athleteId}/competition-results`,
+        {
+          competition_name: event.title,
+          competition_date: event.start_date,
+          rounds_completed: roundsWon ? Number(roundsWon) : null,
+          final_position: place.trim() || null,
+          event_id: event.id,
+        }
+      );
+      if (postToProfile) {
+        await api.post(`/athletes/${athleteId}/posts`, {
+          share_kind: "competition_result",
+          share_id: result.id,
+        });
+      }
+      onSaved(place.trim() || null);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Drawer open={event !== null} onClose={onClose} title="Record result">
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <Field label="Rounds won">
+          <input
+            type="number"
+            min={0}
+            value={roundsWon}
+            onChange={(e) => setRoundsWon(e.target.value)}
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+          />
+        </Field>
+        <Field label="Place">
+          <input
+            value={place}
+            onChange={(e) => setPlace(e.target.value)}
+            placeholder="e.g. 1st, Gold, Semifinal"
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+          />
+        </Field>
+        <label className="flex min-h-[44px] items-center gap-2 rounded-xl bg-stone-50 px-3 text-sm text-stone-700">
+          <input
+            type="checkbox"
+            checked={postToProfile}
+            onChange={(e) => setPostToProfile(e.target.checked)}
+          />
+          Post this result to my profile
+        </label>
+        <button
+          type="submit"
+          disabled={submitting}
+          className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+        >
+          {submitting ? "Saving..." : "Save result"}
+        </button>
+      </form>
+    </Drawer>
   );
 }
 
