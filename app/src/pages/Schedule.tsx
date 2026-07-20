@@ -1013,24 +1013,18 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                               <div className="flex items-center gap-2">
                                 <Badge>{info.label}</Badge>
                                 <span className="text-xs text-stone-500">
-                                  {toDateInput(e.start_date)}
-                                  {e.end_date !== e.start_date
-                                    ? ` – ${toDateInput(e.end_date)}`
-                                    : ""}
                                   {occ.totalDays === 1 || e.daily_times ? (
                                     <>
-                                      {e.start_time
-                                        ? ` ${toTimeInput(e.start_time)}`
-                                        : ""}
+                                      {e.start_time ? toTimeInput(e.start_time) : ""}
                                       {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
                                     </>
                                   ) : (
                                     <>
                                       {occ.dayIndex === 1 && e.start_time
-                                        ? ` from ${toTimeInput(e.start_time)}`
+                                        ? `from ${toTimeInput(e.start_time)}`
                                         : ""}
                                       {occ.dayIndex === occ.totalDays && e.end_time
-                                        ? ` until ${toTimeInput(e.end_time)}`
+                                        ? `until ${toTimeInput(e.end_time)}`
                                         : ""}
                                     </>
                                   )}
