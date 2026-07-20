@@ -880,9 +880,7 @@ const migrations = [
   // share_kind identifies which of the four nullable share_* columns is
   // populated. Only one athlete_posts table backs all four kinds rather
   // than one table per kind, since a post is a post regardless of what
-  // (if anything) it links to; ON DELETE SET NULL keeps the post itself
-  // around (falling back to a plain note) if the shared record is later
-  // deleted, rather than cascading the deletion into someone's feed.
+  // (if anything) it links to.
   `ALTER TABLE nk_athletes ADD COLUMN IF NOT EXISTS bio TEXT`,
   `ALTER TABLE nk_athletes ADD COLUMN IF NOT EXISTS is_public_profile BOOLEAN NOT NULL DEFAULT false`,
   `CREATE TABLE IF NOT EXISTS nk_athlete_posts (
@@ -980,6 +978,30 @@ const migrations = [
   // every day in the range, rendering as its own timed block each day
   // (like a recurring daily session) rather than one all-day bar.
   `ALTER TABLE nk_events ADD COLUMN IF NOT EXISTS daily_times BOOLEAN NOT NULL DEFAULT false`,
+
+  // A shared post's share_*_id columns originally used ON DELETE SET NULL
+  // so deleting the underlying event/item/grading/competition-result left
+  // the post itself in place - in practice this just leaves a "blank"
+  // post behind (header row, no body, no image, no share badge, since
+  // ShareBadge has nothing to render once the joined row is gone) rather
+  // than a usable fallback. Switched to CASCADE so deleting the shared
+  // record removes the post that shared it instead of orphaning it -
+  // constraint names are Postgres's own default (`<table>_<column>_fkey`)
+  // for an inline REFERENCES clause, confirmed via pg_constraint, so the
+  // DROP below targets the right one; safe to rerun every deploy since
+  // the DROP happens before the ADD each time.
+  `ALTER TABLE nk_athlete_posts DROP CONSTRAINT IF EXISTS nk_athlete_posts_share_event_id_fkey`,
+  `ALTER TABLE nk_athlete_posts ADD CONSTRAINT nk_athlete_posts_share_event_id_fkey
+     FOREIGN KEY (share_event_id) REFERENCES nk_events(id) ON DELETE CASCADE`,
+  `ALTER TABLE nk_athlete_posts DROP CONSTRAINT IF EXISTS nk_athlete_posts_share_event_item_id_fkey`,
+  `ALTER TABLE nk_athlete_posts ADD CONSTRAINT nk_athlete_posts_share_event_item_id_fkey
+     FOREIGN KEY (share_event_item_id) REFERENCES nk_event_items(id) ON DELETE CASCADE`,
+  `ALTER TABLE nk_athlete_posts DROP CONSTRAINT IF EXISTS nk_athlete_posts_share_grading_id_fkey`,
+  `ALTER TABLE nk_athlete_posts ADD CONSTRAINT nk_athlete_posts_share_grading_id_fkey
+     FOREIGN KEY (share_grading_id) REFERENCES nk_grades(id) ON DELETE CASCADE`,
+  `ALTER TABLE nk_athlete_posts DROP CONSTRAINT IF EXISTS nk_athlete_posts_share_competition_result_id_fkey`,
+  `ALTER TABLE nk_athlete_posts ADD CONSTRAINT nk_athlete_posts_share_competition_result_id_fkey
+     FOREIGN KEY (share_competition_result_id) REFERENCES nk_competition_results(id) ON DELETE CASCADE`,
 ];
 
 async function migrate() {

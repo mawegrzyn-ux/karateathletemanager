@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, useApi } from "../hooks/useApi";
 import { Spinner } from "../components/ui";
+import { renderFormattedText } from "../utils/formatText";
 
 interface ToolAction {
   name: string;
@@ -129,7 +130,7 @@ export default function Osu() {
                     : "bg-white text-stone-800"
                 }`}
               >
-                {m.content}
+                {renderFormattedText(m.content)}
               </div>
               {m.actions && m.actions.length > 0 && (
                 <div className="flex flex-wrap gap-1">

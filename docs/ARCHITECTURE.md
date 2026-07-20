@@ -766,6 +766,17 @@ coach-run attendance) — this is personal athlete itinerary planning.
   are what's left - capturing or viewing a result in the context of one
   athlete's profile or one schedule item, via the existing
   `/athletes/:id/competition-results` endpoints.
+- **Fixed: deleting a shared record left a blank post behind.** A post's
+  four `share_*_id` columns (`nk_athlete_posts`) originally used
+  `ON DELETE SET NULL`, so deleting the event/item/grading/competition-
+  result it shared didn't touch the post itself - but `ShareBadge` has
+  nothing left to render once the joined row is gone, so the post just
+  sat in the feed as a bare header with no content, no photo, no way to
+  tell what it used to be about. All four now use `ON DELETE CASCADE`
+  instead, so deleting the shared record removes the post that shared it
+  too (constraint names are Postgres's own default for an inline
+  `REFERENCES` clause, so the migration drops-then-adds each by that
+  known name, confirmed via `pg_constraint` before writing it).
 - **Athlete social profile**: `nk_athletes.bio` (text) and
   `is_public_profile` (boolean, default false) plus `nk_athlete_posts` — a
   Facebook-style feed an athlete can post freeform notes to (`body`/
@@ -863,14 +874,23 @@ coach-run attendance) — this is personal athlete itinerary planning.
   of "Post"), and delete reuses the shared `DeleteButton` in its new
   `iconOnly` form (🗑 only, no text/border pill) rather than a bespoke
   control, so it keeps the same confirm-modal double-confirmation every
-  other delete in the app gets. The composer itself has a "Title"
-  input plus a minimal Bold/Italic toolbar: the buttons wrap the
-  textarea's current selection in `**`/`*` markers (a small, deliberately
-  non-rich-text "WYSIWYG-lite" — no editor dependency, no HTML), and
-  `renderFormattedBody` turns those markers back into `<strong>`/`<em>`
-  at render time by parsing the two known patterns into React elements
-  (never `dangerouslySetInnerHTML`, so a post body can't inject arbitrary
-  markup).
+  other delete in the app gets. The edit/delete icon pair is `z-10` so it
+  reliably stacks above the header row immediately below it — that row's
+  own cut-out-tab wrapper is a later, unpositioned sibling spanning the
+  card's full width (via `-mx-4`), so without an explicit z-index it was
+  intercepting clicks meant for the icons in their shared top-right
+  corner despite rendering visually underneath them. The composer itself
+  has a "Title" input plus a minimal Bold/Italic toolbar: the buttons
+  wrap the textarea's current selection in `**`/`*` markers (a small,
+  deliberately non-rich-text "WYSIWYG-lite" — no editor dependency, no
+  HTML). `renderFormattedText` (`utils/formatText.tsx`) turns `**bold**`,
+  `*italic*`, and `` `code` `` back into real elements at render time by
+  parsing those patterns into React elements (never
+  `dangerouslySetInnerHTML`, so a post body can't inject arbitrary
+  markup) — shared with Osu's chat window (`Osu.tsx`) since Claude's
+  replies routinely contain the same markdown even though nothing there
+  prompts a user to type it, so without this its `**`/`` ` `` markers
+  showed up literally instead of rendering.
 - **Events and itinerary items share one type set**: no more hardcoded
   `EVENT_TYPES`/`ITEM_TYPES` arrays — event and item types are now the
   per-club `nk_event_types` rows described below, and both event and item
@@ -1095,6 +1115,15 @@ coach-run attendance) — this is personal athlete itinerary planning.
   only ever reachable on an athlete's own row
   (`disabled={e.my_status == null}` already gates the whole
   `SwipeableRow` to `role === "athlete"` viewers).
+  **Fixed: a photo picked right before tapping "Save result" could get
+  silently dropped** — `MediaField`'s upload is async (`uploadFile`
+  await), and nothing previously stopped the form from submitting while
+  it was still in flight, so `photoUrl` was still empty at submit time if
+  the athlete tapped Save before the "Uploading…" state resolved.
+  `MediaField` gained an optional `onUploadingChange` callback (fired
+  around its existing `uploading` state) that `RecordResultDrawer` uses
+  to disable Save (showing "Uploading photo..." on the button) for as
+  long as an upload is in progress.
 - **`my_result_place` on the event list.** `GET /api/events`' existing
   `attachMyEventStatus` rollup (which computes `my_status` for the
   signed-in athlete) now also attaches `my_result_place`: the athlete's
