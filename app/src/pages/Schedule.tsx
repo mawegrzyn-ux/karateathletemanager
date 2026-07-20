@@ -1029,7 +1029,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                               <span
                                 className={`font-medium ${
                                   e.my_status === "completed"
-                                    ? "line-through text-stone-400"
+                                    ? "text-green-300"
                                     : e.my_status === "failed"
                                     ? "text-red-700"
                                     : ""
@@ -2845,7 +2845,7 @@ function AthleteStatusList({
                 to={`/athletes/${s.athlete_id}/profile`}
                 className={
                   s.status === "completed"
-                    ? "line-through text-stone-400"
+                    ? "text-green-300"
                     : s.status === "failed"
                     ? "text-red-700"
                     : "underline decoration-dotted underline-offset-2"
@@ -3164,7 +3164,7 @@ function ItemsSection({
                       <span
                         className={
                           myEffectiveStatus === "completed"
-                            ? "line-through text-stone-400"
+                            ? "text-green-300"
                             : myEffectiveStatus === "failed"
                             ? "text-red-700"
                             : ""

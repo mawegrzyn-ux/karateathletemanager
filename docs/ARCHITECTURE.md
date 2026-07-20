@@ -1002,6 +1002,14 @@ coach-run attendance) — this is personal athlete itinerary planning.
   when `event.my_status === "failed"` (plain white otherwise) — the same
   reddish background an item row gets, just applied one level up, at the
   event row itself.
+- **Completed title: tinted, not struck through.** All three places a
+  title/name reflects `"completed"` status (the List view tile, the
+  coach/admin `AthleteStatusList` roster, and an itinerary item row in
+  `ItemsSection`) render it `text-green-300` rather than
+  `line-through text-stone-400` — a soft green close to its own
+  `bg-green-50` tint (still legible, just deliberately low-contrast)
+  instead of a strikethrough, so a completed item reads as "faded into
+  the done state" rather than "crossed off."
 - **Combined date+time picker**: `DateTimeField` (`components/ui.tsx`)
   replaces the old side-by-side date-`<input>` + time-`<input>` pair
   everywhere both are edited together (event create/edit, itinerary item
