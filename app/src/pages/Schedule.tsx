@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -210,10 +211,42 @@ function toTimeInput(value: string | null) {
   return value ? value.slice(0, 5) : "";
 }
 
-function groupEventsByDate(events: Event[]) {
-  return groupByDate(events, (e) => toDateInput(e.start_date)).map(
-    ({ date, items }) => ({ date, events: items })
-  );
+interface EventOccurrence {
+  event: Event;
+  date: string;
+  dayIndex: number;
+  totalDays: number;
+}
+
+// List view shows a multi-day event on every date it spans (not just its
+// start date), each tagged with its position in the span ("Day 2 of 4") -
+// this expands each event into one occurrence per date first, so grouping
+// by date naturally places it under every day it covers.
+function expandEventsForList(events: Event[]): EventOccurrence[] {
+  const out: EventOccurrence[] = [];
+  for (const event of events) {
+    const start = toDateInput(event.start_date);
+    const end = toDateInput(event.end_date);
+    const totalDays =
+      Math.round(
+        (new Date(`${end}T00:00:00Z`).getTime() -
+          new Date(`${start}T00:00:00Z`).getTime()) /
+          86400000
+      ) + 1;
+    let date = start;
+    for (let dayIndex = 1; dayIndex <= totalDays; dayIndex++) {
+      out.push({ event, date, dayIndex, totalDays });
+      date = addDaysStr(date, 1);
+    }
+  }
+  return out;
+}
+
+function groupOccurrencesByDate(occurrences: EventOccurrence[]) {
+  return groupByDate(occurrences, (o) => o.date).map(({ date, items }) => ({
+    date,
+    occurrences: items,
+  }));
 }
 
 function startOfWeek(dateStr: string) {
@@ -358,6 +391,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [eventTypes, setEventTypes] = useState<EventTypeRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
   const [drawer, setDrawer] = useState<"closed" | "create" | Event>("closed");
   const [form, setForm] = useState(EMPTY_FORM);
   const [formAthleteIds, setFormAthleteIds] = useState<number[]>([]);
@@ -373,18 +407,50 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const loadingFutureRef = useRef(false);
   const [loadingPast, setLoadingPast] = useState(false);
   const [loadingFuture, setLoadingFuture] = useState(false);
+  const suppressLazyLoadRef = useRef(false);
+
+  const filteredEvents = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (events ?? []).filter((e) => {
+      const matchesQuery = `${e.title} ${
+        typeInfo(eventTypes, e.club_id, e.event_type).label
+      }`
+        .toLowerCase()
+        .includes(q);
+      const matchesType = !typeFilter || e.event_type === typeFilter;
+      return matchesQuery && matchesType;
+    });
+  }, [events, query, typeFilter, eventTypes]);
+
+  const typeFilterOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const e of events ?? []) {
+      if (!seen.has(e.event_type)) {
+        seen.set(e.event_type, typeInfo(eventTypes, e.club_id, e.event_type).label);
+      }
+    }
+    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [events, eventTypes]);
 
   function scrollToToday(behavior: ScrollBehavior = "smooth") {
     const today = todayStr();
-    const groups = groupEventsByDate(events ?? []);
+    const groups = groupOccurrencesByDate(expandEventsForList(filteredEvents));
     const target =
       groups.find((g) => g.date >= today) ?? groups[groups.length - 1];
-    if (target) {
-      sectionRefs.current[target.date]?.scrollIntoView({
-        behavior,
-        block: "start",
-      });
+    const el = target && sectionRefs.current[target.date];
+    if (!el) return;
+    if (behavior === "smooth") {
+      // Jumping back to today from far in the future has to scroll back
+      // past the near-top lazy-load threshold on the way there; without
+      // this guard that fires loadMorePast() mid-animation, prepending
+      // more days above and throwing off where the in-progress smooth
+      // scroll actually lands.
+      suppressLazyLoadRef.current = true;
+      window.setTimeout(() => {
+        suppressLazyLoadRef.current = false;
+      }, 800);
     }
+    el.scrollIntoView({ behavior, block: "start" });
   }
 
   useEffect(() => {
@@ -415,7 +481,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     if (!container) return;
 
     function onScroll() {
-      if (!container) return;
+      if (!container || suppressLazyLoadRef.current) return;
       const { scrollTop, scrollHeight, clientHeight } = container;
       if (scrollTop < 150) loadMorePast();
       if (scrollHeight - scrollTop - clientHeight < 150) loadMoreFuture();
@@ -646,13 +712,6 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       </div>
     );
 
-  const q = query.trim().toLowerCase();
-  const filteredEvents = events.filter((e) =>
-    `${e.title} ${typeInfo(eventTypes, e.club_id, e.event_type).label}`
-      .toLowerCase()
-      .includes(q)
-  );
-
   const editing = drawer !== "closed" && drawer !== "create" ? drawer : null;
 
   return (
@@ -663,12 +722,27 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           <AddButton onClick={openCreate} />
         </div>
 
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search schedule..."
-          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-        />
+        <div className="flex gap-2">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search schedule..."
+            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
+          />
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            aria-label="Filter by type"
+            className="min-h-[44px] rounded-xl border border-stone-300 px-2 text-sm"
+          >
+            <option value="">All types</option>
+            {typeFilterOptions.map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="flex gap-1 rounded-full bg-stone-200 p-1">
           {(["list", "day", "week", "month"] as const).map((mode) => (
@@ -694,88 +768,96 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               <Spinner />
             </div>
           )}
-          {groupEventsByDate(filteredEvents).map(({ date, events: dayEvents }) => (
-            <div
-              key={date}
-              ref={(el) => {
-                sectionRefs.current[date] = el;
-              }}
-              className="flex scroll-mt-[190px] flex-col gap-2"
-            >
-              <h2 className="text-sm font-semibold text-stone-500">
-                {dateLabel(date)}
-              </h2>
-              {dayEvents.map((e) => (
-                <SwipeableRow
-                  key={e.id}
-                  disabled={e.my_status == null}
-                  onSwipeComplete={() => swipeEventStatus(e, "completed")}
-                  onSwipeFailed={() => swipeEventStatus(e, "failed")}
-                >
-                  {(() => {
-                    const info = typeInfo(eventTypes, e.club_id, e.event_type);
-                    return (
-                      <div className="flex overflow-hidden rounded-2xl shadow-card">
-                        {isOverdue(e) ? (
-                          <div
-                            aria-hidden
-                            className="flex w-12 shrink-0 items-center justify-center bg-red-600 text-5xl font-black leading-none text-red-50"
-                          >
-                            !
-                          </div>
-                        ) : (
-                          <div
-                            aria-hidden
-                            className="flex w-12 shrink-0 items-center justify-center text-xl"
-                            style={{ backgroundColor: info.bg_color }}
-                          >
-                            {info.icon}
-                          </div>
-                        )}
-                        <button
-                          onClick={() => setDrawer(e)}
-                          className={`flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 px-4 py-3 text-left ${
-                            e.my_status === "failed" ? "bg-red-50" : "bg-white"
-                          }`}
-                        >
-                          <div className="flex w-full items-center justify-between gap-2">
-                            <span
-                              className={`font-medium ${
-                                e.my_status === "completed"
-                                  ? "line-through text-stone-400"
-                                  : e.my_status === "failed"
-                                  ? "text-red-700"
-                                  : ""
+          {groupOccurrencesByDate(expandEventsForList(filteredEvents)).map(
+            ({ date, occurrences }) => (
+              <div
+                key={date}
+                ref={(el) => {
+                  sectionRefs.current[date] = el;
+                }}
+                className="flex scroll-mt-[190px] flex-col gap-2"
+              >
+                <h2 className="text-sm font-semibold text-stone-500">
+                  {dateLabel(date)}
+                </h2>
+                {occurrences.map((occ) => {
+                  const e = occ.event;
+                  return (
+                    <SwipeableRow
+                      key={`${e.id}-${occ.date}`}
+                      disabled={e.my_status == null}
+                      onSwipeComplete={() => swipeEventStatus(e, "completed")}
+                      onSwipeFailed={() => swipeEventStatus(e, "failed")}
+                    >
+                      {(() => {
+                        const info = typeInfo(eventTypes, e.club_id, e.event_type);
+                        return (
+                          <div className="flex overflow-hidden rounded-2xl shadow-card">
+                            {isOverdue(e) ? (
+                              <div
+                                aria-hidden
+                                className="flex w-12 shrink-0 items-center justify-center bg-red-600 text-5xl font-black leading-none text-red-50"
+                              >
+                                !
+                              </div>
+                            ) : (
+                              <div
+                                aria-hidden
+                                className="flex w-12 shrink-0 items-center justify-center text-xl"
+                                style={{ backgroundColor: info.bg_color }}
+                              >
+                                {info.icon}
+                              </div>
+                            )}
+                            <button
+                              onClick={() => setDrawer(e)}
+                              className={`flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 px-4 py-3 text-left ${
+                                e.my_status === "failed" ? "bg-red-50" : "bg-white"
                               }`}
                             >
-                              {e.title}
-                            </span>
-                            {e.my_status === "completed" && (
-                              <span className="shrink-0 text-green-600">✓</span>
-                            )}
-                            {e.my_status === "failed" && (
-                              <span className="shrink-0 text-red-600">✗</span>
-                            )}
+                              <div className="flex w-full items-center justify-between gap-2">
+                                <span
+                                  className={`font-medium ${
+                                    e.my_status === "completed"
+                                      ? "line-through text-stone-400"
+                                      : e.my_status === "failed"
+                                      ? "text-red-700"
+                                      : ""
+                                  }`}
+                                >
+                                  {e.title}
+                                </span>
+                                {e.my_status === "completed" && (
+                                  <span className="shrink-0 text-green-600">✓</span>
+                                )}
+                                {e.my_status === "failed" && (
+                                  <span className="shrink-0 text-red-600">✗</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge>{info.label}</Badge>
+                                <span className="text-xs text-stone-500">
+                                  {toDateInput(e.start_date)}
+                                  {e.end_date !== e.start_date
+                                    ? ` – ${toDateInput(e.end_date)}`
+                                    : ""}
+                                  {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
+                                  {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
+                                  {occ.totalDays > 1
+                                    ? ` · Day ${occ.dayIndex} of ${occ.totalDays}`
+                                    : ""}
+                                </span>
+                              </div>
+                            </button>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge>{info.label}</Badge>
-                            <span className="text-xs text-stone-500">
-                              {toDateInput(e.start_date)}
-                              {e.end_date !== e.start_date
-                                ? ` – ${toDateInput(e.end_date)}`
-                                : ""}
-                              {e.start_time ? ` ${toTimeInput(e.start_time)}` : ""}
-                              {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
-                            </span>
-                          </div>
-                        </button>
-                      </div>
-                    );
-                  })()}
-                </SwipeableRow>
-              ))}
-            </div>
-          ))}
+                        );
+                      })()}
+                    </SwipeableRow>
+                  );
+                })}
+              </div>
+            )
+          )}
           {filteredEvents.length === 0 && (
             <p className="px-1 py-2 text-sm text-stone-500">
               Nothing scheduled yet.

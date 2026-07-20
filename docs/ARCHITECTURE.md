@@ -1020,6 +1020,32 @@ coach-run attendance) — this is personal athlete itinerary planning.
   renders its own label `<span>` instead. Where a field only has a time
   (no separate date, e.g. an itinerary item's "End time") it stays a
   plain time `<input>`.
+- **List view: type filter, and multi-day events on every spanned day**:
+  a `<select>` next to the search input filters by `event_type` (options
+  built from whichever keys are actually present in the loaded window,
+  labeled via `typeInfo`) — combined with the existing text search in one
+  `filteredEvents` memo. A multi-day event used to render only once,
+  under its `start_date` — `expandEventsForList`/`groupOccurrencesByDate`
+  now expand each event into one occurrence per date it spans before
+  grouping, so it shows up under every day in its range, each tagged
+  "Day n of x" (e.g. "Day 2 of 4") appended to its date/time line.
+  Swiping any one day's row still flags the whole event (the swipe
+  handlers operate on the occurrence's underlying `event`, not the date).
+- **Fixed: "jump to today" not landing on today from far in the future.**
+  The floating ↑ button's `scrollToToday` computes its target from the
+  same `filteredEvents` the list actually renders (previously used the
+  unfiltered `events`, which could disagree with the rendered section
+  refs when a search/type filter was active). More importantly: jumping
+  back to today from deep in the future has to smooth-scroll back past
+  the list's own near-top lazy-load threshold on the way there, which
+  fired `loadMorePast()` mid-animation — prepending more days above and
+  throwing off where the in-progress scroll actually landed. (This is
+  why it "worked" when already viewing past events: scrolling forward
+  toward today only crosses the near-*bottom* threshold, which is far
+  away and never triggers.) `scrollToToday` now sets a
+  `suppressLazyLoadRef` guard for the duration of the jump, which the
+  scroll-triggered `loadMorePast`/`loadMoreFuture` effect checks and
+  skips while it's set.
 
 ## Auth & RBAC
 
