@@ -1426,6 +1426,29 @@ never drift apart on what a tool does or what it's called:
   hovering a chip shows its input as a tooltip. It's a deliberate
   exception to the list+drawer convention in `CLAUDE.md`: a conversation
   isn't an entity list, so it doesn't try to force-fit that pattern.
+- **API key configuration is in-app, not `api/.env`-only.** The
+  `ANTHROPIC_API_KEY` this needs was originally `.env`-only, which meant
+  setting it up required server access no admin actually had — the key
+  was simply never set, and every chat attempt silently 500'd. `osu.js`
+  now reads the key from `nk_settings` (key `anthropic_api_key`, same
+  key-value table `settings.js` already uses for the branding icon) via
+  `getClient()`, falling back to `process.env.ANTHROPIC_API_KEY` for
+  back-compat with a real `.env`-configured deployment; it constructs the
+  Anthropic SDK client lazily per request rather than once at module load
+  specifically so a key saved through the UI takes effect on the very
+  next request, no redeploy or restart needed (cached by key value so
+  repeat requests don't pay a DB round trip). `GET`/`PATCH`/`DELETE
+  /api/admin/settings/anthropic-key` (also `settings.js`) manage it — GET
+  only ever reports `{configured: boolean}`, never the key itself, so the
+  admin UI can detect "needs setup" without displaying or re-requesting a
+  live secret. `Osu.tsx` checks that on load and renders a one-field setup
+  form (`ApiKeySetup`) instead of the chat UI when unconfigured, with an
+  "Update key" link once configured to return to it (e.g. to rotate a
+  revoked key); a `409` from `/osu/chat` itself (key removed after the
+  page already loaded) falls back to the same form as a defensive
+  backstop, distinct from any other chat error (a bad/expired key still
+  reaches Claude's API and surfaces as a normal request failure, not a
+  bounce back to setup).
 - Needs `ANTHROPIC_API_KEY` set in `api/.env` (see Environment Variables
   below) — the Anthropic SDK's default client reads it directly from the
   environment, no extra plumbing.
