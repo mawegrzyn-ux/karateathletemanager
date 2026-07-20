@@ -84,6 +84,7 @@ export default function More() {
               icon="💪"
               label="Training modules"
             />
+            <Tile to="/admin/event-types" icon="🏷️" label="Schedule types" />
           </TileGrid>
         </div>
       )}

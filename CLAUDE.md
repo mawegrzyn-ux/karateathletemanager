@@ -121,6 +121,30 @@ style) to reveal its fields (same auto-save + `DeleteButton` pattern as
 any other record); adding a new one reveals an inline form below the
 list rather than opening anything else.
 
+## UI convention: combined date+time picker
+
+Wherever a record has a paired date and time that get edited together
+(an event's start/end, an itinerary item's start, the Training tab's
+quick-add composer), use `DateTimeField` (`app/src/components/ui.tsx`)
+instead of two side-by-side `<input type="date">`/`<input type="time">`
+fields. It renders one tappable field showing both values together
+("Sat, Jul 25, 2026 · 14:30") that opens a `Modal` with a Date/Time pill
+toggle, so the user can flip between adjusting either value without
+closing and reopening separate inputs — picking a date auto-advances to
+the Time tab. Where a field only ever has a time with no paired date
+(e.g. an itinerary item's "End time", which shares the item's own date),
+leave it as a plain time `<input>` — `DateTimeField` is for pairs, not a
+blanket replacement for every date or time input.
+
+Don't wrap `DateTimeField` itself in `Field` (or any other `<label>`
+wrapper): a `<label>` containing more than one interactive control has a
+tendency to re-fire its implicit click-forwarding onto the *first*
+control inside it whenever another control inside the same label is
+clicked (observed here as clicking the modal's "Done" button also
+re-triggering the trigger button's `onClick`, reopening the modal it had
+just closed). `DateTimeField` renders its own label `<span>` instead of
+using `Field` for exactly this reason.
+
 ## UI convention: view/edit toggle for a self-service page
 
 A full-page self-service view that mixes several distinct pieces (e.g.

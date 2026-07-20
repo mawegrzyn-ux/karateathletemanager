@@ -18,6 +18,7 @@ import AdminReferees from "./pages/admin/Referees";
 import AdminTrainingModules from "./pages/admin/TrainingModules";
 import AdminKatas from "./pages/admin/Katas";
 import AdminKarateStyles from "./pages/admin/KarateStyles";
+import AdminEventTypes from "./pages/admin/EventTypes";
 import AdminVenues from "./pages/admin/Venues";
 import AdminCoachRoles from "./pages/admin/CoachRoles";
 import AdminAppIcon from "./pages/admin/AppIcon";
@@ -206,6 +207,14 @@ export default function App() {
           element={
             <RequireAuth adminOnly>
               <AdminKarateStyles />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/event-types"
+          element={
+            <RequireAuth roles={["coach"]}>
+              <AdminEventTypes />
             </RequireAuth>
           }
         />

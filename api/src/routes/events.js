@@ -7,29 +7,15 @@ const { isEventEditor } = require("../utils/permissions");
 
 const router = Router();
 
-// Events and itinerary items share the exact same type set - a lone event
-// can be a rest day, a one-off note, or a kata performance just like an
-// itinerary item can, and vice versa. Same array reference for both names
-// so there's no risk of the two drifting apart again.
-const EVENT_TYPES = [
-  "competition",
-  "squad_session",
-  "training",
-  "travel",
-  "time_off",
-  "seminar",
-  "training_camp",
-  "grading",
-  "rest",
-  "other",
-  "kata_performance",
-];
-const ITEM_TYPES = EVENT_TYPES;
+// Events and itinerary items share event_type/item_type keys - once a
+// fixed global enum, now each club's own nk_event_types library (standard
+// + custom, see isValidEventType/resolveEventClubId below), so there's no
+// hardcoded list here any more.
 const REPEAT_FREQS = ["daily", "weekly", "monthly"];
 const MAX_REPEAT_OCCURRENCES = 60;
 const STATUS_VALUES = ["pending", "completed", "failed"];
 
-const EVENT_FIELDS = `id, title, event_type, start_date, end_date, start_time, end_time, location, venue_id, kata_id, notes, training_module_id, recurrence_id, created_at`;
+const EVENT_FIELDS = `id, title, event_type, club_id, start_date, end_date, start_time, end_time, location, venue_id, kata_id, notes, training_module_id, recurrence_id, created_at`;
 const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id, recurrence_id`;
 
 router.use(authorize());
@@ -400,6 +386,59 @@ async function resolveAthleteIds(user, requested) {
   throw { status: 403, message: "Forbidden" };
 }
 
+// Resolves which club an event belongs to, for the purpose of picking
+// whose event-type library (standard + custom, icon/bg_color) applies. An
+// explicit club_id is honored if the caller actually has some relationship
+// to that club (admin, or any nk_coach_clubs row - not just the club
+// admins the way isClubAdmin requires, since scheduling an event doesn't
+// need club-admin rights); otherwise it's derived best-effort from the
+// first assigned athlete's first club. Returns null if neither yields a
+// club - event_type then only validates against standard/global keys.
+async function resolveEventClubId(user, requestedClubId, athleteIds) {
+  const requested = Number(requestedClubId);
+  if (Number.isInteger(requested)) {
+    if (user.is_admin) return requested;
+    if (user.role === "coach" && user.coach_id) {
+      const { rows } = await pool.query(
+        `SELECT 1 FROM nk_coach_clubs WHERE club_id = $1 AND coach_id = $2`,
+        [requested, user.coach_id]
+      );
+      if (rows.length > 0) return requested;
+    }
+  }
+  if (Array.isArray(athleteIds) && athleteIds.length > 0) {
+    const { rows } = await pool.query(
+      `SELECT ac.club_id FROM nk_athlete_clubs ac
+       WHERE ac.athlete_id = ANY($1::int[])
+       ORDER BY ac.athlete_id, ac.club_id LIMIT 1`,
+      [athleteIds]
+    );
+    if (rows.length > 0) return rows[0].club_id;
+  }
+  return null;
+}
+
+// Confirms `key` is a usable event/item type for `clubId` - either a row
+// in that club's own nk_event_types library, or (when clubId is unknown,
+// e.g. an event with no determinable club) any is_standard row sharing
+// the key, since standard keys/labels are consistent across every club
+// even though clubId is what actually resolves icon/bg_color at read time.
+async function isValidEventType(clubId, key) {
+  if (typeof key !== "string" || key.length === 0) return false;
+  if (Number.isInteger(clubId)) {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM nk_event_types WHERE club_id = $1 AND key = $2`,
+      [clubId, key]
+    );
+    return rows.length > 0;
+  }
+  const { rows } = await pool.query(
+    `SELECT 1 FROM nk_event_types WHERE key = $1 AND is_standard = true LIMIT 1`,
+    [key]
+  );
+  return rows.length > 0;
+}
+
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Schedule.tsx's list view only loads a rolling window (2 weeks back/
@@ -473,9 +512,6 @@ router.post(
     if (typeof title !== "string" || title.trim().length === 0) {
       return res.status(400).json({ error: { message: "Title is required" } });
     }
-    if (!EVENT_TYPES.includes(event_type)) {
-      return res.status(400).json({ error: { message: "Invalid event_type" } });
-    }
     if (!start_date || !end_date) {
       return res
         .status(400)
@@ -518,6 +554,11 @@ router.post(
       throw err;
     }
 
+    const clubId = await resolveEventClubId(req.user, req.body?.club_id, athleteIds);
+    if (!(await isValidEventType(clubId, event_type))) {
+      return res.status(400).json({ error: { message: "Invalid event_type" } });
+    }
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -526,13 +567,14 @@ router.post(
         const occurrenceEnd = toDateStr(addUTCDays(occurrenceStart, spanDays));
         const { rows } = await client.query(
           `INSERT INTO nk_events
-             (title, event_type, start_date, end_date, start_time, end_time, location,
+             (title, event_type, club_id, start_date, end_date, start_time, end_time, location,
               venue_id, kata_id, notes, training_module_id, recurrence_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
            RETURNING ${EVENT_FIELDS}`,
           [
             title,
             event_type,
+            clubId,
             occurrenceStart,
             occurrenceEnd,
             start_time ?? null,
@@ -718,8 +760,17 @@ router.patch(
       kata_id,
     } = body;
 
-    if (event_type !== undefined && !EVENT_TYPES.includes(event_type)) {
-      return res.status(400).json({ error: { message: "Invalid event_type" } });
+    if (event_type !== undefined) {
+      const { rows: currentRows } = await pool.query(
+        `SELECT club_id FROM nk_events WHERE id = $1`,
+        [req.params.id]
+      );
+      if (currentRows.length === 0) {
+        return res.status(404).json({ error: { message: "Event not found" } });
+      }
+      if (!(await isValidEventType(currentRows[0].club_id, event_type))) {
+        return res.status(400).json({ error: { message: "Invalid event_type" } });
+      }
     }
 
     const fields = {
@@ -981,7 +1032,14 @@ router.post(
       repeat,
     } = req.body ?? {};
 
-    if (!ITEM_TYPES.includes(item_type)) {
+    const { rows: parentRows } = await pool.query(
+      `SELECT club_id FROM nk_events WHERE id = $1`,
+      [req.params.id]
+    );
+    if (parentRows.length === 0) {
+      return res.status(404).json({ error: { message: "Event not found" } });
+    }
+    if (!(await isValidEventType(parentRows[0].club_id, item_type))) {
       return res.status(400).json({ error: { message: "Invalid item_type" } });
     }
     if (typeof title !== "string" || title.trim().length === 0) {
@@ -1092,8 +1150,17 @@ router.patch(
       kata_id,
     } = body;
 
-    if (item_type !== undefined && !ITEM_TYPES.includes(item_type)) {
-      return res.status(400).json({ error: { message: "Invalid item_type" } });
+    if (item_type !== undefined) {
+      const { rows: parentRows } = await pool.query(
+        `SELECT club_id FROM nk_events WHERE id = $1`,
+        [req.params.id]
+      );
+      if (parentRows.length === 0) {
+        return res.status(404).json({ error: { message: "Event not found" } });
+      }
+      if (!(await isValidEventType(parentRows[0].club_id, item_type))) {
+        return res.status(400).json({ error: { message: "Invalid item_type" } });
+      }
     }
     if ("start_time" in body && !start_time) {
       return res.status(400).json({ error: { message: "start_time is required" } });

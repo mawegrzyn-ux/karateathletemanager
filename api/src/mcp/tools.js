@@ -12,20 +12,6 @@
 const pool = require("../db/pool");
 const { activateUser } = require("../utils/activateUser");
 
-const EVENT_TYPES = [
-  "competition",
-  "squad_session",
-  "training",
-  "travel",
-  "time_off",
-  "seminar",
-  "training_camp",
-  "grading",
-  "rest",
-  "other",
-  "kata_performance",
-];
-
 const tools = [
   {
     name: "list_clubs",
@@ -189,7 +175,11 @@ const tools = [
       type: "object",
       properties: {
         title: { type: "string" },
-        event_type: { type: "string", enum: EVENT_TYPES },
+        event_type: {
+          type: "string",
+          description:
+            "One of the standard schedule type keys (e.g. competition, squad_session, training, travel, time_off, seminar, training_camp, grading, rest, other, kata_performance) - clubs can also define custom types, but this tool creates the event with no club assigned, so only standard types are accepted here.",
+        },
         start_date: { type: "string", description: "YYYY-MM-DD" },
         end_date: { type: "string", description: "YYYY-MM-DD" },
         start_time: { type: "string", description: "HH:MM, optional" },
@@ -210,11 +200,17 @@ const tools = [
       notes,
     }) {
       if (!title || !title.trim()) throw new Error("title is required");
-      if (!EVENT_TYPES.includes(event_type)) {
-        throw new Error(`event_type must be one of: ${EVENT_TYPES.join(", ")}`);
-      }
       if (!start_date || !end_date) {
         throw new Error("start_date and end_date are required");
+      }
+      const { rows: typeRows } = await pool.query(
+        `SELECT 1 FROM nk_event_types WHERE key = $1 AND is_standard = true LIMIT 1`,
+        [event_type]
+      );
+      if (typeRows.length === 0) {
+        throw new Error(
+          `event_type must be a standard schedule type key (this tool creates events with no club, so custom per-club types aren't available here)`
+        );
       }
       const { rows } = await pool.query(
         `INSERT INTO nk_events

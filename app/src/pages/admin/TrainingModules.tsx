@@ -9,6 +9,7 @@ import {
   Field,
   MediaField,
   Toast,
+  DateTimeField,
 } from "../../components/ui";
 import {
   TrainingModuleView,
@@ -850,24 +851,13 @@ function TrainingLogComposer({
           className="min-h-[44px] rounded-xl border border-stone-300 px-3"
         />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Date">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-          />
-        </Field>
-        <Field label="Start time">
-          <input
-            type="time"
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-          />
-        </Field>
-      </div>
+      <DateTimeField
+        label="Start"
+        date={date}
+        time={startTime}
+        onDateChange={setDate}
+        onTimeChange={setStartTime}
+      />
       <Field label="End time">
         <input
           type="time"

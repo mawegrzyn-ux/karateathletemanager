@@ -6,6 +6,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const { isClubAdmin } = require("../utils/permissions");
 const { activateUser } = require("../utils/activateUser");
 const { registerClubCollection } = require("../utils/clubCollections");
+const { seedStandardEventTypes } = require("../utils/standardEventTypes");
 
 const router = Router();
 
@@ -62,6 +63,7 @@ router.post(
          RETURNING id, name, association_id, location, contact_email, contact_phone, created_at`,
         [name, association_id ?? null, location, contact_email, contact_phone]
       );
+      await seedStandardEventTypes(pool, rows[0].id);
       res.status(201).json({ club: rows[0] });
     } catch (err) {
       if (err.code === "23503") {
