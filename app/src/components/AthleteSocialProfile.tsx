@@ -169,7 +169,19 @@ function PostCard({
           )}
         </div>
       )}
-      <div className="flex items-center gap-2">
+      <div className="relative isolate -mx-4 -mt-4 flex items-center gap-2 px-4 pb-3 pt-4">
+        {/* A cut-out tab behind the author/date, echoing the diagonal
+            accent shapes used elsewhere (cover photo edge, nav wedge) -
+            tapers off well before the edit/delete icons' corner so it
+            never runs under them. `isolate` gives this row its own
+            stacking context so the `-z-10` shape stays scoped here
+            instead of sinking behind unrelated page content (the parent
+            `relative` alone doesn't create one). */}
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10 bg-stone-100"
+          style={{ clipPath: "polygon(0 0, 78% 0, 65% 100%, 0 100%)" }}
+        />
         <Avatar
           name={`${profile.first_name} ${profile.last_name}`}
           url={profile.photo_url}
@@ -184,7 +196,11 @@ function PostCard({
           </span>
         </div>
       </div>
-      {post.title && <h3 className="font-semibold">{post.title}</h3>}
+      {post.title && (
+        <h3 className="font-display text-lg uppercase tracking-wide">
+          {post.title}
+        </h3>
+      )}
       {post.body && (
         <p className="whitespace-pre-wrap text-sm">{renderFormattedBody(post.body)}</p>
       )}

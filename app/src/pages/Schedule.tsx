@@ -935,6 +935,14 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             <p className="px-1 py-2 text-sm text-stone-500">No types yet.</p>
           )}
         </div>
+        <button
+          type="button"
+          onClick={() => setTypeFilterDrawerOpen(false)}
+          aria-label="Close filters"
+          className="fixed bottom-6 right-6 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-red-600 text-lg text-white shadow-lg"
+        >
+          ↩
+        </button>
       </Drawer>
 
       {viewMode === "list" && (
