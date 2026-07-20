@@ -39,7 +39,11 @@ Don't invent a new layout per page; extend this one.
 - **The `Drawer`** (`app/src/components/ui.tsx`) overtakes the full
   screen on mobile and becomes a right-side panel (`sm:` breakpoint) on
   wider viewports. It's a distinct component from `Modal` (which is a
-  bottom-sheet, used for lighter-weight confirmations).
+  bottom-sheet, used for lighter-weight confirmations). It slides in
+  from the right (a 300ms transform transition) rather than popping in,
+  and stays mounted for one extra tick after closing so the close also
+  slides out instead of vanishing instantly — don't reintroduce a bare
+  `if (!open) return null` early-out, that skips the closing animation.
 
 Reusable pieces, all in `app/src/components/ui.tsx`: `Drawer`,
 `AddButton`, `DeleteButton`, `Field`, `Badge`, `Spinner`, `Modal`, `Toast`,

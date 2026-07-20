@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -395,15 +396,37 @@ export function DateTimeField({
   );
 }
 
+// Slides in from the right (full-screen push on mobile, a side panel at
+// the sm: breakpoint) rather than just popping in - stays mounted for one
+// extra transition tick after `open` goes false so the closing slide has
+// somewhere to animate to, instead of vanishing instantly.
 export function Drawer({
   open,
   onClose,
   title,
   children,
 }: PropsWithChildren<{ open: boolean; onClose: () => void; title: string }>) {
-  if (!open) return null;
+  const [mounted, setMounted] = useState(open);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      const raf = requestAnimationFrame(() => setVisible(true));
+      return () => cancelAnimationFrame(raf);
+    }
+    setVisible(false);
+    const timeout = setTimeout(() => setMounted(false), 300);
+    return () => clearTimeout(timeout);
+  }, [open]);
+
+  if (!mounted) return null;
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-white sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[420px] sm:border-l sm:border-stone-200 sm:shadow-xl">
+    <div
+      className={`fixed inset-0 z-50 flex flex-col bg-white transition-transform duration-300 ease-out sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[420px] sm:border-l sm:border-stone-200 sm:shadow-xl ${
+        visible ? "translate-x-0" : "translate-x-full"
+      }`}
+    >
       <div className="flex items-center justify-between border-b border-stone-200 p-4">
         <h2 className="text-lg font-semibold">{title}</h2>
         <button
