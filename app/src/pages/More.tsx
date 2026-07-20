@@ -71,6 +71,17 @@ export default function More() {
         </div>
       )}
 
+      {user?.is_admin && (
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-stone-500">
+            Configuration
+          </span>
+          <TileGrid>
+            <Tile to="/admin/osu-api-key" icon="🔑" label="Osu API key" />
+          </TileGrid>
+        </div>
+      )}
+
       {(user?.is_admin || user?.role === "coach") && (
         <div className="flex flex-col gap-2">
           <span className="text-xs font-medium uppercase tracking-wide text-stone-500">

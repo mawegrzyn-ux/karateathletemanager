@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { ApiError, useApi } from "../hooks/useApi";
-import { Spinner, Toast } from "../components/ui";
+import { Spinner } from "../components/ui";
 
 interface ToolAction {
   name: string;
@@ -15,78 +16,14 @@ interface ChatMessage {
   actions?: ToolAction[];
 }
 
-// Osu needs an Anthropic API key to actually talk to Claude, entered here
-// rather than requiring server access to edit api/.env - saved to
-// nk_settings (see api/src/routes/settings.js) and picked up by
-// api/src/routes/osu.js on the very next request, no redeploy/restart
-// needed. `configured` starts undefined (loading) then flips to a real
+// Osu needs an Anthropic API key to actually talk to Claude - configured
+// from More > Configuration > Osu API key (see admin/OsuApiKey.tsx), not
+// here, so it's discoverable independent of ever landing on this page
+// first. `configured` starts undefined (loading) then flips to a real
 // boolean once GET .../anthropic-key resolves; the chat UI only renders
-// once it's true. A 409 with error.code === "not_configured" from the
-// chat endpoint itself (e.g. a key that was removed after this page
-// loaded) falls back to the same setup form as a defensive backstop.
-function ApiKeySetup({
-  onConfigured,
-  showToast,
-}: {
-  onConfigured: () => void;
-  showToast: (message: string) => void;
-}) {
-  const api = useApi();
-  const [key, setKey] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    if (!key.trim() || saving) return;
-    setSaving(true);
-    try {
-      await api.patch("/admin/settings/anthropic-key", { api_key: key.trim() });
-      showToast("API key saved");
-      onConfigured();
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to save key");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-1 flex-col gap-4 p-4">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">Osu 🥋</h1>
-        <p className="text-sm text-stone-600">
-          Osu needs an Anthropic API key before it can chat. Create one at{" "}
-          <span className="font-medium">console.anthropic.com</span> and paste
-          it below - this is saved on the server and only needs to be entered
-          once.
-        </p>
-      </div>
-      <form onSubmit={save} className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-card">
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-stone-700">
-            Anthropic API key
-          </span>
-          <input
-            type="password"
-            autoComplete="off"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder="sk-ant-..."
-            className="min-h-[44px] rounded-xl border border-stone-300 px-3 font-mono text-sm"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={saving || !key.trim()}
-          className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
-        >
-          {saving ? "Saving..." : "Save and continue"}
-        </button>
-      </form>
-    </div>
-  );
-}
-
+// once it's true. A 409 from the chat endpoint itself (e.g. a key that
+// was removed after this page loaded) falls back to the same "not
+// configured" message as a defensive backstop.
 export default function Osu() {
   const api = useApi();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -94,23 +31,13 @@ export default function Osu() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [configured, setConfigured] = useState<boolean | undefined>(undefined);
-  const [toast, setToast] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  function showToast(message: string) {
-    setToast(message);
-    setTimeout(() => setToast(null), 4000);
-  }
-
-  function checkConfigured() {
+  useEffect(() => {
     api
       .get<{ configured: boolean }>("/admin/settings/anthropic-key")
       .then((res) => setConfigured(res.configured))
       .catch(() => setConfigured(false));
-  }
-
-  useEffect(() => {
-    checkConfigured();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -158,23 +85,31 @@ export default function Osu() {
 
   if (!configured) {
     return (
-      <ApiKeySetup onConfigured={checkConfigured} showToast={showToast} />
+      <div className="flex flex-1 flex-col gap-4 p-4">
+        <h1 className="text-2xl font-bold tracking-tight">Osu 🥋</h1>
+        <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-card">
+          <p className="text-sm text-stone-600">
+            Osu needs an Anthropic API key before it can chat.
+          </p>
+          <Link
+            to="/admin/osu-api-key"
+            className="min-h-[44px] rounded-full bg-red-600 px-4 text-center font-medium leading-[44px] text-white"
+          >
+            Configure Osu API key
+          </Link>
+        </div>
+      </div>
     );
   }
 
   return (
     <div className="flex min-h-full flex-col">
-      {toast && <Toast message={toast} />}
       <div className="p-4 pb-0">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-tight">Osu 🥋</h1>
-          <button
-            type="button"
-            onClick={() => setConfigured(false)}
-            className="text-sm font-medium text-red-700"
-          >
+          <Link to="/admin/osu-api-key" className="text-sm font-medium text-red-700">
             Update key
-          </button>
+          </Link>
         </div>
         <p className="text-sm text-stone-600">
           Ask about clubs, athletes, pending sign-ups, or the schedule - or
