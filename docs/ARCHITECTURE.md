@@ -1121,17 +1121,19 @@ coach-run attendance) — this is personal athlete itinerary planning.
   left/right end caps, plus its own `shadow-sm` — a small raised-card
   look floating between the two flanking chevrons rather than flush with
   their full height.
-- **Competition-result share card: white background, accent-color post
-  break.** `ShareBadge`'s `competition_result` card (`AthleteSocialProfile.tsx`)
-  switched from a filled `bg-stone-100` box to `bg-white` with a thin
-  `border-stone-200` for definition, so it doesn't fight visually with
-  the header row's own grey cut-out tab immediately above it. Separately,
-  `PostCard`'s bottom border switched from a plain `border-stone-200`
-  grey line to a 2px border in the profile's own `accentColor` (already
-  computed from the cover photo via `usePhotoPalette`, or the default red)
-  — the same color already used for the post title — so the break
-  between consecutive posts in the feed reads clearly instead of a
-  near-invisible hairline.
+- **Competition-result share card: plain text, soft accent-color post
+  break.** `ShareBadge`'s `competition_result` card
+  (`AthleteSocialProfile.tsx`) has no background/border/frame of its
+  own — just the same plain text weight as any other post's title/body,
+  so a shared result reads like the rest of the feed instead of standing
+  out as a boxed widget. Separately, `PostCard`'s bottom border uses the
+  profile's own `accentColor` (already computed from the cover photo via
+  `usePhotoPalette`, or the default red — the same color used for the
+  post title) at 25% opacity (`${accentColor}40` hex alpha suffix, safe
+  since `accentColor` is always a 6-digit `#rrggbb` string) rather than
+  full strength, so the break between consecutive posts reads as a soft
+  tinted line rather than either a stark solid bar or a barely-visible
+  grey hairline.
 
 Self-service email/password registration, gated by admin approval — not
 third-party OAuth.
