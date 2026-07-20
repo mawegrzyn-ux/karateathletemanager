@@ -973,6 +973,13 @@ const migrations = [
   `ALTER TABLE nk_events DROP CONSTRAINT IF EXISTS nk_events_type_fk;
    ALTER TABLE nk_events ADD CONSTRAINT nk_events_type_fk
      FOREIGN KEY (club_id, event_type) REFERENCES nk_event_types (club_id, key)`,
+
+  // Multi-day events default to one continuous span (start_time marks
+  // when the whole thing begins, end_time when it all wraps up); when
+  // daily_times is set, the same start_time-end_time instead applies to
+  // every day in the range, rendering as its own timed block each day
+  // (like a recurring daily session) rather than one all-day bar.
+  `ALTER TABLE nk_events ADD COLUMN IF NOT EXISTS daily_times BOOLEAN NOT NULL DEFAULT false`,
 ];
 
 async function migrate() {
