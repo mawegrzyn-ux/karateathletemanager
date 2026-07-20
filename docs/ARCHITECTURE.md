@@ -1453,10 +1453,10 @@ never drift apart on what a tool does or what it's called:
   "✓ Configured"/"Not configured" status line, a field to set or replace
   the key, and (once configured) a `DeleteButton`-confirmed "Remove key".
   `Osu.tsx` checks configuration status on load and shows a short message
-  linking to that page instead of the chat UI when unconfigured, with an
-  "Update key" link back to it once configured (e.g. to rotate a revoked
-  key); a `409` from `/osu/chat` itself (key removed after the page
-  already loaded) falls back to the same message as a defensive
+  pointing to that page (as plain text, not a link — key management lives
+  solely under Configuration now) instead of the chat UI when
+  unconfigured; a `409` from `/osu/chat` itself (key removed after the
+  page already loaded) falls back to the same message as a defensive
   backstop, distinct from any other chat error (a bad/expired key still
   reaches Claude's API and surfaces as a normal request failure, not a
   bounce back to the unconfigured state). `settings.js` factors the
