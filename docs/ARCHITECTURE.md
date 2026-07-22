@@ -1238,6 +1238,34 @@ coach-run attendance) — this is personal athlete itinerary planning.
   full strength, so the break between consecutive posts reads as a soft
   tinted line rather than either a stark solid bar or a barely-visible
   grey hairline.
+- **`RecordResultDrawer` gained Title/Body fields.** Previously, checking
+  "Post this result to my profile" produced a post with no text of its
+  own — just the bare `share_kind: "competition_result"` `ShareBadge`
+  summary, unlike every other posting flow in the app (the main
+  composer, `QuickPostDrawer`) which always has a title/body. A Title
+  `<input>` and Body `<textarea>` (matching the main composer's
+  placeholders, "Title (optional)" / "What's on your mind?") now appear
+  alongside the Photo field when the checkbox is checked, and both are
+  passed straight through on the `/athletes/:id/posts` `POST` (the route
+  already accepted `title`/`body` on any post — no backend change
+  needed).
+- **Tactile/audio feedback on the Schedule tile's swipe gesture.**
+  `app/src/utils/feedback.ts` exports `feedbackTick()`/`feedbackConfirm()`
+  — `feedbackTick` is a light `navigator.vibrate(8)` plus a brief
+  (30ms) Web Audio sine blip, `feedbackConfirm` a firmer double-pulse
+  vibration (`[10, 30, 10]`) with a slightly longer (50ms) tone; both are
+  silent no-ops where unsupported (iOS Safari has no Vibration API, and
+  audio needs a user gesture to unlock, which every call here is already
+  inside). `SwipeableRow` fires `feedbackTick` on each *edge crossing* —
+  entering/leaving the `SWIPE_THRESHOLD` zone, entering/leaving the
+  `DEEP_SWIPE_THRESHOLD` zone, and each step of the vertical
+  `OPTION_CYCLE_DISTANCE` picker (a distinct, rising pitch per step so
+  cycling through options feels ordered) — tracked via refs
+  (`pastSwipeRef`/`pastDeepRef`/`deepIndexRef`) so it fires once per
+  crossing rather than continuously while held past it. `feedbackConfirm`
+  fires once on release, only when an action actually triggers (swipe
+  complete/fail, or a deep action), giving a distinctly firmer
+  "committed" pulse versus the lighter in-progress ticks.
 
 Self-service email/password registration, gated by admin approval — not
 third-party OAuth.

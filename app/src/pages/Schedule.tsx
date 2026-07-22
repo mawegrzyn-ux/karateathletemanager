@@ -24,6 +24,7 @@ import {
 import { TrainingModuleView, type TrainingModule } from "../components/TrainingModuleView";
 import { EventCompetitionResults } from "../components/CompetitionResults";
 import { todayStr, addDaysStr, dateLabel, groupByDate } from "../utils/dates";
+import { feedbackTick, feedbackConfirm } from "../utils/feedback";
 
 type CompletionStatus = "pending" | "completed" | "failed";
 
@@ -2654,12 +2655,18 @@ function SwipeableRow({
   const startXRef = useRef<number | null>(null);
   const deepEntryYRef = useRef<number | null>(null);
   const draggedRef = useRef(false);
+  const pastSwipeRef = useRef(false);
+  const pastDeepRef = useRef(false);
+  const deepIndexRef = useRef(0);
   const cyclable = !!deepSwipeActions && deepSwipeActions.length > 1;
 
   function onPointerDown(e: ReactPointerEvent) {
     startXRef.current = e.clientX;
     deepEntryYRef.current = null;
     draggedRef.current = false;
+    pastSwipeRef.current = false;
+    pastDeepRef.current = false;
+    deepIndexRef.current = 0;
     setDeepIndex(0);
     (e.target as Element).setPointerCapture(e.pointerId);
   }
@@ -2674,13 +2681,32 @@ function SwipeableRow({
       : Math.max(-max, Math.min(max, delta));
     setDragX(clampedX);
 
+    if (!disabled) {
+      const isPastSwipe = Math.abs(clampedX) >= SWIPE_THRESHOLD;
+      if (isPastSwipe !== pastSwipeRef.current) {
+        pastSwipeRef.current = isPastSwipe;
+        if (isPastSwipe) feedbackTick(600);
+      }
+      const isPastDeep = !!deepSwipeActions && clampedX <= -DEEP_SWIPE_THRESHOLD;
+      if (isPastDeep !== pastDeepRef.current) {
+        pastDeepRef.current = isPastDeep;
+        if (isPastDeep) feedbackTick(350);
+      }
+    }
+
     if (!disabled && cyclable && clampedX <= -DEEP_SWIPE_THRESHOLD) {
       if (deepEntryYRef.current == null) deepEntryYRef.current = e.clientY;
       const deltaY = e.clientY - deepEntryYRef.current;
       const step = Math.round(-deltaY / OPTION_CYCLE_DISTANCE);
-      setDeepIndex(Math.max(0, Math.min(deepSwipeActions!.length - 1, step)));
+      const clampedStep = Math.max(0, Math.min(deepSwipeActions!.length - 1, step));
+      if (clampedStep !== deepIndexRef.current) {
+        deepIndexRef.current = clampedStep;
+        feedbackTick(700 + clampedStep * 60);
+      }
+      setDeepIndex(clampedStep);
     } else {
       deepEntryYRef.current = null;
+      deepIndexRef.current = 0;
       setDeepIndex(0);
     }
   }
@@ -2689,16 +2715,22 @@ function SwipeableRow({
     if (startXRef.current == null) return;
     if (!disabled) {
       if (deepSwipeActions && dragX <= -DEEP_SWIPE_THRESHOLD) {
+        feedbackConfirm(450);
         deepSwipeActions[deepIndex]?.onTrigger();
       } else if (dragX <= -SWIPE_THRESHOLD) {
+        feedbackConfirm(500);
         onSwipeComplete();
       } else if (dragX >= SWIPE_THRESHOLD) {
+        feedbackConfirm(400);
         onSwipeFailed();
       }
     }
     setDragX(0);
     setDeepIndex(0);
     deepEntryYRef.current = null;
+    pastSwipeRef.current = false;
+    pastDeepRef.current = false;
+    deepIndexRef.current = 0;
     startXRef.current = null;
   }
 
@@ -2811,6 +2843,8 @@ function RecordResultDrawer({
   const [roundsWon, setRoundsWon] = useState("");
   const [place, setPlace] = useState("");
   const [postToProfile, setPostToProfile] = useState(false);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
@@ -2825,6 +2859,8 @@ function RecordResultDrawer({
     setRoundsWon("");
     setPlace("");
     setPostToProfile(false);
+    setTitle("");
+    setBody("");
     setPhotoUrl("");
     setUploadingPhoto(false);
   }, [event?.id]);
@@ -2846,6 +2882,8 @@ function RecordResultDrawer({
       );
       if (postToProfile) {
         await api.post(`/athletes/${athleteId}/posts`, {
+          title: title.trim() || undefined,
+          body: body.trim() || undefined,
           share_kind: "competition_result",
           share_id: result.id,
           image_url: photoUrl || undefined,
@@ -2886,14 +2924,29 @@ function RecordResultDrawer({
           Post this result to my profile
         </label>
         {postToProfile && (
-          <MediaField
-            label="Photo (optional)"
-            kind="image"
-            value={photoUrl}
-            onChange={setPhotoUrl}
-            onError={showMediaError}
-            onUploadingChange={setUploadingPhoto}
-          />
+          <>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Title (optional)"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="What's on your mind?"
+              rows={3}
+              className="rounded-xl border border-stone-300 px-3 py-2"
+            />
+            <MediaField
+              label="Photo (optional)"
+              kind="image"
+              value={photoUrl}
+              onChange={setPhotoUrl}
+              onError={showMediaError}
+              onUploadingChange={setUploadingPhoto}
+            />
+          </>
         )}
         <button
           type="submit"
