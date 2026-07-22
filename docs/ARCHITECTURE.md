@@ -510,32 +510,62 @@ coach-run attendance) — this is personal athlete itinerary planning.
   For editors of the module library, the page surfaces any save failure
   (bad bounds, network error) via a `Toast`, since every field edit
   auto-saves immediately and previously failed silently.
-- **Creating a module is a step-by-step wizard; editing one stays a
-  single scrolling form.** `CreateModuleWizard` (`admin/TrainingModules.tsx`)
-  replaces the old "New training module" drawer's one long form: step 0
-  is the module's own Title/Explanation/Type, then one step per
-  exercise/rest item (reusing `ItemFields`, extracted from
-  `ModuleItemsEditor` so both the wizard and the existing all-at-once
-  edit-flow editor share the same field markup instead of duplicating
-  it). "Next" on step 0 validates the title, seeds a first blank
-  exercise item if none exist yet, and advances; each item step has
-  "Back", "+ Next step" (append another blank item and advance to it),
-  "Remove this step", and "Finish" (submits everything gathered so far,
-  reachable from any item step, not just the last). All state
-  (`step`/`form`/`items`) lives inside `CreateModuleWizard` itself and
-  the component is only mounted while the create drawer is open, so
-  each open starts fresh with no reset boilerplate needed in the parent.
-  **Fixed: switching steps showed the previous item's stale field
-  values.** `ItemFields`' inputs are uncontrolled (`defaultValue` +
-  `onBlur`, matching every other auto-saving form in the app) so mid-
-  edit keystrokes don't fight the cursor - but that means React doesn't
-  refresh their displayed value when a *different* item swaps into the
-  same position without unmounting. `<ItemFields key={step} .../>` in
-  the wizard forces a remount on every step change so each step's inputs
-  always reflect that step's actual item, not leftover DOM state from
-  the previous one (this only affects the single-item-at-a-time wizard;
-  `ModuleItemsEditor`'s all-at-once list already keys each item's block
-  by its stable index).
+- **Creating a module is a step-by-step wizard whose steps are the
+  exercise/rest items only** (`admin/TrainingModules.tsx`). General info
+  (Title/Explanation/Type) is a screen of its own before step 1, not
+  counted in the step total — the caption just reads "General info"
+  there, and switches to `Step {itemIndex+1} of {items.length} ·
+  {stageLabel}` once past it. Each item is itself broken into small,
+  lazily-revealed stages rather than one long field list —
+  `stagesFor(item)` returns `["type", "name", "measure", "details",
+  "media"]` for an exercise (pick exercise-vs-rest first, since that
+  decides everything downstream; then name/explanation; then how it's
+  measured; then the sets-or-duration fields that choice implies; then
+  optional video/image last) or just `["type", "details"]` for a rest
+  item (straight from type to its one duration field — it has no name,
+  measure choice, or media). `ItemStageContent` renders one stage's
+  fields at a time and is shared by both the create wizard and the
+  edit-flow's per-step editor below, so the stage markup exists once.
+  Navigation is five icon buttons (`IconBtn`, matching the app's
+  existing emoji-icon conventions — 🗑 for delete, ✓ for done) rather
+  than labeled text buttons: ← Back / → Next walk one stage at a time
+  (crossing into the next item once the current one's stages run out,
+  or back into the previous item's last stage, or back onto General
+  Info from item 1's first stage); ➕ Insert always appends a brand new
+  blank item and jumps straight to its first (type) stage regardless of
+  which stage/item you're currently on; 🗑 Remove deletes the current
+  item outright (dropping back to General Info if it was the last one
+  left); ✓ Finish submits everything gathered so far from any point, not
+  just the end. All wizard state lives inside `CreateModuleWizard` itself
+  and it's only mounted while the create drawer is open, so each open
+  starts fresh with no reset boilerplate needed in the parent.
+  **Fixed: switching stages/items showed the previous one's stale field
+  values.** The stage fields are uncontrolled (`defaultValue` + `onBlur`,
+  matching every other auto-saving form in the app) so mid-edit
+  keystrokes don't fight the cursor — but that means React won't
+  refresh their displayed value when a *different* item or stage swaps
+  into the same position without unmounting. `<ItemStageContent
+  key={`${itemIndex}-${stage}`} .../>` forces a remount on every
+  stage/item change so the fields always reflect what's actually being
+  edited, never leftover DOM state from the previous screen.
+- **Editing an existing module: a draggable, jump-to-step list instead
+  of every item open at once.** `EditModuleItems` replaces the old
+  `ModuleItemsEditor` — each step collapses to a one-line summary
+  (`draftItemSummary`) with a drag handle (⠿, native HTML5
+  `draggable`/`onDragStart`/`onDragOver`/`onDrop` — no drag-and-drop
+  library needed) and a ▼/▲ chevron; tapping a row expands it in place
+  into the *same* per-stage editor the create wizard uses (its own
+  local `stageIndex`, reset to 0 whenever a different row expands), so
+  jumping into any step lands you on its first stage rather than a wall
+  of fields, with ← Back/→ Next to move between that step's stages and
+  🗑 Remove to delete it. Dragging a row's handle onto another reorders
+  the array (splice-out/splice-in) and immediately `PATCH`es the whole
+  `items` array in its new order — same replace-all-as-a-unit pattern
+  the rest of the module's fields already use. A trailing ➕ Insert
+  button appends a new blank item and auto-expands it. `draftItemSummary`
+  is a `DraftItem`-shaped twin of `itemSummary` (string-valued fields,
+  not yet the server's numeric ones) so an in-progress edit's summary
+  line updates immediately without waiting on a round-trip.
 - **Training module types.** A shared, admin-managed lookup
   (`nk_training_module_types`: `id`, `name`) — same shape as
   `nk_karate_styles` — for tagging a module with a category (Cardio,
