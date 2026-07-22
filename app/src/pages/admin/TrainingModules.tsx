@@ -1,4 +1,9 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { ApiError, useApi } from "../../hooks/useApi";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -293,22 +298,35 @@ function ItemStageContent({
   }
 }
 
-// Jumping into an *existing* step from the list below skips straight past
-// the "type" stage to the name/description (or, for rest, the duration)
-// stage - the type was already chosen when the step was created, so
-// re-asking it first is just an extra tap. A brand-new step (via "Add
-// step") still starts at stage 0, since its type genuinely isn't decided
-// yet.
-const EXISTING_STEP_STAGE_INDEX = 1;
+// Jumping into an *existing* activity from the list below skips straight
+// past the "type" stage to the name/description (or, for rest, the
+// duration) stage - the type was already chosen when the activity was
+// created, so re-asking it first is just an extra tap. A brand-new
+// activity (via "Add activity") still starts at stage 0, since its type
+// genuinely isn't decided yet.
+const EXISTING_ACTIVITY_STAGE_INDEX = 1;
 
-// The step list shown on the general-info screen of both wizards - lets
-// you see every exercise/rest step at a glance, jump straight into one to
-// edit it, reorder with ▲/▼ (icon buttons rather than drag-and-drop, since
-// this is a touch-first app - see NavTabsEditor for the same reasoning),
-// and remove one without entering it. Restores the at-a-glance step
-// overview that jumping straight into the per-step wizard on open doesn't
-// otherwise provide.
-function StepsList({
+const LONG_PRESS_MS = 350;
+const MOVE_CANCEL_PX = 10;
+
+// The activities list shown on the general-info screen of both wizards -
+// lets you see every exercise/rest activity at a glance, jump straight
+// into one to edit it, drag ⠿ to reorder, and remove one without entering
+// it. Restores the at-a-glance overview that jumping straight into the
+// per-activity wizard on open doesn't otherwise provide.
+//
+// Dragging arms after a long press on the ⠿ handle specifically (not the
+// whole row - the row itself stays a plain tap target for "open this
+// activity"), matching the same long-press-then-pointer-drag pattern
+// already used for rescheduling a timed event in the Day view: a short
+// press-and-swipe (e.g. scrolling the drawer past this list) never starts
+// a drag, since the row doesn't listen to pointermove until the timer
+// fires, and moving too far before it fires cancels the pending arm.
+// Reordering happens locally (`displayItems`) as the drag crosses each
+// row-height boundary, purely for live visual feedback - the parent's
+// `onReorder` (which persists via PATCH in the edit wizard) only fires
+// once, on release, rather than once per boundary crossed.
+function ActivitiesList({
   items,
   onReorder,
   onSelect,
@@ -319,30 +337,102 @@ function StepsList({
   onSelect: (index: number) => void;
   onRemove: (index: number) => void;
 }) {
+  const [displayItems, setDisplayItems] = useState(items);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [dragOffset, setDragOffset] = useState(0);
+  const startYRef = useRef(0);
+  const rowHeightRef = useRef(60);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (draggingIndex === null) setDisplayItems(items);
+  }, [items, draggingIndex]);
+
   if (items.length === 0) return null;
 
-  function moveUp(i: number) {
-    if (i <= 0) return;
-    const next = [...items];
-    [next[i - 1], next[i]] = [next[i], next[i - 1]];
-    onReorder(next);
+  function clearLongPressTimer() {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
   }
 
-  function moveDown(i: number) {
-    if (i >= items.length - 1) return;
-    const next = [...items];
-    [next[i + 1], next[i]] = [next[i], next[i + 1]];
-    onReorder(next);
+  function handlePointerDown(
+    e: ReactPointerEvent,
+    index: number,
+    rowEl: HTMLElement | null
+  ) {
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    pressStartRef.current = { x: e.clientX, y: e.clientY };
+    if (rowEl) rowHeightRef.current = rowEl.offsetHeight + 8;
+    const startY = e.clientY;
+    clearLongPressTimer();
+    longPressTimerRef.current = setTimeout(() => {
+      startYRef.current = startY;
+      setDraggingIndex(index);
+      setDragOffset(0);
+    }, LONG_PRESS_MS);
+  }
+
+  function handlePointerMove(e: ReactPointerEvent) {
+    if (draggingIndex === null) {
+      if (pressStartRef.current) {
+        const dx = e.clientX - pressStartRef.current.x;
+        const dy = e.clientY - pressStartRef.current.y;
+        if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) {
+          clearLongPressTimer();
+          pressStartRef.current = null;
+        }
+      }
+      return;
+    }
+    const delta = e.clientY - startYRef.current;
+    const steps = Math.round(delta / rowHeightRef.current);
+    if (steps === 0) {
+      setDragOffset(delta);
+      return;
+    }
+    const targetIndex = Math.max(
+      0,
+      Math.min(displayItems.length - 1, draggingIndex + steps)
+    );
+    if (targetIndex !== draggingIndex) {
+      const next = [...displayItems];
+      const [moved] = next.splice(draggingIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      setDisplayItems(next);
+      setDraggingIndex(targetIndex);
+    }
+    startYRef.current = e.clientY;
+    setDragOffset(0);
+  }
+
+  function handlePointerUp() {
+    clearLongPressTimer();
+    pressStartRef.current = null;
+    if (draggingIndex !== null) onReorder(displayItems);
+    setDraggingIndex(null);
+    setDragOffset(0);
   }
 
   return (
     <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
-      <span className="text-xs font-medium text-stone-600">Steps</span>
+      <span className="text-xs font-medium text-stone-600">Activities</span>
       <div className="flex flex-col gap-2">
-        {items.map((item, i) => (
+        {displayItems.map((item, i) => (
           <div
             key={i}
-            className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2"
+            className={`flex items-center gap-2 rounded-xl border bg-white px-3 py-2 ${
+              draggingIndex === i
+                ? "z-10 border-red-300 shadow-lg"
+                : "border-stone-200"
+            }`}
+            style={
+              draggingIndex === i
+                ? { transform: `translateY(${dragOffset}px)` }
+                : undefined
+            }
           >
             <button
               type="button"
@@ -351,31 +441,27 @@ function StepsList({
             >
               {draftItemSummary(item)}
             </button>
-            <button
-              type="button"
-              onClick={() => moveUp(i)}
-              disabled={i === 0}
-              aria-label={`Move step ${i + 1} up`}
-              className="flex h-9 w-9 items-center justify-center text-stone-500 disabled:opacity-30"
+            <span
+              onPointerDown={(e) =>
+                handlePointerDown(e, i, e.currentTarget.closest("div"))
+              }
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              aria-label={`Drag to reorder ${draftItemSummary(item)}`}
+              role="button"
+              style={{ touchAction: "none" }}
+              className="flex h-9 w-9 shrink-0 cursor-grab items-center justify-center text-lg text-stone-400 active:cursor-grabbing"
             >
-              ▲
-            </button>
-            <button
-              type="button"
-              onClick={() => moveDown(i)}
-              disabled={i === items.length - 1}
-              aria-label={`Move step ${i + 1} down`}
-              className="flex h-9 w-9 items-center justify-center text-stone-500 disabled:opacity-30"
-            >
-              ▼
-            </button>
+              ⠿
+            </span>
             <button
               type="button"
               onClick={() => onRemove(i)}
-              aria-label={`Remove step ${i + 1}`}
-              className="flex h-9 w-9 items-center justify-center text-red-700"
+              aria-label={`Remove ${draftItemSummary(item)}`}
+              className="flex h-9 w-9 shrink-0 items-center justify-center text-red-700"
             >
-              ✕
+              🗑
             </button>
           </div>
         ))}
@@ -446,7 +532,7 @@ function CreateModuleWizard({
   const [itemIndex, setItemIndex] = useState(0);
   const [stageIndex, setStageIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [stepError, setStepError] = useState<string | null>(null);
+  const [activityError, setActivityError] = useState<string | null>(null);
 
   const currentItem = !onGeneralInfo ? items[itemIndex] ?? null : null;
   const stages = currentItem ? stagesFor(currentItem) : [];
@@ -464,10 +550,10 @@ function CreateModuleWizard({
   }
 
   function goNext() {
-    setStepError(null);
+    setActivityError(null);
     if (onGeneralInfo) {
       if (!form.title.trim()) {
-        setStepError("Title is required");
+        setActivityError("Title is required");
         return;
       }
       if (items.length === 0) setItems([{ ...EMPTY_EXERCISE }]);
@@ -478,7 +564,7 @@ function CreateModuleWizard({
     }
     if (!currentItem) return;
     if (!stageValid(currentItem, stage)) {
-      setStepError("Name is required");
+      setActivityError("Name is required");
       return;
     }
     if (stageIndex < stages.length - 1) {
@@ -490,7 +576,7 @@ function CreateModuleWizard({
   }
 
   function goBack() {
-    setStepError(null);
+    setActivityError(null);
     if (onGeneralInfo) return;
     if (stageIndex > 0) {
       setStageIndex((s) => s - 1);
@@ -502,24 +588,24 @@ function CreateModuleWizard({
     }
   }
 
-  function insertStep() {
+  function insertActivity() {
     if (!onGeneralInfo && !currentItemMinimallyValid()) {
-      setStepError("Name is required");
+      setActivityError("Name is required");
       return;
     }
-    setStepError(null);
+    setActivityError(null);
     setItemIndex(items.length);
     setItems((prev) => [...prev, { ...EMPTY_EXERCISE }]);
     setStageIndex(0);
     setOnGeneralInfo(false);
   }
 
-  function removeStep() {
+  function removeActivity() {
     if (onGeneralInfo || !currentItem) return;
     const next = items.filter((_, i) => i !== itemIndex);
     setItems(next);
     setStageIndex(0);
-    setStepError(null);
+    setActivityError(null);
     if (next.length === 0) {
       setOnGeneralInfo(true);
       setItemIndex(0);
@@ -530,10 +616,10 @@ function CreateModuleWizard({
 
   async function finish() {
     if (!onGeneralInfo && !currentItemMinimallyValid()) {
-      setStepError("Name is required");
+      setActivityError("Name is required");
       return;
     }
-    setStepError(null);
+    setActivityError(null);
     setSubmitting(true);
     try {
       const { module: created } = await api.post<{ module: TrainingModule }>(
@@ -556,14 +642,14 @@ function CreateModuleWizard({
   const canGoNext =
     onGeneralInfo || stageIndex < stages.length - 1 || itemIndex < items.length - 1;
 
-  function selectStep(index: number) {
-    setStepError(null);
+  function selectActivity(index: number) {
+    setActivityError(null);
     setItemIndex(index);
-    setStageIndex(EXISTING_STEP_STAGE_INDEX);
+    setStageIndex(EXISTING_ACTIVITY_STAGE_INDEX);
     setOnGeneralInfo(false);
   }
 
-  function removeStepAt(index: number) {
+  function removeActivityAt(index: number) {
     setItems((prev) => prev.filter((_, i) => i !== index));
   }
 
@@ -579,7 +665,7 @@ function CreateModuleWizard({
       <span className="text-xs font-medium text-stone-500">
         {onGeneralInfo
           ? "General info"
-          : `Step ${itemIndex + 1} of ${items.length} · ${stageLabel(stage)}`}
+          : `Activity ${itemIndex + 1} of ${items.length} · ${stageLabel(stage)}`}
       </span>
 
       {onGeneralInfo ? (
@@ -604,11 +690,11 @@ function CreateModuleWizard({
             value={form.type_id}
             onChange={(type_id) => setForm({ ...form, type_id })}
           />
-          <StepsList
+          <ActivitiesList
             items={items}
             onReorder={setItems}
-            onSelect={selectStep}
-            onRemove={removeStepAt}
+            onSelect={selectActivity}
+            onRemove={removeActivityAt}
           />
         </>
       ) : (
@@ -623,7 +709,7 @@ function CreateModuleWizard({
         )
       )}
 
-      {stepError && <p className="text-sm text-red-700">{stepError}</p>}
+      {activityError && <p className="text-sm text-red-700">{activityError}</p>}
 
       <div className="sticky bottom-0 -mx-4 mt-2 flex flex-col gap-2 border-t border-stone-200 bg-white px-4 pb-4 pt-3">
         <div className="flex gap-2">
@@ -641,17 +727,17 @@ function CreateModuleWizard({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={insertStep}
+              onClick={insertActivity}
               className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
             >
-              + Add step
+              + Add activity
             </button>
             <button
               type="button"
-              onClick={removeStep}
+              onClick={removeActivity}
               className="min-h-[44px] flex-1 rounded-xl border border-red-200 font-medium text-red-700"
             >
-              🗑 Remove step
+              🗑 Remove activity
             </button>
           </div>
         )}
@@ -729,7 +815,7 @@ function EditModuleWizard({
     }
   }
 
-  function insertStep() {
+  function insertActivity() {
     const next = [...items, { ...EMPTY_EXERCISE }];
     setItemIndex(next.length - 1);
     setStageIndex(0);
@@ -737,7 +823,7 @@ function EditModuleWizard({
     saveItems(next);
   }
 
-  function removeStep() {
+  function removeActivity() {
     if (!currentItem) return;
     const next = items.filter((_, i) => i !== itemIndex);
     setStageIndex(0);
@@ -753,13 +839,13 @@ function EditModuleWizard({
   const canGoNext =
     onGeneralInfo || stageIndex < stages.length - 1 || itemIndex < items.length - 1;
 
-  function selectStep(index: number) {
+  function selectActivity(index: number) {
     setItemIndex(index);
-    setStageIndex(EXISTING_STEP_STAGE_INDEX);
+    setStageIndex(EXISTING_ACTIVITY_STAGE_INDEX);
     setOnGeneralInfo(false);
   }
 
-  function removeStepAt(index: number) {
+  function removeActivityAt(index: number) {
     saveItems(items.filter((_, i) => i !== index));
   }
 
@@ -775,7 +861,7 @@ function EditModuleWizard({
       <span className="text-xs font-medium text-stone-500">
         {onGeneralInfo
           ? "General info"
-          : `Step ${itemIndex + 1} of ${items.length} · ${stageLabel(stage)}`}
+          : `Activity ${itemIndex + 1} of ${items.length} · ${stageLabel(stage)}`}
       </span>
 
       {onGeneralInfo ? (
@@ -808,11 +894,11 @@ function EditModuleWizard({
             value={module.type_id}
             onChange={(type_id) => onSave({ type_id })}
           />
-          <StepsList
+          <ActivitiesList
             items={items}
             onReorder={saveItems}
-            onSelect={selectStep}
-            onRemove={removeStepAt}
+            onSelect={selectActivity}
+            onRemove={removeActivityAt}
           />
         </>
       ) : (
@@ -837,22 +923,24 @@ function EditModuleWizard({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={insertStep}
+              onClick={insertActivity}
               className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
             >
-              + Add step
+              + Add activity
             </button>
             <button
               type="button"
-              onClick={removeStep}
+              onClick={removeActivity}
               className="min-h-[44px] flex-1 rounded-xl border border-red-200 font-medium text-red-700"
             >
-              🗑 Remove step
+              🗑 Remove activity
             </button>
           </div>
         )}
 
-        <DeleteButton onClick={onDelete} itemLabel={module.title} />
+        {onGeneralInfo && (
+          <DeleteButton onClick={onDelete} itemLabel={module.title} />
+        )}
       </div>
     </div>
   );
