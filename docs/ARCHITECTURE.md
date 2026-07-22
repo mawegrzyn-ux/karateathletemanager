@@ -1700,6 +1700,17 @@ unchanged.
   tab is active, since text color alone wouldn't reliably show up over a
   photo either. `Avatar` (the small circular badge) still renders, but
   only as the no-photo fallback.
+- **Fixed: a solid white wedge showed next to the diagonal cut.** The
+  `clip-path` on the Profile tab's colored/photo layer only fills the
+  polygon itself; the small triangular remainder of that tab's `w-24`
+  box (outside the cut, at the bottom) used to fall through to the
+  `<nav>` element's own `bg-white/95`, so a stray white sliver sat right
+  at the diagonal seam. `bg-white/95 backdrop-blur` (and the safe-area
+  bottom padding) moved off `<nav>` itself and onto the tab-strip
+  container div instead, while the Profile `NavLink` got its own
+  `bg-stone-100` (the app's base background color) to sit behind its
+  clipped layers — the sliver now blends into the page background
+  instead of standing out as an opaque white patch.
 
 ### Osu — admin chatbot & MCP server
 

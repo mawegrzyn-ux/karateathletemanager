@@ -78,11 +78,11 @@ function Shell() {
         <Outlet />
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 flex bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-1px_2px_rgba(28,25,23,0.04),0_-8px_20px_-6px_rgba(28,25,23,0.10)] backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 flex shadow-[0_-1px_2px_rgba(28,25,23,0.04),0_-8px_20px_-6px_rgba(28,25,23,0.10)]">
         <NavLink
           to="/profile"
           className={({ isActive }) =>
-            `relative flex min-h-[44px] w-24 flex-col items-center justify-center gap-0.5 pl-2 pr-5 text-xs font-medium transition-colors ${
+            `relative flex min-h-[44px] w-24 flex-col items-center justify-center gap-0.5 bg-stone-100 pb-[env(safe-area-inset-bottom)] pl-2 pr-5 text-xs font-medium transition-colors ${
               profilePhoto
                 ? "text-white"
                 : isActive
@@ -123,7 +123,7 @@ function Shell() {
             </>
           )}
         </NavLink>
-        <div className="flex flex-1 gap-1 overflow-x-auto px-1">
+        <div className="flex flex-1 gap-1 overflow-x-auto bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur">
           {tabs.map((tab) => (
             <NavLink
               key={tab.key}
