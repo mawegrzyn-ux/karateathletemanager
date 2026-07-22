@@ -647,6 +647,34 @@ coach-run attendance) — this is personal athlete itinerary planning.
   labeled with its club name; tapping a chip bulk-adds every athlete in
   it (never removes) to the selection, leaving the existing
   add/remove/search picker underneath for fine-tuning.
+- **Venue contact info + free address lookup.** `nk_venues` gained
+  `contact_name`/`contact_phone`/`contact_email` — a single on-site
+  contact per venue (a facility manager, front desk, etc.), not a list,
+  so plain columns rather than a join table. Both venue-editing surfaces
+  (`admin/Venues.tsx`'s create/edit drawer, `ClubVenuesSection`'s
+  accordion) grew the three fields alongside name/address/notes; `PATCH`
+  on both `adminVenues.js` and `clubs.js`'s venue sub-route switched from
+  `COALESCE`-based updates to the presence-based dynamic `SET` clause
+  pattern (`key in req.body`) other PATCH handlers already use, so
+  explicitly clearing a contact field (`null`) actually clears it instead
+  of being indistinguishable from an omitted one. `GET /api/venues` (the
+  cross-club Schedule picker) and `Schedule.tsx`'s read-only venue display
+  also surface the contact info, shown as a second line under the
+  address when any of the three fields are set.
+  The Address field itself (`AddressField`, `components/ui.tsx`) is a
+  drop-in replacement for a plain `<input>` — same `value`/`onChange`
+  contract as `MediaField`, same auto-save-on-blur behavior for whatever
+  gets typed — that also debounces (400ms, 3+ chars) a lookup against
+  `GET /api/geocode` and shows matching addresses in a dropdown; picking
+  one fills the field immediately (an onBlur equivalent) rather than
+  requiring the field to also be blurred. `geocode.js` proxies OpenStreetMap's
+  Nominatim search API rather than calling it from the browser: Nominatim
+  needs neither an API key nor per-admin configuration (unlike Brave
+  Search's `nk_settings`-backed key), but its usage policy requires a
+  descriptive `User-Agent` (which `fetch` from a browser can't set) and
+  caps usage at roughly one request/second — both far easier to guarantee
+  from one server process (a hardcoded `User-Agent` plus an in-memory
+  `lastRequestAt` throttle) than from every client's browser.
 - **Grades**: belts and grades are unified into one concept.
   `nk_grade_levels` (`kind` `'kyu'|'dan'`, `rank_order` — a flat ascending
   beginner→advanced scale spanning both kinds, `name`, `belt_color`,

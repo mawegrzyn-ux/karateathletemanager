@@ -6,6 +6,7 @@ import {
   type PropsWithChildren,
 } from "react";
 import { dateLabel } from "../utils/dates";
+import { useApi } from "../hooks/useApi";
 
 export function Avatar({
   name,
@@ -148,6 +149,95 @@ export function MediaField({
             className="max-h-40 w-full rounded-xl object-cover"
           />
         ) : null}
+      </div>
+    </Field>
+  );
+}
+
+// Address text input with free-as-you-type lookup suggestions, backed by
+// GET /api/geocode (a thin server-side proxy over OpenStreetMap's Nominatim,
+// which needs neither an API key nor per-admin configuration, unlike
+// web_search's Brave key). Shaped as a drop-in replacement for a plain
+// `<input>` bound to venue.address: the outer contract is `value`/`onChange`
+// like MediaField, but internally the main text field still auto-saves on
+// blur (matching every other onBlur-triggers-PATCH field in this app) -
+// picking a suggestion is just a second, faster way to fill it in, not a
+// replacement for typing an address by hand.
+export function AddressField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (address: string) => void;
+}) {
+  const api = useApi();
+  const [query, setQuery] = useState(value);
+  const [suggestions, setSuggestions] = useState<{ display_name: string }[]>([]);
+  const [open, setOpen] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => setQuery(value), [value]);
+
+  function handleInput(e: ChangeEvent<HTMLInputElement>) {
+    const next = e.target.value;
+    setQuery(next);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (next.trim().length < 3) {
+      setSuggestions([]);
+      setOpen(false);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get<{ results: { display_name: string }[] }>(
+          `/geocode?q=${encodeURIComponent(next)}`
+        );
+        setSuggestions(res.results);
+        setOpen(res.results.length > 0);
+      } catch {
+        setSuggestions([]);
+      }
+    }, 400);
+  }
+
+  function pick(displayName: string) {
+    setQuery(displayName);
+    setOpen(false);
+    if (displayName !== value) onChange(displayName);
+  }
+
+  return (
+    <Field label={label}>
+      <div className="relative">
+        <input
+          value={query}
+          onChange={handleInput}
+          onFocus={() => setOpen(suggestions.length > 0)}
+          onBlur={() => {
+            // Delay closing so a click on a suggestion (which also blurs
+            // the input) has a chance to register first.
+            setTimeout(() => setOpen(false), 150);
+            if (query !== value) onChange(query);
+          }}
+          className="min-h-[44px] w-full rounded-xl border border-stone-300 px-3"
+        />
+        {open && (
+          <div className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-stone-200 bg-white shadow-card">
+            {suggestions.map((s, i) => (
+              <button
+                key={i}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pick(s.display_name)}
+                className="block w-full px-3 py-2 text-left text-sm hover:bg-stone-50"
+              >
+                {s.display_name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </Field>
   );

@@ -10,6 +10,7 @@ import {
   Toast,
   BeltSwatch,
   BELT_COLOR_OPTIONS,
+  AddressField,
 } from "../../components/ui";
 
 interface Association {
@@ -954,6 +955,9 @@ interface Venue {
   name: string;
   address: string | null;
   notes: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
 }
 
 interface ClubGrade {
@@ -1292,23 +1296,52 @@ function ClubVenuesSection({ clubId }: { clubId: number }) {
                         className="min-h-[44px] rounded-xl border border-stone-300 px-3"
                       />
                     </Field>
-                    <Field label="Address">
-                      <input
-                        defaultValue={v.address ?? ""}
-                        onBlur={(e) => {
-                          if (e.target.value !== (v.address ?? "")) {
-                            update(v.id, { address: e.target.value });
-                          }
-                        }}
-                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                      />
-                    </Field>
+                    <AddressField
+                      label="Address"
+                      value={v.address ?? ""}
+                      onChange={(address) => update(v.id, { address })}
+                    />
                     <Field label="Notes">
                       <input
                         defaultValue={v.notes ?? ""}
                         onBlur={(e) => {
                           if (e.target.value !== (v.notes ?? "")) {
                             update(v.id, { notes: e.target.value });
+                          }
+                        }}
+                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                      />
+                    </Field>
+                    <Field label="Contact name">
+                      <input
+                        defaultValue={v.contact_name ?? ""}
+                        onBlur={(e) => {
+                          if (e.target.value !== (v.contact_name ?? "")) {
+                            update(v.id, { contact_name: e.target.value });
+                          }
+                        }}
+                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                      />
+                    </Field>
+                    <Field label="Contact phone">
+                      <input
+                        type="tel"
+                        defaultValue={v.contact_phone ?? ""}
+                        onBlur={(e) => {
+                          if (e.target.value !== (v.contact_phone ?? "")) {
+                            update(v.id, { contact_phone: e.target.value });
+                          }
+                        }}
+                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                      />
+                    </Field>
+                    <Field label="Contact email">
+                      <input
+                        type="email"
+                        defaultValue={v.contact_email ?? ""}
+                        onBlur={(e) => {
+                          if (e.target.value !== (v.contact_email ?? "")) {
+                            update(v.id, { contact_email: e.target.value });
                           }
                         }}
                         className="min-h-[44px] rounded-xl border border-stone-300 px-3"

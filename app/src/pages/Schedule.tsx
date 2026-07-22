@@ -89,6 +89,9 @@ interface Venue {
   address: string | null;
   club_id: number | null;
   club_name: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
 }
 
 interface AthleteGroup {
@@ -1847,12 +1850,25 @@ function EventDetail({
           {event.venue_id != null &&
             (() => {
               const venue = venues.find((v) => v.id === event.venue_id);
-              return venue ? (
-                <p className="text-sm text-stone-600">
-                  📍 {venue.name}
-                  {venue.address ? ` – ${venue.address}` : ""}
-                </p>
-              ) : null;
+              if (!venue) return null;
+              const contact = [
+                venue.contact_name,
+                venue.contact_phone,
+                venue.contact_email,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <>
+                  <p className="text-sm text-stone-600">
+                    📍 {venue.name}
+                    {venue.address ? ` – ${venue.address}` : ""}
+                  </p>
+                  {contact && (
+                    <p className="text-xs text-stone-500">{contact}</p>
+                  )}
+                </>
+              );
             })()}
           {event.location && (
             <p className="text-sm text-stone-600">
