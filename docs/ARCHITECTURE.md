@@ -1164,15 +1164,20 @@ coach-run attendance) — this is personal athlete itinerary planning.
   needed since that route already accepts `image_url` on any post,
   shared or not.
   `QuickPostDrawer` (the "Add post" action, available on every event,
-  not just competitions) is even simpler: a body textarea prefilled with
-  `"{type label} · {dateLabel(start_date)} · {title}"` (e.g. "Squad
-  session · Today (Jul 22) · Morning Kihon Training") plus the same
-  optional photo field, `POST`ing straight to `/athletes/:id/posts` with
-  `share_kind: "event"` so the resulting post also carries the same
-  "🗓️ {title}" `ShareBadge` a manually-shared event gets from the main
-  composer — no "post to profile" checkbox needed since posting *is* the
-  action here, unlike Record Result where it's an optional add-on to a
-  different primary action.
+  not just competitions) is a Title input + Bold/Italic toolbar + body
+  textarea prefilled with `"{type label} · {dateLabel(start_date)} ·
+  {title}"` (e.g. "Squad session · Today (Jul 22) · Morning Kihon
+  Training") plus the same optional photo field, `POST`ing straight to
+  `/athletes/:id/posts` with `share_kind: "event"` so the resulting post
+  also carries the same "🗓️ {title}" `ShareBadge` a manually-shared event
+  gets from the main composer — no "post to profile" checkbox needed
+  since posting *is* the action here, unlike Record Result where it's an
+  optional add-on to a different primary action. The Title field and the
+  Bold/Italic buttons (`wrapSelection` wrapping the textarea's current
+  selection in `**`/`*` markers, identical to the main composer's
+  toolbar in `AthleteSocialProfile.tsx`) were both missing from the first
+  cut of this drawer — added so quick swipe-posted content has the same
+  formatting/title parity as every other posting path in the app.
   Neither drawer needs an athlete picker: both deep-swipe actions are
   only ever reachable on an athlete's own row
   (`disabled={e.my_status == null}` already gates the whole
