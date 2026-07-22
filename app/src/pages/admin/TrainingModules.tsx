@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, useApi } from "../../hooks/useApi";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -81,18 +81,6 @@ const EMPTY_EXERCISE: DraftItem = {
   duration_seconds: "",
 };
 
-const EMPTY_REST: DraftItem = {
-  item_type: "rest",
-  name: "",
-  explanation: "",
-  video_url: "",
-  image_url: "",
-  mode: "time",
-  sets: "",
-  reps: "",
-  duration_seconds: "",
-};
-
 function toDraftItem(item: TrainingModuleItem): DraftItem {
   return {
     item_type: item.item_type,
@@ -136,32 +124,85 @@ function toApiItem(it: DraftItem) {
   };
 }
 
-// The type-select + type-dependent fields for a single item - shared by
-// ModuleItemsEditor (all items open at once, editing an existing module)
-// and CreateModuleWizard (one item per step, building a new module).
-function ItemFields({
+// A quick, DraftItem-shaped summary line - same wording as itemSummary but
+// working off the string-valued draft fields (not yet the numeric,
+// server-shaped TrainingModuleItem) so it's usable before an item is saved.
+function draftItemSummary(it: DraftItem): string {
+  if (it.item_type === "rest") {
+    return it.duration_seconds ? `Rest ${it.duration_seconds}s` : "Rest";
+  }
+  const name = it.name.trim() || "Untitled exercise";
+  if (it.mode === "time") {
+    return it.duration_seconds ? `${name} — ${it.duration_seconds}s` : name;
+  }
+  return it.sets && it.reps ? `${name} — ${it.sets} × ${it.reps}` : name;
+}
+
+// Building or reviewing one exercise/rest item is broken into a handful of
+// small screens instead of one long form, so a coach on a phone only ever
+// sees a couple of fields at once: pick the type first (it decides what
+// the rest of the screens even are), then name/explanation, then how it's
+// measured, then the sets-or-duration values that choice implies, and
+// finally optional media - each its own screen. `rest` skips straight from
+// type to its one duration field, since it has no name/measure/media.
+const EXERCISE_STAGES = ["type", "name", "measure", "details", "media"] as const;
+const REST_STAGES = ["type", "details"] as const;
+type Stage = (typeof EXERCISE_STAGES)[number] | (typeof REST_STAGES)[number];
+
+function stagesFor(item: DraftItem): readonly Stage[] {
+  return item.item_type === "exercise" ? EXERCISE_STAGES : REST_STAGES;
+}
+
+function stageLabel(stage: Stage): string {
+  switch (stage) {
+    case "type":
+      return "Exercise or rest?";
+    case "name":
+      return "Name & explanation";
+    case "measure":
+      return "Measured by";
+    case "details":
+      return "Details";
+    case "media":
+      return "Media";
+  }
+}
+
+function stageValid(item: DraftItem, stage: Stage): boolean {
+  if (stage === "name") return item.item_type !== "exercise" || item.name.trim() !== "";
+  return true;
+}
+
+// The fields for a single stage of a single item - shared by the create
+// wizard (one stage of one item on screen at a time) and the edit-flow's
+// per-step editor (same stages, reached by expanding a step in the list).
+function ItemStageContent({
   item,
+  stage,
   onChange,
   onError,
 }: {
   item: DraftItem;
+  stage: Stage;
   onChange: (patch: Partial<DraftItem>) => void;
   onError: (message: string) => void;
 }) {
-  return (
-    <>
-      <Field label="Type">
-        <select
-          value={item.item_type}
-          onChange={(e) => onChange({ item_type: e.target.value as ItemType })}
-          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-        >
-          <option value="exercise">Exercise</option>
-          <option value="rest">Rest</option>
-        </select>
-      </Field>
-
-      {item.item_type === "exercise" ? (
+  switch (stage) {
+    case "type":
+      return (
+        <Field label="Type">
+          <select
+            value={item.item_type}
+            onChange={(e) => onChange({ item_type: e.target.value as ItemType })}
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+          >
+            <option value="exercise">Exercise</option>
+            <option value="rest">Rest</option>
+          </select>
+        </Field>
+      );
+    case "name":
+      return (
         <>
           <Field label="Name">
             <input
@@ -178,6 +219,63 @@ function ItemFields({
               className="rounded-xl border border-stone-300 px-3 py-2"
             />
           </Field>
+        </>
+      );
+    case "measure":
+      return (
+        <Field label="Measured by">
+          <select
+            value={item.mode}
+            onChange={(e) => onChange({ mode: e.target.value as "reps" | "time" })}
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+          >
+            <option value="reps">Sets &amp; reps</option>
+            <option value="time">Time</option>
+          </select>
+        </Field>
+      );
+    case "details":
+      if (item.item_type === "rest" || item.mode === "time") {
+        return (
+          <Field label="Duration (seconds)">
+            <input
+              type="number"
+              min={1}
+              max={MAX_DURATION_SECONDS}
+              defaultValue={item.duration_seconds}
+              onBlur={(e) => onChange({ duration_seconds: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+        );
+      }
+      return (
+        <div className="flex gap-2">
+          <Field label="Sets">
+            <input
+              type="number"
+              min={1}
+              max={MAX_SETS}
+              defaultValue={item.sets}
+              onBlur={(e) => onChange({ sets: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Reps">
+            <input
+              type="number"
+              min={1}
+              max={MAX_REPS}
+              defaultValue={item.reps}
+              onBlur={(e) => onChange({ reps: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+        </div>
+      );
+    case "media":
+      return (
+        <>
           <MediaField
             label="Video"
             kind="video"
@@ -192,145 +290,57 @@ function ItemFields({
             onChange={(url) => onChange({ image_url: url })}
             onError={onError}
           />
-          <Field label="Measured by">
-            <select
-              value={item.mode}
-              onChange={(e) => onChange({ mode: e.target.value as "reps" | "time" })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            >
-              <option value="reps">Sets &amp; reps</option>
-              <option value="time">Time</option>
-            </select>
-          </Field>
-          {item.mode === "reps" ? (
-            <div className="flex gap-2">
-              <Field label="Sets">
-                <input
-                  type="number"
-                  min={1}
-                  max={MAX_SETS}
-                  defaultValue={item.sets}
-                  onBlur={(e) => onChange({ sets: e.target.value })}
-                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                />
-              </Field>
-              <Field label="Reps">
-                <input
-                  type="number"
-                  min={1}
-                  max={MAX_REPS}
-                  defaultValue={item.reps}
-                  onBlur={(e) => onChange({ reps: e.target.value })}
-                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                />
-              </Field>
-            </div>
-          ) : (
-            <Field label="Duration (seconds)">
-              <input
-                type="number"
-                min={1}
-                max={MAX_DURATION_SECONDS}
-                defaultValue={item.duration_seconds}
-                onBlur={(e) => onChange({ duration_seconds: e.target.value })}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-          )}
         </>
-      ) : (
-        <Field label="Duration (seconds)">
-          <input
-            type="number"
-            min={1}
-            max={MAX_DURATION_SECONDS}
-            defaultValue={item.duration_seconds}
-            onBlur={(e) => onChange({ duration_seconds: e.target.value })}
-            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-          />
-        </Field>
-      )}
-    </>
-  );
+      );
+  }
 }
 
-function ModuleItemsEditor({
-  items,
-  onChange,
-  onError,
+// Icon-only nav buttons shared by the create wizard and the edit-flow's
+// per-step editor - back/next/insert/remove/finish, matching the rest of
+// the app's emoji-icon conventions (🗑 for delete, ✓ for a done state).
+function IconBtn({
+  icon,
+  label,
+  onClick,
+  disabled,
+  tone = "neutral",
 }: {
-  items: DraftItem[];
-  onChange: (items: DraftItem[]) => void;
-  onError: (message: string) => void;
+  icon: string;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "neutral" | "danger" | "primary";
 }) {
-  function updateItem(index: number, patch: Partial<DraftItem>) {
-    onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
-  }
-
-  function removeItem(index: number) {
-    onChange(items.filter((_, i) => i !== index));
-  }
-
   return (
-    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
-      <span className="text-xs font-medium text-stone-600">
-        Exercises &amp; rest ({items.length})
-      </span>
-
-      <div className="flex flex-col gap-2">
-        {items.map((item, i) => (
-          <div
-            key={i}
-            className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-3"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-stone-500">
-                Step {i + 1}
-              </span>
-              <button
-                type="button"
-                onClick={() => removeItem(i)}
-                aria-label="Remove item"
-                className="flex min-h-[44px] min-w-[44px] items-center justify-center text-red-700"
-              >
-                ✕
-              </button>
-            </div>
-            <ItemFields
-              item={item}
-              onChange={(patch) => updateItem(i, patch)}
-              onError={onError}
-            />
-          </div>
-        ))}
-      </div>
-
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => onChange([...items, { ...EMPTY_EXERCISE }])}
-          className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
-        >
-          + Add exercise
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange([...items, { ...EMPTY_REST }])}
-          className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
-        >
-          + Add rest
-        </button>
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className={`flex min-h-[44px] flex-1 items-center justify-center text-lg disabled:opacity-40 ${
+        tone === "primary"
+          ? "rounded-full bg-red-600 text-white"
+          : tone === "danger"
+          ? "rounded-xl border border-stone-300 text-red-700"
+          : "rounded-xl border border-stone-300 text-stone-700"
+      }`}
+    >
+      {icon}
+    </button>
   );
 }
 
 // Building a new module is a step-by-step wizard rather than one long
-// scrolling form: step 0 is the module's own title/explanation, then one
-// step per exercise/rest item, added one at a time via "Next step" until
-// the coach taps "Finish" to submit everything gathered so far. Mounted
-// only while the create drawer is open (see TrainingModules below), so
-// each open gets fresh internal state for free.
+// scrolling form. General info (title/explanation/type) isn't counted as
+// a step - it's a screen of its own before step 1 - then each exercise/
+// rest item is its own step, itself broken into the stage screens above.
+// "Next" walks forward one stage at a time (crossing into the next item
+// once the current one's stages run out); "Insert" always appends a new
+// blank item and jumps straight to it, regardless of which stage of
+// which item you're currently on; "Remove" deletes the current item
+// outright; "Finish" submits everything gathered so far from any point.
+// Mounted only while the create drawer is open, so each open gets fresh
+// internal state for free.
 function CreateModuleWizard({
   types,
   onCreated,
@@ -341,55 +351,96 @@ function CreateModuleWizard({
   onToast: (message: string) => void;
 }) {
   const api = useApi();
-  const [step, setStep] = useState(0); // 0 = general info, N = items[N - 1]
+  const [onGeneralInfo, setOnGeneralInfo] = useState(true);
   const [form, setForm] = useState(EMPTY_FORM);
   const [items, setItems] = useState<DraftItem[]>([]);
+  const [itemIndex, setItemIndex] = useState(0);
+  const [stageIndex, setStageIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [stepError, setStepError] = useState<string | null>(null);
 
-  const currentItem = step > 0 ? items[step - 1] : null;
+  const currentItem = !onGeneralInfo ? items[itemIndex] ?? null : null;
+  const stages = currentItem ? stagesFor(currentItem) : [];
+  const stage = stages[stageIndex];
 
   function updateCurrentItem(patch: Partial<DraftItem>) {
     setItems((prev) =>
-      prev.map((it, i) => (i === step - 1 ? { ...it, ...patch } : it))
+      prev.map((it, i) => (i === itemIndex ? { ...it, ...patch } : it))
     );
   }
 
-  function currentItemValid() {
+  function currentItemMinimallyValid() {
     if (!currentItem) return true;
     return currentItem.item_type === "rest" || currentItem.name.trim() !== "";
   }
 
-  function goNextFromGeneralInfo() {
-    if (!form.title.trim()) {
-      setStepError("Title is required");
+  function goNext() {
+    setStepError(null);
+    if (onGeneralInfo) {
+      if (!form.title.trim()) {
+        setStepError("Title is required");
+        return;
+      }
+      if (items.length === 0) setItems([{ ...EMPTY_EXERCISE }]);
+      setOnGeneralInfo(false);
+      setItemIndex(0);
+      setStageIndex(0);
       return;
     }
-    setStepError(null);
-    if (items.length === 0) {
-      setItems([{ ...EMPTY_EXERCISE }]);
+    if (!currentItem) return;
+    if (!stageValid(currentItem, stage)) {
+      setStepError("Name is required");
+      return;
     }
-    setStep(1);
+    if (stageIndex < stages.length - 1) {
+      setStageIndex((s) => s + 1);
+    } else if (itemIndex < items.length - 1) {
+      setItemIndex((i) => i + 1);
+      setStageIndex(0);
+    }
   }
 
-  function addStep() {
-    if (!currentItemValid()) {
+  function goBack() {
+    setStepError(null);
+    if (onGeneralInfo) return;
+    if (stageIndex > 0) {
+      setStageIndex((s) => s - 1);
+    } else if (itemIndex > 0) {
+      setStageIndex(stagesFor(items[itemIndex - 1]).length - 1);
+      setItemIndex((i) => i - 1);
+    } else {
+      setOnGeneralInfo(true);
+    }
+  }
+
+  function insertStep() {
+    if (!onGeneralInfo && !currentItemMinimallyValid()) {
       setStepError("Name is required");
       return;
     }
     setStepError(null);
+    setItemIndex(items.length);
     setItems((prev) => [...prev, { ...EMPTY_EXERCISE }]);
-    setStep((s) => s + 1);
+    setStageIndex(0);
+    setOnGeneralInfo(false);
   }
 
-  function removeCurrentStep() {
-    setItems((prev) => prev.filter((_, i) => i !== step - 1));
-    setStep((s) => Math.max(0, s - 1));
+  function removeStep() {
+    if (onGeneralInfo || !currentItem) return;
+    const next = items.filter((_, i) => i !== itemIndex);
+    setItems(next);
+    setStageIndex(0);
     setStepError(null);
+    if (next.length === 0) {
+      setOnGeneralInfo(true);
+      setItemIndex(0);
+    } else {
+      setItemIndex((i) => Math.min(i, next.length - 1));
+    }
   }
 
   async function finish() {
-    if (!currentItemValid()) {
+    if (!onGeneralInfo && !currentItemMinimallyValid()) {
       setStepError("Name is required");
       return;
     }
@@ -413,17 +464,18 @@ function CreateModuleWizard({
     }
   }
 
-  const totalItemSteps = Math.max(items.length, step);
+  const canGoNext =
+    onGeneralInfo || stageIndex < stages.length - 1 || itemIndex < items.length - 1;
 
   return (
     <div className="flex flex-col gap-4">
       <span className="text-xs font-medium text-stone-500">
-        {step === 0
-          ? `Step 1 of ${totalItemSteps + 1} · General info`
-          : `Step ${step + 1} of ${totalItemSteps + 1} · Exercise/rest`}
+        {onGeneralInfo
+          ? "General info"
+          : `Step ${itemIndex + 1} of ${items.length} · ${stageLabel(stage)}`}
       </span>
 
-      {step === 0 ? (
+      {onGeneralInfo ? (
         <>
           <Field label="Title">
             <input
@@ -448,15 +500,10 @@ function CreateModuleWizard({
         </>
       ) : (
         currentItem && (
-          // Keyed on step so switching to a different (or freshly-added,
-          // blank) item remounts the fields instead of reusing the same
-          // DOM inputs - they're uncontrolled (defaultValue + onBlur, so
-          // a mid-step edit doesn't fight the user's cursor), which means
-          // React won't otherwise refresh their displayed value when the
-          // underlying item changes out from under them.
-          <ItemFields
-            key={step}
+          <ItemStageContent
+            key={`${itemIndex}-${stage}`}
             item={currentItem}
+            stage={stage}
             onChange={updateCurrentItem}
             onError={onToast}
           />
@@ -466,53 +513,155 @@ function CreateModuleWizard({
       {stepError && <p className="text-sm text-red-700">{stepError}</p>}
 
       <div className="flex gap-2">
-        {step > 0 && (
-          <button
-            type="button"
-            onClick={() => setStep((s) => s - 1)}
-            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
-          >
-            Back
-          </button>
+        <IconBtn icon="←" label="Back" onClick={goBack} disabled={onGeneralInfo} />
+        <IconBtn icon="→" label="Next" onClick={goNext} disabled={!canGoNext} />
+        {!onGeneralInfo && (
+          <>
+            <IconBtn icon="➕" label="Insert step" onClick={insertStep} />
+            <IconBtn icon="🗑" label="Remove step" onClick={removeStep} tone="danger" />
+          </>
         )}
-        {step === 0 ? (
-          <button
-            type="button"
-            onClick={goNextFromGeneralInfo}
-            className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white"
-          >
-            Next
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={addStep}
-            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
-          >
-            + Next step
-          </button>
-        )}
+        <IconBtn
+          icon="✓"
+          label={submitting ? "Saving" : "Finish"}
+          onClick={finish}
+          disabled={submitting}
+          tone="primary"
+        />
+      </div>
+    </div>
+  );
+}
+
+// Editing an existing module's items: a draggable, collapsed list of
+// steps (tap to expand into the same stage-by-stage editor the create
+// wizard uses, drag the ⠿ handle to reorder) rather than every item's
+// full field set open at once - keeps a module with several steps
+// scannable, and reordering doesn't need its own separate mode.
+function EditModuleItems({
+  items,
+  onChange,
+  onError,
+}: {
+  items: DraftItem[];
+  onChange: (items: DraftItem[]) => void;
+  onError: (message: string) => void;
+}) {
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [stageIndex, setStageIndex] = useState(0);
+  const dragIndexRef = useRef<number | null>(null);
+
+  function updateItem(index: number, patch: Partial<DraftItem>) {
+    onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+  }
+
+  function removeItem(index: number) {
+    onChange(items.filter((_, i) => i !== index));
+    setExpandedIndex(null);
+  }
+
+  function insertItem() {
+    setExpandedIndex(items.length);
+    setStageIndex(0);
+    onChange([...items, { ...EMPTY_EXERCISE }]);
+  }
+
+  function toggleExpand(index: number) {
+    setStageIndex(0);
+    setExpandedIndex((prev) => (prev === index ? null : index));
+  }
+
+  function handleDrop(targetIndex: number) {
+    const from = dragIndexRef.current;
+    dragIndexRef.current = null;
+    if (from == null || from === targetIndex) return;
+    const next = [...items];
+    const [moved] = next.splice(from, 1);
+    next.splice(targetIndex, 0, moved);
+    onChange(next);
+    setExpandedIndex(null);
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">
+        Exercises &amp; rest ({items.length}) — drag ⠿ to reorder
+      </span>
+
+      <div className="flex flex-col gap-2">
+        {items.map((item, i) => {
+          const expanded = expandedIndex === i;
+          const stages = stagesFor(item);
+          const stage = stages[Math.min(stageIndex, stages.length - 1)];
+          return (
+            <div
+              key={i}
+              draggable
+              onDragStart={() => {
+                dragIndexRef.current = i;
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => handleDrop(i)}
+              className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-3"
+            >
+              <button
+                type="button"
+                onClick={() => toggleExpand(i)}
+                className="flex min-h-[44px] w-full items-center justify-between gap-2 text-left"
+              >
+                <span className="flex items-center gap-2">
+                  <span aria-hidden className="cursor-grab text-stone-400">
+                    ⠿
+                  </span>
+                  <span className="font-medium">{draftItemSummary(item)}</span>
+                </span>
+                <span aria-hidden className="text-stone-400">
+                  {expanded ? "▲" : "▼"}
+                </span>
+              </button>
+
+              {expanded && (
+                <>
+                  <span className="text-xs font-medium text-stone-500">
+                    {stageLabel(stage)}
+                  </span>
+                  <ItemStageContent
+                    key={`${i}-${stage}`}
+                    item={item}
+                    stage={stage}
+                    onChange={(patch) => updateItem(i, patch)}
+                    onError={onError}
+                  />
+                  <div className="flex gap-2">
+                    <IconBtn
+                      icon="←"
+                      label="Back"
+                      onClick={() => setStageIndex((s) => Math.max(0, s - 1))}
+                      disabled={stageIndex === 0}
+                    />
+                    <IconBtn
+                      icon="→"
+                      label="Next"
+                      onClick={() =>
+                        setStageIndex((s) => Math.min(stages.length - 1, s + 1))
+                      }
+                      disabled={stageIndex >= stages.length - 1}
+                    />
+                    <IconBtn
+                      icon="🗑"
+                      label="Remove step"
+                      onClick={() => removeItem(i)}
+                      tone="danger"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {step > 0 && (
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={removeCurrentStep}
-            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-red-700"
-          >
-            Remove this step
-          </button>
-          <button
-            type="button"
-            onClick={finish}
-            disabled={submitting}
-            className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
-          >
-            {submitting ? "Saving..." : "Finish"}
-          </button>
-        </div>
-      )}
+      <IconBtn icon="➕" label="Insert step" onClick={insertItem} />
     </div>
   );
 }
@@ -695,7 +844,7 @@ export default function TrainingModules() {
                 className="rounded-xl border border-stone-300 px-3 py-2"
               />
             </Field>
-            <ModuleItemsEditor
+            <EditModuleItems
               items={editing.items.map(toDraftItem)}
               onChange={(next) =>
                 updateModule(editing.id, { items: next.map(toApiItem) })
@@ -719,4 +868,3 @@ export default function TrainingModules() {
     </div>
   );
 }
-
