@@ -885,20 +885,37 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           </button>
         </div>
 
-        <div className="flex gap-1 rounded-full bg-stone-200 p-1">
-          {(["list", "day", "week", "month"] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              className={`min-h-[40px] flex-1 rounded-full px-2 text-sm font-medium capitalize transition-colors ${
-                viewMode === mode
-                  ? "bg-red-600 text-white shadow-sm"
-                  : "text-stone-600"
-              }`}
-            >
-              {mode}
-            </button>
-          ))}
+        {/* Edge-to-edge, unlike the rest of this sticky header's px-4-inset
+            rows above - -mx-4 cancels that padding for just this bar. Each
+            button is a parallelogram (clip-path, not a CSS transform:skew -
+            skewing the box would also tilt its text) with a 12px slant; the
+            first/last buttons only slant their inner edge so the strip's
+            outer corners stay square against the screen edges, and adjacent
+            buttons' slants share the same line so they interlock with no
+            gap or overlap. */}
+        <div className="-mx-4 flex bg-stone-200">
+          {(["list", "day", "week", "month"] as const).map((mode, i, arr) => {
+            const clipPath =
+              i === 0
+                ? "polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%)"
+                : i === arr.length - 1
+                ? "polygon(12px 0, 100% 0, 100% 100%, 0 100%)"
+                : "polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)";
+            return (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                style={{ clipPath }}
+                className={`min-h-[44px] flex-1 px-2 text-sm font-medium capitalize transition-colors ${
+                  viewMode === mode
+                    ? "bg-red-600 text-white shadow-sm"
+                    : "text-stone-600"
+                }`}
+              >
+                {mode}
+              </button>
+            );
+          })}
         </div>
       </div>
 

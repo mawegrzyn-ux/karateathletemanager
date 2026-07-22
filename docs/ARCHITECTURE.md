@@ -358,6 +358,19 @@ coach-run attendance) — this is personal athlete itinerary planning.
   control (all client-side, no new endpoints) sits above the event list
   in `ScheduleManager`. All four operate on the same `events` array —
   there's no separate "calendar" data source.
+  - **Rhomboid, edge-to-edge buttons**: each of the four toggle buttons
+    is a parallelogram via `clip-path: polygon(...)`, not a CSS
+    `transform: skew` — skewing the box would tilt its label text too,
+    which a clip only on the background/border avoids. The first and
+    last buttons only slant their *inner* edge (the outer one stays
+    square against the screen edge); every interior slant uses the same
+    12px offset so adjacent buttons' cut lines coincide exactly,
+    interlocking into one continuous strip with no gap or overlap. The
+    row itself is `-mx-4` inside the sticky header's own `px-4` (one
+    level of cancellation deeper than the header's own `-mx-4` against
+    the page's `p-4`), so it's the one element in that header that
+    bleeds fully to both screen edges instead of sitting inset like the
+    title row and search bar above it.
   - **List**: events are grouped into date-headed sections ("Today",
     "Tomorrow", or a formatted date). On first load the view
     auto-scrolls the "Today" section (or the nearest future date) into
