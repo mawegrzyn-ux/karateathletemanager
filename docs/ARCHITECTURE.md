@@ -582,35 +582,67 @@ coach-run attendance) — this is personal athlete itinerary planning.
   patches for title/explanation/type), so there's no separate
   create-only "Finish" submit step — its ✓ button here just closes the
   drawer, since by the time you'd tap it everything is already saved.
-  ← Back/→ Next/+ Add step/🗑 Remove step behave identically to the
-  create wizard, and the whole-module `DeleteButton` moved from the old
-  items-list page onto every screen of this wizard. The general-info
-  screen no longer counts as a step, matching creation's convention.
-  **Steps list.** The General Info screen of both wizards also renders
-  `StepsList` — every item as a one-line row (`draftItemSummary`, the
-  same "Name — sets × reps" shape as the read-only `itemSummary`), with
-  ▲/▼ buttons to reorder (icon buttons rather than drag-and-drop, same
-  touch-first reasoning as everywhere else in this app that made that
-  call — see `NavTabsEditor`) and a ✕ to remove without entering the
-  item at all. This is what makes the list at-a-glance and sortable
-  again despite always jumping into the per-step wizard rather than a
-  free-form editable list — the two aren't mutually exclusive once the
-  step list only reorders/removes/opens rather than also hosting field
-  edits. Tapping a row's label opens that step, but starts at stage
-  index 1 (`EXISTING_STEP_STAGE_INDEX`) — name-and-explanation for an
-  exercise, the duration field for a rest — skipping the type stage,
-  since an existing item's type was already decided when it was
-  created and re-asking it first is just an extra tap; only a brand
-  new item via Add step still starts at stage 0.
-- **Fixed: the Back/Next/Finish/Add-step/Remove-step controls ran
-  straight into the exercise fields above them with no visual break,**
-  reading as part of the same form rather than navigation. Both
-  wizards now wrap that whole button block (plus the whole-module
-  `DeleteButton` in the edit wizard) in a `sticky bottom-0` footer with
-  its own `border-t` and `bg-white` — visually separated from the
-  fields by the divider, and pinned to the bottom of the drawer's
-  scrollable area rather than just trailing off wherever the current
-  stage's content happens to end.
+  ← Back/→ Next/+ Add activity/🗑 Remove activity behave identically to
+  the create wizard. The general-info screen no longer counts as a
+  step, matching creation's convention. Each exercise/rest item is now
+  called an **activity** in every user-facing string — the breadcrumb
+  reads "Activity N of M" (was "Step N of M"), and the footer buttons
+  read "Add activity"/"Remove activity" (were "Add step"/"Remove
+  step"); internal identifiers (`insertActivity`/`removeActivity`/
+  `selectActivity`/`activityError`) were renamed to match. "Step" is
+  still the right word for the generic step-by-step-wizard *pattern*
+  this flow uses (each stage screen is still a "step" in that sense) —
+  it just wasn't the right word for what one of those steps actually
+  *is*, and reusing it for both read as though they meant the same
+  thing.
+  **Activities list.** The General Info screen of both wizards also
+  renders `ActivitiesList` — every item as a one-line row
+  (`draftItemSummary`, the same "Name — sets × reps" shape as the
+  read-only `itemSummary`), with a 🗑 to remove without entering the
+  item at all (not the ✕ used elsewhere for "clear/cancel" — a red X
+  reads ambiguously next to an actual delete action) and a ⠿ drag
+  handle to reorder. This is what makes the list at-a-glance and
+  sortable again despite always jumping into the per-activity wizard
+  rather than a free-form editable list — the two aren't mutually
+  exclusive once the list only reorders/removes/opens rather than also
+  hosting field edits. Tapping a row's label opens that activity, but
+  starts at stage index 1 (`EXISTING_ACTIVITY_STAGE_INDEX`) — name-and-
+  explanation for an exercise, the duration field for a rest — skipping
+  the type stage, since an existing item's type was already decided
+  when it was created and re-asking it first is just an extra tap;
+  only a brand new item via Add activity still starts at stage 0.
+  **Drag-and-drop, not ▲/▼ buttons** (a reversal of this app's own
+  earlier stance — `NavTabsEditor` and this same list both originally
+  used ▲/▼ specifically to avoid drag-and-drop's known touch problems):
+  requested explicitly for this list, so it uses the same long-press-
+  then-pointer-drag pattern as the Day view's timed-event rescheduling
+  (`LONG_PRESS_MS` = 350ms arms the drag, `MOVE_CANCEL_PX` cancels the
+  pending arm if the finger moves too far first — treating that as a
+  scroll, not drag intent) rather than native HTML5 drag-and-drop,
+  which is what actually caused the touch problems the ▲/▼ buttons were
+  originally introduced to avoid — the long-press gesture itself was
+  never the issue. The drag only arms from the ⠿ handle specifically,
+  not the whole row, so the row's own tap-to-open target is never at
+  risk of accidentally starting a drag. Reordering happens locally
+  (`displayItems`, resynced from the `items` prop whenever no drag is
+  active) as the drag crosses each row-height boundary, purely for live
+  visual feedback; the parent's `onReorder` (which persists via `PATCH`
+  in the edit wizard) fires only once, on release, rather than once per
+  boundary crossed.
+- **Fixed: the Back/Next/Finish/Add-activity/Remove-activity controls
+  ran straight into the exercise fields above them with no visual
+  break,** reading as part of the same form rather than navigation.
+  Both wizards wrap that whole button block in a `sticky bottom-0`
+  footer with its own `border-t` and `bg-white` — visually separated
+  from the fields by the divider, and pinned to the bottom of the
+  drawer's scrollable area rather than just trailing off wherever the
+  current stage's content happens to end. **The whole-module
+  `DeleteButton` only renders on the General Info screen** of the edit
+  wizard, not on every individual activity's screen the way it
+  originally did — showing it next to "Remove activity" (a similarly-
+  styled red/trash control that deletes just the current activity, not
+  the whole module) on every activity screen read as two competing
+  delete actions and invited tapping the wrong one.
 - **Training module types.** A shared, admin-managed lookup
   (`nk_training_module_types`: `id`, `name`) — same shape as
   `nk_karate_styles` — for tagging a module with a category (Cardio,
