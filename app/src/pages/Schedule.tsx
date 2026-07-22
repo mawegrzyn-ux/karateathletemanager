@@ -419,6 +419,12 @@ function minutesToTime(mins: number) {
 const DAY_START_HOUR = 6;
 const DAY_END_HOUR = 22;
 const HOUR_HEIGHT = 56;
+// Week view lays days out as rows and hours as columns (transposed from Day
+// view's vertical timeline), so it needs its own per-hour width and
+// per-day row height rather than reusing HOUR_HEIGHT.
+const WEEK_HOUR_WIDTH = 72;
+const WEEK_DAY_ROW_HEIGHT = 64;
+const WEEK_LABEL_COL_WIDTH = 96;
 const LONG_PRESS_MS = 350;
 const MOVE_CANCEL_PX = 10;
 const GRID_HOURS = Array.from(
@@ -2321,7 +2327,8 @@ function WeekView({
     return events.filter((e) => eventOverlapsDate(e, date) && !isTimedOnDate(e, date));
   }
 
-  const gridHeight = (DAY_END_HOUR - DAY_START_HOUR + 1) * HOUR_HEIGHT;
+  const gridWidth = GRID_HOURS.length * WEEK_HOUR_WIDTH;
+  const gridTemplateColumns = `${WEEK_LABEL_COL_WIDTH}px repeat(${GRID_HOURS.length}, ${WEEK_HOUR_WIDTH}px)`;
 
   return (
     <div className="flex flex-col gap-3">
@@ -2332,91 +2339,104 @@ function WeekView({
         onToday={() => setFocusedDate(todayStr())}
       />
 
-      <div className="grid grid-cols-[36px_repeat(7,1fr)] gap-1 text-center text-xs font-medium text-stone-500">
-        <span />
-        {days.map((d) => (
-          <span key={d} className={d === todayStr() ? "text-red-600" : ""}>
-            {shortDateLabel(d)}
-          </span>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-[36px_repeat(7,1fr)] gap-1">
-        <span />
-        {days.map((date) => {
-          const allDay = allDayEventsFor(date);
-          if (allDay.length === 0) return <span key={date} />;
-          return (
-            <div key={date} className="flex flex-col gap-0.5">
-              {allDay.slice(0, 2).map((e) => {
-                const info = eventTypeInfo(eventTypes, e);
-                return (
-                  <button
-                    key={e.id}
-                    onClick={() => onOpenEvent(e)}
-                    className={`truncate rounded px-1 py-0.5 text-left text-[10px] ${
-                      e.my_status === "failed" ? "bg-red-50" : "bg-stone-100"
-                    }`}
-                    title={e.title}
-                  >
-                    {info.icon} {e.title}
-                  </button>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="flex max-h-[60vh] overflow-auto rounded-lg">
-        <div className="sticky left-0 flex flex-col bg-stone-100 text-right text-[10px] text-stone-500" style={{ width: 36 }}>
-          {GRID_HOURS.map((h) => (
+      {/* Days run down the rows, hours run across the columns (transposed
+          from Day view's vertical timeline) - the corner cell and header
+          row freeze on scroll via `sticky`, so a week's full 6am-10pm span
+          can be panned both horizontally (time) and vertically (days)
+          without losing your place. */}
+      <div className="max-h-[70vh] overflow-auto rounded-lg bg-white shadow-card">
+        <div
+          className="grid"
+          style={{ gridTemplateColumns, width: WEEK_LABEL_COL_WIDTH + gridWidth }}
+        >
+          <div
+            className="sticky left-0 top-0 z-20 border-b border-r border-stone-100 bg-stone-100"
+            style={{ gridColumn: 1, gridRow: 1 }}
+          />
+          {GRID_HOURS.map((h, i) => (
             <div
               key={h}
-              style={{ height: HOUR_HEIGHT }}
-              className="shrink-0 pr-1 -translate-y-2"
+              className="sticky top-0 z-10 border-b border-stone-100 bg-stone-100 py-1 text-center text-[10px] text-stone-500"
+              style={{ gridColumn: i + 2, gridRow: 1 }}
             >
               {formatHour(h)}
             </div>
           ))}
-        </div>
-        <div className="grid flex-1 grid-cols-7 gap-1">
-          {days.map((date) => (
-            <div
-              key={date}
-              className="relative rounded-lg bg-white shadow-card"
-              style={{ height: gridHeight }}
-            >
-              {GRID_HOURS.map((h, i) => (
-                <div
-                  key={h}
-                  className="absolute inset-x-0 border-t border-stone-100"
-                  style={{ top: i * HOUR_HEIGHT }}
-                />
-              ))}
-              {timedEventsFor(date).map((e) => {
-                const start = timeToMinutes(e.start_time) ?? DAY_START_HOUR * 60;
-                const end = timeToMinutes(e.end_time) ?? start + 30;
-                const top = ((start - DAY_START_HOUR * 60) / 60) * HOUR_HEIGHT;
-                const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, 20);
-                const info = eventTypeInfo(eventTypes, e);
-                return (
-                  <button
-                    key={e.id}
-                    onClick={() => onOpenEvent(e)}
-                    className={`absolute inset-x-0.5 overflow-hidden rounded border-l-4 px-1 text-left text-[10px] ${
-                      e.my_status === "failed"
-                        ? "bg-red-50 text-red-800"
-                        : "bg-white text-stone-700"
-                    }`}
-                    style={{ top, height, borderLeftColor: info.bg_color }}
-                  >
-                    {info.icon} {e.title}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+
+          {days.flatMap((date, rowIdx) => {
+            const allDay = allDayEventsFor(date);
+            const isToday = date === todayStr();
+            return [
+              <div
+                key={`label-${date}`}
+                className={`sticky left-0 z-10 flex flex-col justify-center gap-0.5 border-r border-stone-100 px-2 text-xs font-medium ${
+                  isToday ? "bg-red-50" : "bg-stone-100"
+                }`}
+                style={{
+                  gridColumn: 1,
+                  gridRow: rowIdx + 2,
+                  height: WEEK_DAY_ROW_HEIGHT,
+                }}
+              >
+                <span className={isToday ? "text-red-600" : "text-stone-700"}>
+                  {shortDateLabel(date)}
+                </span>
+                {allDay.length > 0 && (
+                  <div className="flex gap-0.5">
+                    {allDay.slice(0, 3).map((e) => (
+                      <button
+                        key={e.id}
+                        type="button"
+                        title={e.title}
+                        onClick={() => onOpenEvent(e)}
+                        className="text-xs leading-none"
+                      >
+                        {eventTypeInfo(eventTypes, e).icon}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>,
+              <div
+                key={`row-${date}`}
+                className="relative"
+                style={{
+                  gridColumn: `2 / span ${GRID_HOURS.length}`,
+                  gridRow: rowIdx + 2,
+                  height: WEEK_DAY_ROW_HEIGHT,
+                }}
+              >
+                {GRID_HOURS.map((h, i) => (
+                  <div
+                    key={h}
+                    className="absolute inset-y-0 border-l border-stone-100"
+                    style={{ left: i * WEEK_HOUR_WIDTH }}
+                  />
+                ))}
+                {timedEventsFor(date).map((e) => {
+                  const start = timeToMinutes(e.start_time) ?? DAY_START_HOUR * 60;
+                  const end = timeToMinutes(e.end_time) ?? start + 30;
+                  const left = ((start - DAY_START_HOUR * 60) / 60) * WEEK_HOUR_WIDTH;
+                  const width = Math.max(((end - start) / 60) * WEEK_HOUR_WIDTH, 44);
+                  const info = eventTypeInfo(eventTypes, e);
+                  return (
+                    <button
+                      key={e.id}
+                      onClick={() => onOpenEvent(e)}
+                      className={`absolute inset-y-0.5 overflow-hidden rounded border-t-4 px-1 text-left text-[10px] ${
+                        e.my_status === "failed"
+                          ? "bg-red-50 text-red-800"
+                          : "bg-white text-stone-700"
+                      }`}
+                      style={{ left, width, borderTopColor: info.bg_color }}
+                    >
+                      {info.icon} {e.title}
+                    </button>
+                  );
+                })}
+              </div>,
+            ];
+          })}
         </div>
       </div>
     </div>

@@ -427,11 +427,22 @@ coach-run attendance) — this is personal athlete itinerary planning.
     3 small `TYPE_ICONS` emoji (one per overlapping event, `+N` beyond
     that) rather than full event rows, since a month cell has no room
     for detail. Tapping a day switches to Day view for that date.
-  - **Week**: 7 day columns × hourly rows (6 AM–10 PM, `HOUR_HEIGHT`
-    px/hour). An event only gets a time-positioned block if it's
-    single-day *and* has both `start_time`/`end_time` — anything else
-    (multi-day, or no time set) renders instead as a small all-day strip
-    above the grid for each day it overlaps.
+  - **Week**: transposed from Day view's layout — 7 day *rows* × hourly
+    *columns* (6 AM–10 PM, `WEEK_HOUR_WIDTH` px/hour, `WEEK_DAY_ROW_HEIGHT`
+    px/day), so scanning a whole week's timing reads top-to-bottom by day
+    rather than needing 7 side-by-side mini-columns. It's one CSS grid
+    (`gridTemplateColumns` = label column + one column per hour) inside a
+    single `max-h-[70vh] overflow-auto` container, so it scrolls in both
+    directions: horizontally through the day's hours, vertically through
+    the week's days. The corner cell and the hour-header row use
+    `sticky top-0`, and the day-label column uses `sticky left-0`, so both
+    freeze in place — matching the "freeze panes" pattern of a spreadsheet
+    — while the timed-event blocks (positioned via `left`/`width` instead
+    of Day/old-Week's `top`/`height`) scroll underneath. An event only
+    gets a time-positioned block if it's single-day *and* has both
+    `start_time`/`end_time`; anything else (multi-day, or no time set)
+    instead shows as a small icon-only chip inline in that day's sticky
+    label cell (there's no time axis to place it on).
   - **Day**: the same split (timed events on an hourly grid, everything
     else in an all-day strip) for a single focused date, with the same
     per-event detail (icon, title, badge, time) as the List view's rows.
@@ -449,16 +460,20 @@ coach-run attendance) — this is personal athlete itinerary planning.
     otherwise fire immediately after a drag's pointerup; releasing
     without ever moving (a genuine long-press with no drag) falls
     through to the normal open-on-tap behavior.
-  - The hour-label ruler column (sticky, to the left of the hour grid in
-    both Day and Week view) renders each hour as its own flex-column
-    child with an explicit `height: HOUR_HEIGHT` — that child also needs
-    `shrink-0`, since without it the browser's flex layout compresses
-    the label rows to fit `max-h-[60vh]` (the ruler has no explicit
-    total height, unlike the event grid it sits next to, which does),
-    silently drifting the hour labels out of sync with the actual
-    gridlines/event blocks the longer the visible range runs past the
-    viewport height. If timed events ever look vertically misaligned
-    with their hour labels again, check this first.
+  - Day view's hour-label ruler column (sticky, to the left of the hour
+    grid) renders each hour as its own flex-column child with an explicit
+    `height: HOUR_HEIGHT` — that child also needs `shrink-0`, since
+    without it the browser's flex layout compresses the label rows to fit
+    `max-h-[60vh]` (the ruler has no explicit total height, unlike the
+    event grid it sits next to, which does), silently drifting the hour
+    labels out of sync with the actual gridlines/event blocks the longer
+    the visible range runs past the viewport height. If timed events ever
+    look vertically misaligned with their hour labels again, check this
+    first. Week view's grid sidesteps this since every cell (header row,
+    label column, and day rows) is placed on the same CSS grid via
+    `gridColumn`/`gridRow` rather than a separately-flowed sibling
+    column, so there's no independent flex track that can drift out of
+    sync with the timeline it's labeling.
   - All three calendar views share date-math helpers (`startOfWeek`,
     `startOfMonth`, `eventOverlapsDate`, `timeToMinutes`/
     `minutesToTime`, etc.) defined once near the top of `Schedule.tsx`.
