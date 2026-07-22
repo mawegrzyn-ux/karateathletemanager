@@ -12,6 +12,8 @@ import {
   BELT_COLOR_OPTIONS,
   AddressField,
 } from "../../components/ui";
+import { NavTabsEditor } from "../../components/NavTabsEditor";
+import { resolveNavTabKeys } from "../../utils/navTabs";
 
 interface Association {
   id: number;
@@ -32,6 +34,7 @@ interface Club {
   location: string | null;
   contact_email: string | null;
   contact_phone: string | null;
+  forced_nav_tabs: string[] | null;
 }
 
 interface Membership {
@@ -462,6 +465,47 @@ export default function Clubs() {
             {canSeePending && <JoinLink clubId={editing.id} />}
 
             {canSeePending && <PendingMembers clubId={editing.id} />}
+
+            <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+              <span className="text-xs font-medium text-stone-600">
+                Menu for this club's athletes
+              </span>
+              {editing.forced_nav_tabs ? (
+                <>
+                  <NavTabsEditor
+                    ctx={{ role: "athlete", is_admin: false }}
+                    value={editing.forced_nav_tabs}
+                    onChange={(next) =>
+                      updateClub(editing.id, { forced_nav_tabs: next })
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateClub(editing.id, { forced_nav_tabs: null })
+                    }
+                    className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700"
+                  >
+                    Clear override (let athletes choose their own)
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateClub(editing.id, {
+                      forced_nav_tabs: resolveNavTabKeys(
+                        { role: "athlete", is_admin: false },
+                        null
+                      ),
+                    })
+                  }
+                  className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700"
+                >
+                  Set a fixed menu for all athletes
+                </button>
+              )}
+            </div>
 
             {isAdmin && (
               <DeleteButton

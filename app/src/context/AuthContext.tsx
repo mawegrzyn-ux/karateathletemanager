@@ -33,6 +33,8 @@ export interface User {
   photo_url: string | null;
   date_of_birth: string | null;
   wants_athlete: boolean;
+  nav_tabs: string[] | null;
+  club_forced_nav_tabs: string[] | null;
 }
 
 export interface ProfileUpdate {
@@ -84,6 +86,7 @@ interface AuthContextValue {
     coaches: Profile[];
     referees: Profile[];
   }>;
+  updateNavTabs: (navTabs: string[] | null) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -185,6 +188,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const updateNavTabs = useCallback(async (navTabs: string[] | null) => {
+    const { user } = await api.patch<{ user: User }>("/auth/me/nav-tabs", {
+      nav_tabs: navTabs,
+    });
+    setUser(user);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -198,6 +209,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         linkChild,
         unlinkChild,
         fetchMyProfiles,
+        updateNavTabs,
       }}
     >
       {children}

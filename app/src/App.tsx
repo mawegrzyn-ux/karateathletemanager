@@ -5,6 +5,7 @@ import Schedule from "./pages/Schedule";
 import Athletes from "./pages/Athletes";
 import Grades from "./pages/Grades";
 import More from "./pages/More";
+import MenuSettings from "./pages/MenuSettings";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Profile from "./pages/Profile";
@@ -27,22 +28,10 @@ import AdminBraveApiKey from "./pages/admin/BraveApiKey";
 import Osu from "./pages/Osu";
 import RequireAuth from "./components/RequireAuth";
 import RequireLogin from "./components/RequireLogin";
-
-const ATHLETE_TABS = [
-  { to: "/", label: "Schedule", icon: "📅", end: true },
-  { to: "/more", label: "More", icon: "⚙️" },
-];
-
-const DEFAULT_TABS = [
-  { to: "/", label: "Schedule", icon: "📅", end: true },
-  { to: "/athletes", label: "Athletes", icon: "👥" },
-  { to: "/more", label: "More", icon: "⚙️" },
-];
-
-const OSU_TAB = { to: "/osu", label: "Osu", icon: "🤖", end: false };
+import { resolveNavTabs } from "./utils/navTabs";
 
 const tabClassName = ({ isActive }: { isActive: boolean }) =>
-  `my-2 flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl py-2 text-xs font-medium transition-colors ${
+  `my-2 flex min-h-[44px] w-20 shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl py-2 text-xs font-medium transition-colors ${
     isActive ? "bg-red-50 text-red-600" : "text-stone-500"
   }`;
 
@@ -55,10 +44,10 @@ const PROFILE_LABELS: Record<string, string> = {
 
 function Shell() {
   const { user } = useAuth();
-  const baseTabs = user?.role === "athlete" ? ATHLETE_TABS : DEFAULT_TABS;
-  const tabs = user?.is_admin
-    ? [...baseTabs.slice(0, -1), OSU_TAB, baseTabs[baseTabs.length - 1]]
-    : baseTabs;
+  const tabs = resolveNavTabs(
+    { role: user?.role ?? null, is_admin: !!user?.is_admin },
+    user?.club_forced_nav_tabs ?? user?.nav_tabs ?? null
+  );
   const activeProfileName =
     user?.role === "athlete"
       ? user.athlete_name
@@ -134,10 +123,10 @@ function Shell() {
             </>
           )}
         </NavLink>
-        <div className="flex flex-1 justify-around">
+        <div className="flex flex-1 gap-1 overflow-x-auto px-1">
           {tabs.map((tab) => (
             <NavLink
-              key={tab.to}
+              key={tab.key}
               to={tab.to}
               end={tab.end}
               className={tabClassName}
@@ -180,6 +169,7 @@ export default function App() {
         <Route path="/athletes/:id/profile" element={<AthleteProfile />} />
         <Route path="/grades" element={<Grades />} />
         <Route path="/more" element={<More />} />
+        <Route path="/menu-settings" element={<MenuSettings />} />
         <Route
           path="/admin/users"
           element={

@@ -32,7 +32,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const { rows } = await pool.query(
       `SELECT c.id, c.name, c.association_id, c.location,
-              c.contact_email, c.contact_phone, c.created_at,
+              c.contact_email, c.contact_phone, c.forced_nav_tabs, c.created_at,
               a.name AS association_name
        FROM nk_clubs c
        LEFT JOIN nk_associations a ON a.id = c.association_id
@@ -86,18 +86,34 @@ router.patch(
     const { name, association_id, location, contact_email, contact_phone } =
       req.body ?? {};
 
+    // forced_nav_tabs (a club manager's override menu for all the
+    // club's athletes) needs an explicit null - "clear the override" -
+    // distinguishable from "field omitted", which the COALESCE fields
+    // above can't express, so it gets its own presence-based clause.
+    const setClauses = [
+      "name           = COALESCE($1, name)",
+      "association_id = COALESCE($2, association_id)",
+      "location       = COALESCE($3, location)",
+      "contact_email  = COALESCE($4, contact_email)",
+      "contact_phone  = COALESCE($5, contact_phone)",
+      "updated_at     = NOW()",
+    ];
+    const values = [name, association_id, location, contact_email, contact_phone];
+    if ("forced_nav_tabs" in (req.body ?? {})) {
+      values.push(
+        req.body.forced_nav_tabs ? JSON.stringify(req.body.forced_nav_tabs) : null
+      );
+      setClauses.push(`forced_nav_tabs = $${values.length}`);
+    }
+    values.push(req.params.id);
+
     try {
       const { rows } = await pool.query(
-        `UPDATE nk_clubs SET
-           name           = COALESCE($1, name),
-           association_id = COALESCE($2, association_id),
-           location       = COALESCE($3, location),
-           contact_email  = COALESCE($4, contact_email),
-           contact_phone  = COALESCE($5, contact_phone),
-           updated_at     = NOW()
-         WHERE id = $6
-         RETURNING id, name, association_id, location, contact_email, contact_phone, created_at`,
-        [name, association_id, location, contact_email, contact_phone, req.params.id]
+        `UPDATE nk_clubs SET ${setClauses.join(", ")}
+         WHERE id = $${values.length}
+         RETURNING id, name, association_id, location, contact_email, contact_phone,
+                   forced_nav_tabs, created_at`,
+        values
       );
 
       if (rows.length === 0) {
