@@ -1122,32 +1122,58 @@ coach-run attendance) — this is personal athlete itinerary planning.
   clamped into the parent event's `start_date`/`end_date` range if "now"
   falls outside it). Duplicating an existing event/item still copies its
   original date/time instead, unaffected by this default.
-- **Deep swipe left → record a competition result.** `SwipeableRow`'s
-  existing swipe-to-complete/fail gesture (`SWIPE_THRESHOLD = 64`) gained
-  a second, larger threshold on the same left-drag axis
-  (`DEEP_SWIPE_THRESHOLD = 96`, via an optional `deepSwipeAction: {
-  label, onTrigger }` prop) rather than a separate gesture. Past that
-  threshold the row's right-edge hint snaps from the green "✓" (fixed
-  `SWIPE_THRESHOLD`-wide) straight to the deep action's own label/amber
-  styling at a fixed, wider `DEEP_HINT_WIDTH` — a snap, not a gradual
-  stretch, so the hint reads cleanly at both sizes and the deeper action
-  surfaces after a short, quick drag rather than an unusually long one.
-  The List view's event-level row passes this only for
-  `event_type === "competition"` rows (`item_type` has no competition
-  value, so this never applies to itinerary-item rows), opening
-  `RecordResultDrawer` on trigger. That drawer is a deliberately minimal
-  capture form (rounds won, place, and a "Post this result to my
-  profile" checkbox) rather than reusing `CompetitionResults.tsx`'s
-  fuller name/date/location/notes form — it `POST`s to the existing
-  `/athletes/:id/competition-results` with `event_id` set, then
-  optionally `POST`s to `/athletes/:id/posts` with
-  `share_kind: "competition_result"` when the checkbox is checked.
+- **Deep swipe left → record a competition result / add a post.**
+  `SwipeableRow`'s existing swipe-to-complete/fail gesture
+  (`SWIPE_THRESHOLD = 64`) gained a second, larger threshold on the same
+  left-drag axis (`DEEP_SWIPE_THRESHOLD = 96`, via an optional
+  `deepSwipeActions: { label, onTrigger }[]` prop) rather than a separate
+  gesture. Past that threshold the row's right-edge hint snaps from the
+  green "✓" (fixed `SWIPE_THRESHOLD`-wide) straight to the first deep
+  action's own label/amber styling at a fixed, wider `DEEP_HINT_WIDTH` —
+  a snap, not a gradual stretch, so the hint reads cleanly at both sizes
+  and the deeper action surfaces after a short, quick drag rather than an
+  unusually long one. The List view passes every event row an "📝 Add
+  post" action (see below), and competition rows (`item_type` has no
+  competition value, so this never applies to itinerary-item rows) get a
+  second, "🏆 Record result", ahead of it in the array so a competition
+  event's existing deep-swipe muscle memory keeps working unchanged.
+  With more than one action, holding past the threshold and then
+  dragging vertically cycles which one is selected — every
+  `OPTION_CYCLE_DISTANCE` (36px) of vertical drag moves one step, clamped
+  to the array's ends rather than wrapping, measured from the Y position
+  where the deep zone was first entered (not the original touch-down) so
+  incidental vertical motion during the initial horizontal swipe never
+  pre-offsets the selection. Small ▲/▼ indicators flank the label,
+  dimmed at whichever end is already selected, satisfying "there's
+  nothing to discover except keep swiping (or now, scrolling)" the same
+  way the original deep-swipe threshold did. `touchAction` switches to
+  `"none"` only while actively cycling (more than one action AND already
+  past the threshold) so the browser's native vertical pan doesn't fight
+  the manual drag tracking there, reverting to `"pan-y"` at every other
+  drag stage so the list still scrolls normally.
+  `RecordResultDrawer` is a deliberately minimal capture form (rounds
+  won, place, and a "Post this result to my profile" checkbox) rather
+  than reusing `CompetitionResults.tsx`'s fuller name/date/location/notes
+  form — it `POST`s to the existing `/athletes/:id/competition-results`
+  with `event_id` set, then optionally `POST`s to `/athletes/:id/posts`
+  with `share_kind: "competition_result"` when the checkbox is checked.
   Checking that box also reveals a `MediaField` ("Photo (optional)") so
   the athlete can attach a photo to the shared post the same way the
   main post composer does — `image_url` is passed straight through to
   the `posts` `POST` alongside `share_kind`/`share_id`, no new endpoint
   needed since that route already accepts `image_url` on any post,
-  shared or not. No athlete picker is needed since the deep swipe is
+  shared or not.
+  `QuickPostDrawer` (the "Add post" action, available on every event,
+  not just competitions) is even simpler: a body textarea prefilled with
+  `"{type label} · {dateLabel(start_date)} · {title}"` (e.g. "Squad
+  session · Today (Jul 22) · Morning Kihon Training") plus the same
+  optional photo field, `POST`ing straight to `/athletes/:id/posts` with
+  `share_kind: "event"` so the resulting post also carries the same
+  "🗓️ {title}" `ShareBadge` a manually-shared event gets from the main
+  composer — no "post to profile" checkbox needed since posting *is* the
+  action here, unlike Record Result where it's an optional add-on to a
+  different primary action.
+  Neither drawer needs an athlete picker: both deep-swipe actions are
   only ever reachable on an athlete's own row
   (`disabled={e.my_status == null}` already gates the whole
   `SwipeableRow` to `role === "athlete"` viewers).
@@ -1157,9 +1183,9 @@ coach-run attendance) — this is personal athlete itinerary planning.
   it was still in flight, so `photoUrl` was still empty at submit time if
   the athlete tapped Save before the "Uploading…" state resolved.
   `MediaField` gained an optional `onUploadingChange` callback (fired
-  around its existing `uploading` state) that `RecordResultDrawer` uses
-  to disable Save (showing "Uploading photo..." on the button) for as
-  long as an upload is in progress.
+  around its existing `uploading` state) that both drawers use to
+  disable their submit button (showing "Uploading photo..." on it) for
+  as long as an upload is in progress.
 - **`my_result_place` on the event list.** `GET /api/events`' existing
   `attachMyEventStatus` rollup (which computes `my_status` for the
   signed-in athlete) now also attaches `my_result_place`: the athlete's
@@ -1194,6 +1220,11 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `drop-shadow` operates on the actual painted (post-clip) alpha shape
   instead, so it correctly follows the chevron's diagonal cut and reads
   as a soft shadow beneath the shape rather than a rectangular ghost.
+  The result segment's ✓/✗ later grew from `text-xl` to `text-3xl` (the
+  🏆 place badge similarly from `text-base`/`text-[10px]` to
+  `text-xl`/`text-xs`) for readability at a glance, and `sideShadow`'s
+  opacity went from 0.25 to 0.35 (blur 1.5px → 2px) since the original
+  was barely perceptible against the tile's light background.
 - **Competition-result share card: plain text, soft accent-color post
   break.** `ShareBadge`'s `competition_result` card
   (`AthleteSocialProfile.tsx`) has no background/border/frame of its

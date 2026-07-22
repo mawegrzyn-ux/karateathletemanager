@@ -469,6 +469,9 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [resultDrawerEvent, setResultDrawerEvent] = useState<Event | null>(
     null
   );
+  const [quickPost, setQuickPost] = useState<
+    { event: Event; typeLabel: string } | null
+  >(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [formAthleteIds, setFormAthleteIds] = useState<number[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "day" | "week" | "month">(
@@ -976,136 +979,140 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                 </h2>
                 {occurrences.map((occ) => {
                   const e = occ.event;
+                  const info = typeInfo(eventTypes, e.club_id, e.event_type);
+                  const showTrophy =
+                    e.event_type === "competition" && e.my_result_place;
+                  // filter: drop-shadow (not box-shadow) since these
+                  // segments are clip-path'd into chevrons - box-shadow
+                  // draws outside the box and gets clipped away with it,
+                  // while drop-shadow follows the actual painted
+                  // (post-clip) shape.
+                  const sideShadow = "drop-shadow(0 2px 2px rgba(28,25,23,0.35))";
+                  const addPostAction = {
+                    label: "📝 Add post",
+                    onTrigger: () =>
+                      setQuickPost({ event: e, typeLabel: info.label }),
+                  };
+                  const deepSwipeActions =
+                    e.event_type === "competition"
+                      ? [
+                          {
+                            label: "🏆 Record result",
+                            onTrigger: () => setResultDrawerEvent(e),
+                          },
+                          addPostAction,
+                        ]
+                      : [addPostAction];
                   return (
                     <SwipeableRow
                       key={`${e.id}-${occ.date}`}
                       disabled={e.my_status == null}
                       onSwipeComplete={() => swipeEventStatus(e, "completed")}
                       onSwipeFailed={() => swipeEventStatus(e, "failed")}
-                      deepSwipeAction={
-                        e.event_type === "competition"
-                          ? {
-                              label: "🏆 Record result",
-                              onTrigger: () => setResultDrawerEvent(e),
-                            }
-                          : undefined
-                      }
+                      deepSwipeActions={deepSwipeActions}
                     >
-                      {(() => {
-                        const info = typeInfo(eventTypes, e.club_id, e.event_type);
-                        const showTrophy =
-                          e.event_type === "competition" && e.my_result_place;
-                        // filter: drop-shadow (not box-shadow) since these
-                        // segments are clip-path'd into chevrons - box-shadow
-                        // draws outside the box and gets clipped away with
-                        // it, while drop-shadow follows the actual painted
-                        // (post-clip) shape.
-                        const sideShadow = "drop-shadow(0 2px 1.5px rgba(28,25,23,0.25))";
-                        return (
-                          <div className="isolate flex overflow-hidden rounded-md shadow-card">
-                            {isOverdue(e) ? (
-                              <div
-                                aria-hidden
-                                className="relative z-10 flex w-12 shrink-0 items-center justify-center bg-red-600 text-5xl font-black leading-none text-red-50"
-                                style={{
-                                  clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
-                                  filter: sideShadow,
-                                }}
-                              >
-                                !
-                              </div>
-                            ) : (
-                              <div
-                                aria-hidden
-                                className="relative z-10 flex w-12 shrink-0 items-center justify-center text-xl"
-                                style={{
-                                  backgroundColor: info.bg_color,
-                                  clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
-                                  filter: sideShadow,
-                                }}
-                              >
-                                {info.icon}
-                              </div>
-                            )}
-                            <button
-                              onClick={() => setDrawer(e)}
-                              className={`relative my-1 -ml-3 flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 rounded-sm py-3 pl-5 pr-4 text-left shadow-sm ${
-                                e.my_status === "failed"
-                                  ? "bg-red-50"
-                                  : e.my_status === "completed"
-                                  ? "bg-green-50"
-                                  : "bg-white"
-                              }`}
-                            >
-                              <span
-                                className={`font-medium ${
-                                  e.my_status === "completed"
-                                    ? "text-green-300"
-                                    : e.my_status === "failed"
-                                    ? "text-red-700"
-                                    : ""
-                                }`}
-                              >
-                                {e.title}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <Badge>{info.label}</Badge>
-                                <span className="text-xs text-stone-500">
-                                  {occ.totalDays === 1 || e.daily_times ? (
-                                    <>
-                                      {e.start_time ? toTimeInput(e.start_time) : ""}
-                                      {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
-                                    </>
-                                  ) : (
-                                    <>
-                                      {occ.dayIndex === 1 && e.start_time
-                                        ? `from ${toTimeInput(e.start_time)}`
-                                        : ""}
-                                      {occ.dayIndex === occ.totalDays && e.end_time
-                                        ? `until ${toTimeInput(e.end_time)}`
-                                        : ""}
-                                    </>
-                                  )}
-                                  {occ.totalDays > 1
-                                    ? ` · Day ${occ.dayIndex} of ${occ.totalDays}`
+                      <div className="isolate flex overflow-hidden rounded-md shadow-card">
+                        {isOverdue(e) ? (
+                          <div
+                            aria-hidden
+                            className="relative z-10 flex w-12 shrink-0 items-center justify-center bg-red-600 text-5xl font-black leading-none text-red-50"
+                            style={{
+                              clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
+                              filter: sideShadow,
+                            }}
+                          >
+                            !
+                          </div>
+                        ) : (
+                          <div
+                            aria-hidden
+                            className="relative z-10 flex w-12 shrink-0 items-center justify-center text-xl"
+                            style={{
+                              backgroundColor: info.bg_color,
+                              clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
+                              filter: sideShadow,
+                            }}
+                          >
+                            {info.icon}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => setDrawer(e)}
+                          className={`relative my-1 -ml-3 flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 rounded-sm py-3 pl-5 pr-4 text-left shadow-sm ${
+                            e.my_status === "failed"
+                              ? "bg-red-50"
+                              : e.my_status === "completed"
+                              ? "bg-green-50"
+                              : "bg-white"
+                          }`}
+                        >
+                          <span
+                            className={`font-medium ${
+                              e.my_status === "completed"
+                                ? "text-green-300"
+                                : e.my_status === "failed"
+                                ? "text-red-700"
+                                : ""
+                            }`}
+                          >
+                            {e.title}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <Badge>{info.label}</Badge>
+                            <span className="text-xs text-stone-500">
+                              {occ.totalDays === 1 || e.daily_times ? (
+                                <>
+                                  {e.start_time ? toTimeInput(e.start_time) : ""}
+                                  {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
+                                </>
+                              ) : (
+                                <>
+                                  {occ.dayIndex === 1 && e.start_time
+                                    ? `from ${toTimeInput(e.start_time)}`
                                     : ""}
+                                  {occ.dayIndex === occ.totalDays && e.end_time
+                                    ? `until ${toTimeInput(e.end_time)}`
+                                    : ""}
+                                </>
+                              )}
+                              {occ.totalDays > 1
+                                ? ` · Day ${occ.dayIndex} of ${occ.totalDays}`
+                                : ""}
+                            </span>
+                          </div>
+                        </button>
+                        {(showTrophy ||
+                          e.my_status === "completed" ||
+                          e.my_status === "failed") && (
+                          <div
+                            aria-hidden
+                            className={`relative z-10 -ml-3 flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 text-center ${
+                              showTrophy
+                                ? "bg-amber-100 text-amber-800"
+                                : e.my_status === "completed"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-red-100 text-red-700"
+                            }`}
+                            style={{
+                              clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%)",
+                              filter: sideShadow,
+                            }}
+                          >
+                            {showTrophy ? (
+                              <>
+                                <span className="text-xl leading-none">🏆</span>
+                                <span className="text-xs font-semibold leading-none">
+                                  {e.my_result_place}
                                 </span>
-                              </div>
-                            </button>
-                            {(showTrophy ||
-                              e.my_status === "completed" ||
-                              e.my_status === "failed") && (
-                              <div
-                                aria-hidden
-                                className={`relative z-10 -ml-3 flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 text-center ${
-                                  showTrophy
-                                    ? "bg-amber-100 text-amber-800"
-                                    : e.my_status === "completed"
-                                    ? "bg-green-100 text-green-700"
-                                    : "bg-red-100 text-red-700"
-                                }`}
-                                style={{
-                                  clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%)",
-                                  filter: sideShadow,
-                                }}
-                              >
-                                {showTrophy ? (
-                                  <>
-                                    <span className="text-base leading-none">🏆</span>
-                                    <span className="text-[10px] font-semibold leading-none">
-                                      {e.my_result_place}
-                                    </span>
-                                  </>
-                                ) : e.my_status === "completed" ? (
-                                  <span className="text-xl leading-none">✓</span>
-                                ) : (
-                                  <span className="text-xl leading-none">✗</span>
-                                )}
-                              </div>
+                              </>
+                            ) : e.my_status === "completed" ? (
+                              <span className="text-3xl leading-none">✓</span>
+                            ) : (
+                              <span className="text-3xl leading-none">✗</span>
                             )}
                           </div>
-                        );
-                      })()}
+                        )}
+                      </div>
                     </SwipeableRow>
                   );
                 })}
@@ -1528,6 +1535,13 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           }
           setResultDrawerEvent(null);
         }}
+      />
+
+      <QuickPostDrawer
+        event={quickPost?.event ?? null}
+        typeLabel={quickPost?.typeLabel ?? ""}
+        athleteId={user?.athlete_id ?? null}
+        onClose={() => setQuickPost(null)}
       />
     </div>
   );
@@ -2587,6 +2601,7 @@ const SWIPE_THRESHOLD = 64;
 const DEEP_SWIPE_THRESHOLD = 96;
 const DEEP_HINT_WIDTH = 140;
 const DISABLED_SWIPE_MAX = 180;
+const OPTION_CYCLE_DISTANCE = 36;
 
 // Wraps a row with horizontal swipe-to-flag: swipe left calls onSwipeComplete,
 // swipe right calls onSwipeFailed. Pointer events (not HTML5 drag-and-drop)
@@ -2596,16 +2611,27 @@ const DISABLED_SWIPE_MAX = 180;
 // ✓/✗ hint, growing with drag distance so the message can be read - but
 // releasing never fires onSwipeComplete/onSwipeFailed.
 //
-// `deepSwipeAction` (competition events only, see the List view) adds a
-// second, deeper zone on the same left-swipe gesture: past
-// DEEP_SWIPE_THRESHOLD the ✓/complete hint snaps straight to the deep
-// action's own label/color at a fixed, wider width (DEEP_HINT_WIDTH) - a
-// snap rather than a gradual stretch, so the hint reads cleanly at both
-// sizes instead of an in-between smear - and releasing there fires it
-// instead of onSwipeComplete. It's exposed as an extension of the same
-// gesture rather than a separate one, so there's nothing to discover
-// except "keep swiping" - kept close to SWIPE_THRESHOLD so that discovery
-// doesn't require an unusually long drag.
+// `deepSwipeActions` (see the List view) adds a second, deeper zone on the
+// same left-swipe gesture: past DEEP_SWIPE_THRESHOLD the ✓/complete hint
+// snaps straight to the (first) deep action's own label/color at a fixed,
+// wider width (DEEP_HINT_WIDTH) - a snap rather than a gradual stretch, so
+// the hint reads cleanly at both sizes instead of an in-between smear - and
+// releasing there fires it instead of onSwipeComplete. It's exposed as an
+// extension of the same gesture rather than a separate one, so there's
+// nothing to discover except "keep swiping" - kept close to
+// SWIPE_THRESHOLD so that discovery doesn't require an unusually long drag.
+//
+// With more than one deep action, holding past DEEP_SWIPE_THRESHOLD and
+// then dragging vertically cycles which one is selected (every
+// OPTION_CYCLE_DISTANCE px of vertical drag moves one step, clamped to the
+// array's ends rather than wrapping) - small ▲/▼ indicators either side of
+// the label hint that this is possible, dimmed at whichever end is already
+// selected. Vertical drag only starts counting once the deep zone is
+// entered (tracked from the Y position at that moment, not from the
+// original touch-down) so incidental vertical motion during the initial
+// horizontal swipe never pre-offsets the selection, and touchAction only
+// switches to "none" (blocking the browser's own vertical pan) while in
+// that held state, so the row scrolls normally at every other drag stage.
 function SwipeableRow({
   children,
   onSwipeComplete,
@@ -2613,7 +2639,7 @@ function SwipeableRow({
   disabled,
   disabledMessage = "Only athletes can swipe",
   className,
-  deepSwipeAction,
+  deepSwipeActions,
 }: {
   children: ReactNode;
   onSwipeComplete: () => void;
@@ -2621,15 +2647,20 @@ function SwipeableRow({
   disabled?: boolean;
   disabledMessage?: string;
   className?: string;
-  deepSwipeAction?: { label: string; onTrigger: () => void };
+  deepSwipeActions?: { label: string; onTrigger: () => void }[];
 }) {
   const [dragX, setDragX] = useState(0);
+  const [deepIndex, setDeepIndex] = useState(0);
   const startXRef = useRef<number | null>(null);
+  const deepEntryYRef = useRef<number | null>(null);
   const draggedRef = useRef(false);
+  const cyclable = !!deepSwipeActions && deepSwipeActions.length > 1;
 
   function onPointerDown(e: ReactPointerEvent) {
     startXRef.current = e.clientX;
+    deepEntryYRef.current = null;
     draggedRef.current = false;
+    setDeepIndex(0);
     (e.target as Element).setPointerCapture(e.pointerId);
   }
 
@@ -2637,19 +2668,28 @@ function SwipeableRow({
     if (startXRef.current == null) return;
     const delta = e.clientX - startXRef.current;
     if (Math.abs(delta) > 8) draggedRef.current = true;
-    const max = deepSwipeAction ? DEEP_HINT_WIDTH : Infinity;
-    setDragX(
-      disabled
-        ? Math.max(-DISABLED_SWIPE_MAX, Math.min(DISABLED_SWIPE_MAX, delta))
-        : Math.max(-max, Math.min(max, delta))
-    );
+    const max = deepSwipeActions ? DEEP_HINT_WIDTH : Infinity;
+    const clampedX = disabled
+      ? Math.max(-DISABLED_SWIPE_MAX, Math.min(DISABLED_SWIPE_MAX, delta))
+      : Math.max(-max, Math.min(max, delta));
+    setDragX(clampedX);
+
+    if (!disabled && cyclable && clampedX <= -DEEP_SWIPE_THRESHOLD) {
+      if (deepEntryYRef.current == null) deepEntryYRef.current = e.clientY;
+      const deltaY = e.clientY - deepEntryYRef.current;
+      const step = Math.round(-deltaY / OPTION_CYCLE_DISTANCE);
+      setDeepIndex(Math.max(0, Math.min(deepSwipeActions!.length - 1, step)));
+    } else {
+      deepEntryYRef.current = null;
+      setDeepIndex(0);
+    }
   }
 
   function onPointerUp() {
     if (startXRef.current == null) return;
     if (!disabled) {
-      if (deepSwipeAction && dragX <= -DEEP_SWIPE_THRESHOLD) {
-        deepSwipeAction.onTrigger();
+      if (deepSwipeActions && dragX <= -DEEP_SWIPE_THRESHOLD) {
+        deepSwipeActions[deepIndex]?.onTrigger();
       } else if (dragX <= -SWIPE_THRESHOLD) {
         onSwipeComplete();
       } else if (dragX >= SWIPE_THRESHOLD) {
@@ -2657,10 +2697,12 @@ function SwipeableRow({
       }
     }
     setDragX(0);
+    setDeepIndex(0);
+    deepEntryYRef.current = null;
     startXRef.current = null;
   }
 
-  const pastDeep = !!deepSwipeAction && dragX <= -DEEP_SWIPE_THRESHOLD;
+  const pastDeep = !!deepSwipeActions && dragX <= -DEEP_SWIPE_THRESHOLD;
   const hintWidth = disabled
     ? Math.abs(dragX)
     : pastDeep
@@ -2677,7 +2719,7 @@ function SwipeableRow({
           the ✓/complete hint - the action that fires for dragX<0 - lives at
           right-0 (and vice versa for ✗/failed at left-0). */}
       <div
-        className={`pointer-events-none absolute inset-y-0 right-0 flex items-center justify-center overflow-hidden whitespace-nowrap px-2 text-center text-xs font-medium transition-[width] duration-150 ease-out ${
+        className={`pointer-events-none absolute inset-y-0 right-0 flex flex-col items-center justify-center overflow-hidden whitespace-nowrap px-2 text-center text-xs font-medium transition-[width] duration-150 ease-out ${
           disabled
             ? "bg-stone-200 text-stone-600"
             : pastDeep
@@ -2686,7 +2728,33 @@ function SwipeableRow({
         }`}
         style={{ opacity: dragX < 0 ? hintOpacity : 0, width: hintWidth }}
       >
-        {disabled ? disabledMessage : pastDeep ? deepSwipeAction!.label : "✓"}
+        {disabled ? (
+          disabledMessage
+        ) : pastDeep ? (
+          cyclable ? (
+            <>
+              <span
+                className={`text-[9px] leading-none ${
+                  deepIndex > 0 ? "opacity-80" : "opacity-25"
+                }`}
+              >
+                ▲
+              </span>
+              <span>{deepSwipeActions![deepIndex].label}</span>
+              <span
+                className={`text-[9px] leading-none ${
+                  deepIndex < deepSwipeActions!.length - 1 ? "opacity-80" : "opacity-25"
+                }`}
+              >
+                ▼
+              </span>
+            </>
+          ) : (
+            deepSwipeActions![0].label
+          )
+        ) : (
+          "✓"
+        )}
       </div>
       <div
         className={`pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center overflow-hidden px-2 text-center text-xs font-medium ${
@@ -2710,7 +2778,7 @@ function SwipeableRow({
         }}
         style={{
           transform: `translateX(${dragX}px)`,
-          touchAction: "pan-y",
+          touchAction: cyclable && pastDeep ? "none" : "pan-y",
           transition: dragX === 0 ? "transform 150ms ease-out" : "none",
         }}
       >
@@ -2837,6 +2905,91 @@ function RecordResultDrawer({
             : submitting
             ? "Saving..."
             : "Save result"}
+        </button>
+      </form>
+      {mediaError && <Toast message={mediaError} />}
+    </Drawer>
+  );
+}
+
+// The deep-swipe "Add post" quick composer, reachable on every event's
+// row (not just competitions - see the List view's deepSwipeActions).
+// Deliberately just a body + optional photo, prefilled with the calendar
+// entry's type/date/name so posting about "today's session" is a one-tap
+// edit-and-send rather than a blank composer - and shares the event
+// (`share_kind: "event"`) so it also carries the same "🗓️ {title}"
+// ShareBadge a manually-shared event gets from the main post composer.
+function QuickPostDrawer({
+  event,
+  typeLabel,
+  athleteId,
+  onClose,
+}: {
+  event: Event | null;
+  typeLabel: string;
+  athleteId: number | null;
+  onClose: () => void;
+}) {
+  const api = useApi();
+  const [body, setBody] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  function showMediaError(message: string) {
+    setMediaError(message);
+    setTimeout(() => setMediaError(null), 4000);
+  }
+
+  useEffect(() => {
+    setBody(event ? `${typeLabel} · ${dateLabel(event.start_date)} · ${event.title}` : "");
+    setPhotoUrl("");
+    setUploadingPhoto(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event?.id]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!event || !athleteId || submitting || uploadingPhoto) return;
+    setSubmitting(true);
+    try {
+      await api.post(`/athletes/${athleteId}/posts`, {
+        body: body.trim() || undefined,
+        image_url: photoUrl || undefined,
+        share_kind: "event",
+        share_id: event.id,
+      });
+      onClose();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Drawer open={event !== null} onClose={onClose} title="Add post">
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <Field label="What's on your mind?">
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            className="min-h-[120px] rounded-xl border border-stone-300 px-3 py-2"
+          />
+        </Field>
+        <MediaField
+          label="Photo (optional)"
+          kind="image"
+          value={photoUrl}
+          onChange={setPhotoUrl}
+          onError={showMediaError}
+          onUploadingChange={setUploadingPhoto}
+        />
+        <button
+          type="submit"
+          disabled={submitting || uploadingPhoto}
+          className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+        >
+          {uploadingPhoto ? "Uploading photo..." : submitting ? "Posting..." : "Post"}
         </button>
       </form>
       {mediaError && <Toast message={mediaError} />}
