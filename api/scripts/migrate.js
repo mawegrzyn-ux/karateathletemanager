@@ -1031,6 +1031,16 @@ const migrations = [
 
   `ALTER TABLE nk_training_modules
      ADD COLUMN IF NOT EXISTS type_id INTEGER REFERENCES nk_training_module_types(id) ON DELETE SET NULL`,
+
+  // A user's personally-chosen, ordered bottom-nav tab keys (see
+  // app/src/utils/navTabs.ts's NAV_TAB_REGISTRY for the key catalog) -
+  // NULL means "use the role-based default". A club can separately force
+  // the same tab set on every one of its athlete members via
+  // nk_clubs.forced_nav_tabs, which takes priority over the athlete's own
+  // nav_tabs when set (resolved server-side into club_forced_nav_tabs on
+  // the user object, see userFields.js).
+  `ALTER TABLE nk_users ADD COLUMN IF NOT EXISTS nav_tabs JSONB`,
+  `ALTER TABLE nk_clubs ADD COLUMN IF NOT EXISTS forced_nav_tabs JSONB`,
 ];
 
 async function migrate() {

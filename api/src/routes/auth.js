@@ -188,6 +188,34 @@ router.patch(
   })
 );
 
+// Personal bottom-nav tab customization - a separate endpoint (rather
+// than folded into PATCH /me's COALESCE-based update) since nav_tabs
+// needs "clear back to the role default" (explicit null) to be
+// distinguishable from "field omitted", which COALESCE can't express.
+router.patch(
+  "/me/nav-tabs",
+  asyncHandler(async (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ error: { message: "Not authenticated" } });
+    }
+
+    const { nav_tabs } = req.body ?? {};
+    if (nav_tabs !== null && !Array.isArray(nav_tabs)) {
+      return res
+        .status(400)
+        .json({ error: { message: "nav_tabs must be an array or null" } });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE nk_users SET nav_tabs = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING ${USER_SELECT_FIELDS}`,
+      [nav_tabs ? JSON.stringify(nav_tabs) : null, req.user.id]
+    );
+    res.json({ user: rows[0] });
+  })
+);
+
 router.post(
   "/switch-role",
   asyncHandler(async (req, res) => {

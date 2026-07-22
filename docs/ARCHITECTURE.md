@@ -1962,6 +1962,73 @@ Key flows:
   Coach → Athletes → selects athlete → views grade history → records new grade
 ```
 
+### Configurable bottom nav
+
+The bottom nav's left "Profile" cut-corner section (`App.tsx`'s `Shell`)
+is fixed and never scrolls; everything to its right lives in an
+`overflow-x-auto` strip of fixed-width (`w-20 shrink-0`) tabs so it
+scrolls horizontally once more tabs are configured than fit on screen.
+Which tabs appear there, and in what order, is configurable rather than
+hardcoded:
+
+- `app/src/utils/navTabs.ts`'s `NAV_TAB_REGISTRY` is the single source
+  of truth: a curated catalog of `{key, to, icon, label, end?,
+  available(ctx)}` entries, filtered against a lightweight
+  `NavRoleContext = {role, is_admin}` (not the full `User`) so the same
+  registry/filtering logic serves both a real logged-in user and a
+  synthetic athlete context (the club-override case below). It's
+  deliberately a subset of `More.tsx`'s full tile list — the 9 everyday
+  destinations (Schedule, Athletes, Grades, Osu, Clubs, Associations,
+  Training, Schedule types, More), not every rare admin-configuration
+  page — expandable later by adding registry entries.
+  `schedule`/`more` (`MANDATORY_NAV_KEYS`) are always present and
+  reorderable-but-not-removable: Schedule is the landing page, More is
+  the only way back into the settings that configure this list.
+- **Personal customization**: `nk_users.nav_tabs` (`JSONB`, nullable —
+  `NULL` means "use the role-based default" computed by
+  `defaultNavTabKeys`, which exactly matches the app's pre-feature
+  hardcoded tab sets so nobody's nav changes on rollout unless they
+  customize). `PATCH /api/auth/me/nav-tabs` `{nav_tabs: string[] |
+  null}` is a separate endpoint from the general profile `PATCH` because
+  it needs an explicit `null` ("reset to default") distinguishable from
+  an omitted field, which the profile endpoint's `COALESCE`-based update
+  can't express. Edited from `MenuSettings.tsx` (reachable via a
+  "Customize menu" tile in `More.tsx`), using the shared
+  `NavTabsEditor` component: a "Your tabs" list with ▲/▼ (reorder) and ✕
+  (remove) icon buttons, plus an "Add a tab" list of the remaining
+  options — icon buttons rather than drag-and-drop, since this is a
+  touch-first app and native HTML5 drag-and-drop doesn't work well on
+  touch without extra plumbing (the training-module wizard hit this
+  same issue and switched to Back/Next buttons).
+- **Club override**: `nk_clubs.forced_nav_tabs` (`JSONB`, nullable) lets
+  a club manager (`isClubAdmin` — global admin, or a coach with
+  `is_admin = TRUE` on that specific `nk_coach_clubs` row) force the
+  same tab set on every one of the club's athlete members, taking
+  priority over each athlete's own `nav_tabs`. Resolved server-side into
+  a computed `club_forced_nav_tabs` field on the user object
+  (`USER_SELECT_FIELDS` in `userFields.js`, a correlated subquery
+  joining the active `athlete_id` through `nk_athlete_clubs`, only ever
+  populated when an athlete profile is active — a coach/admin/referee
+  viewing isn't subject to a club's athlete-menu override; if an athlete
+  belongs to more than one club with an override set, the first one
+  wins, arbitrarily). Set via the existing `PATCH /api/admin/clubs/:id`
+  (same presence-based `"forced_nav_tabs" in req.body` dynamic
+  `SET`-clause pattern as that route's venue sub-resource, so an
+  explicit `null` clears the override rather than being ignored like an
+  omitted field would be under `COALESCE`). Edited from a "Menu for this
+  club's athletes" section in the club's detail drawer
+  (`admin/Clubs.tsx`), reusing the same `NavTabsEditor` against a
+  synthetic `{role: "athlete", is_admin: false}` context. When an
+  override is active, `MenuSettings.tsx` renders the same tab list
+  read-only with an explanatory note instead of the editable controls.
+- Both call sites resolve stored keys into renderable tabs through
+  `resolveNavTabs`/`resolveNavTabKeys` (`navTabs.ts`): drop any key the
+  role no longer has access to or that no longer exists in the
+  registry, then re-append any missing mandatory tab. `Shell` in
+  `App.tsx` calls this with `user.club_forced_nav_tabs ?? user.nav_tabs
+  ?? null` — the same override-then-personal-then-default precedence
+  used everywhere this feature reads a tab list.
+
 ## Nginx
 
 SSL is live via Certbot (auto-renews through `certbot.timer`). Full config
