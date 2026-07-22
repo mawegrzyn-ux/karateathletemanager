@@ -526,18 +526,22 @@ coach-run attendance) — this is personal athlete itinerary planning.
   measure choice, or media). `ItemStageContent` renders one stage's
   fields at a time and is shared by both the create wizard and the
   edit-flow's per-step editor below, so the stage markup exists once.
-  Navigation is five icon buttons (`IconBtn`, matching the app's
-  existing emoji-icon conventions — 🗑 for delete, ✓ for done) rather
-  than labeled text buttons: ← Back / → Next walk one stage at a time
-  (crossing into the next item once the current one's stages run out,
-  or back into the previous item's last stage, or back onto General
-  Info from item 1's first stage); ➕ Insert always appends a brand new
-  blank item and jumps straight to its first (type) stage regardless of
-  which stage/item you're currently on; 🗑 Remove deletes the current
-  item outright (dropping back to General Info if it was the last one
-  left); ✓ Finish submits everything gathered so far from any point, not
-  just the end. All wizard state lives inside `CreateModuleWizard` itself
-  and it's only mounted while the create drawer is open, so each open
+  Navigation is split across two rows: a top row of icon buttons
+  (`IconBtn`, matching the app's existing emoji-icon conventions) for
+  ← Back / → Next (walk one stage at a time, crossing into the next
+  item once the current one's stages run out, or back into the
+  previous item's last stage, or back onto General Info from item 1's
+  first stage) and ✓ Finish (submits everything gathered so far from
+  any point, not just the end); and, only while a step is open, a
+  second row of two labeled text buttons — a bare "+" icon there read
+  as unclear, so **+ Add step** and **🗑 Remove step** spell out what
+  they do. Add step always appends a brand new blank item and jumps
+  straight to its first (type) stage regardless of which stage/item
+  you're currently on (a genuinely new item's type isn't decided yet,
+  so it still needs asking); Remove step deletes the current item
+  outright (dropping back to General Info if it was the last one
+  left). All wizard state lives inside `CreateModuleWizard` itself and
+  it's only mounted while the create drawer is open, so each open
   starts fresh with no reset boilerplate needed in the parent.
   **Fixed: switching stages/items showed the previous one's stale field
   values.** The stage fields are uncontrolled (`defaultValue` + `onBlur`,
@@ -547,7 +551,12 @@ coach-run attendance) — this is personal athlete itinerary planning.
   into the same position without unmounting. `<ItemStageContent
   key={`${itemIndex}-${stage}`} .../>` forces a remount on every
   stage/item change so the fields always reflect what's actually being
-  edited, never leftover DOM state from the previous screen.
+  edited, never leftover DOM state from the previous screen. While a
+  step is open (any stage other than General Info), a persistent
+  `<h2>` above the stage caption always shows that step's own name
+  ("Front kick", or "Rest", or "New exercise" for one not yet named) so
+  it stays obvious which exercise you're editing no matter how many
+  stages deep you are.
 - **Editing an existing module always jumps straight into the wizard
   too** — tapping a module in the list opens `EditModuleWizard`, the
   same general-info-then-stage-by-stage flow `CreateModuleWizard` uses
@@ -560,16 +569,26 @@ coach-run attendance) — this is personal athlete itinerary planning.
   patches for title/explanation/type), so there's no separate
   create-only "Finish" submit step — its ✓ button here just closes the
   drawer, since by the time you'd tap it everything is already saved.
-  ← Back/→ Next/➕ Insert/🗑 Remove behave identically to the create
-  wizard (Insert appends a blank item and jumps to its first stage,
-  Remove deletes the current item outright), and the whole-module
-  `DeleteButton` moved from the old items-list page onto every screen
-  of this wizard. The general-info screen no longer counts as a step,
-  matching creation's convention. Reordering items is not currently
-  exposed in this flow - it was dropped along with the combined list/
-  sort page rather than carried over into a separate screen; positions
-  are otherwise fixed at insertion order (append-only via Insert,
-  removable via Remove).
+  ← Back/→ Next/+ Add step/🗑 Remove step behave identically to the
+  create wizard, and the whole-module `DeleteButton` moved from the old
+  items-list page onto every screen of this wizard. The general-info
+  screen no longer counts as a step, matching creation's convention.
+  **Steps list.** The General Info screen of both wizards also renders
+  `StepsList` — every item as a one-line row (`draftItemSummary`, the
+  same "Name — sets × reps" shape as the read-only `itemSummary`), with
+  ▲/▼ buttons to reorder (icon buttons rather than drag-and-drop, same
+  touch-first reasoning as everywhere else in this app that made that
+  call — see `NavTabsEditor`) and a ✕ to remove without entering the
+  item at all. This is what makes the list at-a-glance and sortable
+  again despite always jumping into the per-step wizard rather than a
+  free-form editable list — the two aren't mutually exclusive once the
+  step list only reorders/removes/opens rather than also hosting field
+  edits. Tapping a row's label opens that step, but starts at stage
+  index 1 (`EXISTING_STEP_STAGE_INDEX`) — name-and-explanation for an
+  exercise, the duration field for a rest — skipping the type stage,
+  since an existing item's type was already decided when it was
+  created and re-asking it first is just an extra tap; only a brand
+  new item via Add step still starts at stage 0.
 - **Training module types.** A shared, admin-managed lookup
   (`nk_training_module_types`: `id`, `name`) — same shape as
   `nk_karate_styles` — for tagging a module with a category (Cardio,
