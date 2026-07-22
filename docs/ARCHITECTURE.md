@@ -1660,6 +1660,15 @@ unchanged.
   `Shell` in `App.tsx` renders them as a small red banner ("Viewing as
   {name} (Athlete/Coach)") above every page whenever the active role is
   athlete or coach.
+- `athlete_photo_url`/`coach_photo_url`/`referee_photo_url` (the active
+  profile's own photo — distinct from `nk_users.photo_url`, the login
+  account's own, set via `Profile.tsx`) are likewise computed in
+  `USER_SELECT_FIELDS` and included on every auth response. `Shell`
+  picks whichever matches the active `role` (falling back to the
+  account's own `photo_url` if that profile has none) and passes it as
+  `Avatar`'s `url` prop for the bottom nav's cut-corner Profile tab, so
+  it shows the athlete/coach/referee's actual photo instead of always
+  falling back to initials.
 
 ### Osu — admin chatbot & MCP server
 

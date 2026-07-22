@@ -72,6 +72,15 @@ function Shell() {
     [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
     user?.email ||
     "";
+  const activeProfilePhoto =
+    user?.role === "athlete"
+      ? user.athlete_photo_url
+      : user?.role === "coach"
+        ? user.coach_photo_url
+        : user?.role === "referee"
+          ? user.referee_photo_url
+          : null;
+  const profilePhoto = activeProfilePhoto || user?.photo_url;
   const profileLabel = (user?.role && PROFILE_LABELS[user.role]) || "Profile";
 
   return (
@@ -93,7 +102,7 @@ function Shell() {
             className="absolute inset-y-0 left-0 right-0 -z-10 bg-red-200"
             style={{ clipPath: "polygon(0 0, 100% 0, 70% 100%, 0 100%)" }}
           />
-          <Avatar name={profileName} size={22} />
+          <Avatar name={profileName} url={profilePhoto} size={22} />
           <span className="font-display uppercase tracking-wide">
             {profileLabel}
           </span>
