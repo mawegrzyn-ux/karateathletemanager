@@ -15,7 +15,7 @@ const REPEAT_FREQS = ["daily", "weekly", "monthly"];
 const MAX_REPEAT_OCCURRENCES = 60;
 const STATUS_VALUES = ["pending", "completed", "failed"];
 
-const EVENT_FIELDS = `id, title, event_type, club_id, start_date, end_date, start_time, end_time, daily_times, location, venue_id, kata_id, notes, training_module_id, recurrence_id, created_at`;
+const EVENT_FIELDS = `id, title, event_type, club_id, start_date, end_date, start_time, end_time, daily_times, location, venue_id, kata_id, notes, training_module_id, recurrence_id, icon, created_at`;
 const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id, recurrence_id`;
 
 router.use(authorize());
@@ -530,6 +530,7 @@ router.post(
       notes,
       training_module_id,
       kata_id,
+      icon,
       repeat,
     } = req.body ?? {};
 
@@ -540,6 +541,11 @@ router.post(
       return res
         .status(400)
         .json({ error: { message: "start_date and end_date are required" } });
+    }
+    if (icon != null && (typeof icon !== "string" || icon.length > 8)) {
+      return res
+        .status(400)
+        .json({ error: { message: "icon must be a string of 8 characters or fewer" } });
     }
 
     // A recurring event is generated the same way a recurring itinerary
@@ -592,8 +598,8 @@ router.post(
         const { rows } = await client.query(
           `INSERT INTO nk_events
              (title, event_type, club_id, start_date, end_date, start_time, end_time, daily_times, location,
-              venue_id, kata_id, notes, training_module_id, recurrence_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+              venue_id, kata_id, notes, training_module_id, recurrence_id, icon)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
            RETURNING ${EVENT_FIELDS}`,
           [
             title,
@@ -610,6 +616,7 @@ router.post(
             notes,
             event_type === "training" ? training_module_id ?? null : null,
             recurrenceId,
+            icon || null,
           ]
         );
         const event = rows[0];
@@ -727,7 +734,14 @@ router.patch(
       notes,
       training_module_id,
       kata_id,
+      icon,
     } = body;
+
+    if (icon !== undefined && icon != null && (typeof icon !== "string" || icon.length > 8)) {
+      return res
+        .status(400)
+        .json({ error: { message: "icon must be a string of 8 characters or fewer" } });
+    }
 
     if (event_type !== undefined) {
       const { rows: currentRows } = await pool.query(
@@ -755,12 +769,15 @@ router.patch(
       notes,
       training_module_id,
       kata_id,
+      icon,
     };
     const setClauses = [];
     const values = [];
     for (const [key, value] of Object.entries(fields)) {
       if (key in body) {
-        values.push(value);
+        // An empty string means "clear the override, fall back to the
+        // event type's shared icon" - store as NULL rather than "".
+        values.push(key === "icon" && value === "" ? null : value);
         setClauses.push(`${key} = $${values.length}`);
       }
     }

@@ -1045,6 +1045,11 @@ const migrations = [
   // A training module exercise "measured by" distance instead of sets/reps
   // or time - e.g. a 400m sprint or a 5000m run.
   `ALTER TABLE nk_training_module_items ADD COLUMN IF NOT EXISTS distance_meters INTEGER`,
+
+  // Optional per-event icon override - lets a user pick a custom emoji for
+  // one specific schedule entry instead of always showing its event type's
+  // shared icon (nk_event_types.icon).
+  `ALTER TABLE nk_events ADD COLUMN IF NOT EXISTS icon VARCHAR(8)`,
 ];
 
 async function migrate() {

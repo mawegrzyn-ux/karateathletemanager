@@ -44,6 +44,7 @@ interface Event {
   notes: string | null;
   training_module_id: number | null;
   recurrence_id: string | null;
+  icon: string | null;
   athlete_status: AthleteStatus[];
   my_status: CompletionStatus | null;
   my_result_place: string | null;
@@ -171,6 +172,14 @@ function typeInfo(eventTypes: EventTypeRow[], clubId: number | null, key: string
   };
 }
 
+// Same as typeInfo, but honors a per-event custom icon override (event.icon)
+// when the user has set one for this specific schedule entry, instead of
+// always showing the event type's shared icon.
+function eventTypeInfo(eventTypes: EventTypeRow[], event: Event) {
+  const info = typeInfo(eventTypes, event.club_id, event.event_type);
+  return event.icon ? { ...info, icon: event.icon } : info;
+}
+
 const EMPTY_FORM = {
   title: "",
   event_type: "training",
@@ -185,6 +194,7 @@ const EMPTY_FORM = {
   notes: "",
   training_module_id: null as number | null,
   kata_id: null as number | null,
+  icon: "",
   repeat_freq: "none",
   repeat_interval: 1,
   repeat_weekdays: [] as number[],
@@ -791,6 +801,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       notes: event.notes ?? "",
       training_module_id: event.training_module_id,
       kata_id: event.kata_id,
+      icon: event.icon ?? "",
       repeat_freq: "none",
       repeat_interval: 1,
       repeat_weekdays: [],
@@ -999,7 +1010,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                 </h2>
                 {occurrences.map((occ) => {
                   const e = occ.event;
-                  const info = typeInfo(eventTypes, e.club_id, e.event_type);
+                  const info = eventTypeInfo(eventTypes, e);
                   const showTrophy =
                     e.event_type === "competition" && e.my_result_place;
                   // filter: drop-shadow (not box-shadow) since these
@@ -1286,6 +1297,14 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                   </option>
                 ))}
             </select>
+          </Field>
+          <Field label="Icon (optional)">
+            <input
+              value={form.icon}
+              onChange={(e) => setForm({ ...form, icon: e.target.value })}
+              placeholder={typeInfo(eventTypes, form.club_id, form.event_type).icon}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
           </Field>
           <DateTimeField
             label="Start"
@@ -1780,6 +1799,19 @@ function EventDetail({
                 ))}
             </select>
           </Field>
+          <Field label="Icon (optional)">
+            <input
+              key={event.icon ?? ""}
+              defaultValue={event.icon ?? ""}
+              onBlur={(e) => {
+                if (e.target.value !== (event.icon ?? "")) {
+                  updateEvent({ icon: e.target.value });
+                }
+              }}
+              placeholder={typeInfo(eventTypes, event.club_id, event.event_type).icon}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
           <DateTimeField
             label="Start"
             date={toDateInput(event.start_date)}
@@ -1906,8 +1938,8 @@ function EventDetail({
         <>
           <div className="flex items-center gap-2">
             <Badge>
-              {typeInfo(eventTypes, event.club_id, event.event_type).icon}{" "}
-              {typeInfo(eventTypes, event.club_id, event.event_type).label}
+              {eventTypeInfo(eventTypes, event).icon}{" "}
+              {eventTypeInfo(eventTypes, event).label}
             </Badge>
             <span className="text-sm text-stone-500">
               {toDateInput(event.start_date)}
@@ -2248,7 +2280,7 @@ function MonthView({
               <div className="flex flex-wrap justify-center gap-0.5 leading-none">
                 {dayEvents.slice(0, 3).map((e) => (
                   <span key={e.id} title={e.title}>
-                    {typeInfo(eventTypes, e.club_id, e.event_type).icon}
+                    {eventTypeInfo(eventTypes, e).icon}
                   </span>
                 ))}
                 {dayEvents.length > 3 && (
@@ -2317,7 +2349,7 @@ function WeekView({
           return (
             <div key={date} className="flex flex-col gap-0.5">
               {allDay.slice(0, 2).map((e) => {
-                const info = typeInfo(eventTypes, e.club_id, e.event_type);
+                const info = eventTypeInfo(eventTypes, e);
                 return (
                   <button
                     key={e.id}
@@ -2367,7 +2399,7 @@ function WeekView({
                 const end = timeToMinutes(e.end_time) ?? start + 30;
                 const top = ((start - DAY_START_HOUR * 60) / 60) * HOUR_HEIGHT;
                 const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, 20);
-                const info = typeInfo(eventTypes, e.club_id, e.event_type);
+                const info = eventTypeInfo(eventTypes, e);
                 return (
                   <button
                     key={e.id}
@@ -2504,7 +2536,7 @@ function DayView({
       {allDayEvents.length > 0 && (
         <div className="flex flex-col gap-1">
           {allDayEvents.map((e) => {
-            const info = typeInfo(eventTypes, e.club_id, e.event_type);
+            const info = eventTypeInfo(eventTypes, e);
             return (
               <button
                 key={e.id}
@@ -2566,7 +2598,7 @@ function DayView({
               ((start - DAY_START_HOUR * 60) / 60) * HOUR_HEIGHT +
               (isDragging ? (drag.offsetMin / 60) * HOUR_HEIGHT : 0);
             const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, 32);
-            const info = typeInfo(eventTypes, e.club_id, e.event_type);
+            const info = eventTypeInfo(eventTypes, e);
             const overdue = isOverdue(e);
             return (
               <div
