@@ -548,24 +548,28 @@ coach-run attendance) — this is personal athlete itinerary planning.
   key={`${itemIndex}-${stage}`} .../>` forces a remount on every
   stage/item change so the fields always reflect what's actually being
   edited, never leftover DOM state from the previous screen.
-- **Editing an existing module: a draggable, jump-to-step list instead
-  of every item open at once.** `EditModuleItems` replaces the old
-  `ModuleItemsEditor` — each step collapses to a one-line summary
-  (`draftItemSummary`) with a drag handle (⠿, native HTML5
-  `draggable`/`onDragStart`/`onDragOver`/`onDrop` — no drag-and-drop
-  library needed) and a ▼/▲ chevron; tapping a row expands it in place
-  into the *same* per-stage editor the create wizard uses (its own
-  local `stageIndex`, reset to 0 whenever a different row expands), so
-  jumping into any step lands you on its first stage rather than a wall
-  of fields, with ← Back/→ Next to move between that step's stages and
-  🗑 Remove to delete it. Dragging a row's handle onto another reorders
-  the array (splice-out/splice-in) and immediately `PATCH`es the whole
-  `items` array in its new order — same replace-all-as-a-unit pattern
-  the rest of the module's fields already use. A trailing ➕ Insert
-  button appends a new blank item and auto-expands it. `draftItemSummary`
-  is a `DraftItem`-shaped twin of `itemSummary` (string-valued fields,
-  not yet the server's numeric ones) so an in-progress edit's summary
-  line updates immediately without waiting on a round-trip.
+- **Editing an existing module always jumps straight into the wizard
+  too** — tapping a module in the list opens `EditModuleWizard`, the
+  same general-info-then-stage-by-stage flow `CreateModuleWizard` uses
+  (shares `stagesFor`/`ItemStageContent`/`IconBtn`), rather than a page
+  where every item was open at once with drag-to-reorder handles
+  alongside the general-info fields — mixing "edit a field" with
+  "reorder everything" on one screen read as confusing. Every field
+  auto-saves via `PATCH` the moment it's touched (the existing
+  replace-all-the-`items`-array pattern for item fields, single-key
+  patches for title/explanation/type), so there's no separate
+  create-only "Finish" submit step — its ✓ button here just closes the
+  drawer, since by the time you'd tap it everything is already saved.
+  ← Back/→ Next/➕ Insert/🗑 Remove behave identically to the create
+  wizard (Insert appends a blank item and jumps to its first stage,
+  Remove deletes the current item outright), and the whole-module
+  `DeleteButton` moved from the old items-list page onto every screen
+  of this wizard. The general-info screen no longer counts as a step,
+  matching creation's convention. Reordering items is not currently
+  exposed in this flow - it was dropped along with the combined list/
+  sort page rather than carried over into a separate screen; positions
+  are otherwise fixed at insertion order (append-only via Insert,
+  removable via Remove).
 - **Training module types.** A shared, admin-managed lookup
   (`nk_training_module_types`: `id`, `name`) — same shape as
   `nk_karate_styles` — for tagging a module with a category (Cardio,
@@ -1665,10 +1669,18 @@ unchanged.
   account's own, set via `Profile.tsx`) are likewise computed in
   `USER_SELECT_FIELDS` and included on every auth response. `Shell`
   picks whichever matches the active `role` (falling back to the
-  account's own `photo_url` if that profile has none) and passes it as
-  `Avatar`'s `url` prop for the bottom nav's cut-corner Profile tab, so
-  it shows the athlete/coach/referee's actual photo instead of always
-  falling back to initials.
+  account's own `photo_url` if that profile has none) as `profilePhoto`.
+  Rather than a small circular `Avatar` badge, the photo fills the
+  bottom nav's cut-corner Profile tab as its `background-image` (its
+  existing `bg-red-200` shape/`clipPath` stays as the fallback when
+  there's no photo), with a `bg-gradient-to-t from-stone-900/70` scrim
+  layered under the label (plus `textShadow` on the text itself) so
+  "ATHLETE"/"COACH"/etc. stays legible over whatever colors are in an
+  arbitrary photo - a small white underline bar substitutes for the
+  red/stone text-color distinction the tab otherwise uses to show which
+  tab is active, since text color alone wouldn't reliably show up over a
+  photo either. `Avatar` (the small circular badge) still renders, but
+  only as the no-photo fallback.
 
 ### Osu — admin chatbot & MCP server
 

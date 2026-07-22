@@ -94,18 +94,45 @@ function Shell() {
           to="/profile"
           className={({ isActive }) =>
             `relative flex min-h-[44px] w-24 flex-col items-center justify-center gap-0.5 pl-2 pr-5 text-xs font-medium transition-colors ${
-              isActive ? "text-red-600" : "text-stone-700"
+              profilePhoto
+                ? "text-white"
+                : isActive
+                ? "text-red-600"
+                : "text-stone-700"
             }`
           }
         >
-          <span
-            className="absolute inset-y-0 left-0 right-0 -z-10 bg-red-200"
-            style={{ clipPath: "polygon(0 0, 100% 0, 70% 100%, 0 100%)" }}
-          />
-          <Avatar name={profileName} url={profilePhoto} size={22} />
-          <span className="font-display uppercase tracking-wide">
-            {profileLabel}
-          </span>
+          {({ isActive }) => (
+            <>
+              <span
+                className="absolute inset-y-0 left-0 right-0 -z-10 bg-red-200 bg-cover bg-center"
+                style={{
+                  clipPath: "polygon(0 0, 100% 0, 70% 100%, 0 100%)",
+                  backgroundImage: profilePhoto ? `url(${profilePhoto})` : undefined,
+                }}
+              />
+              {/* A photo needs a scrim under it so the label stays legible
+                  against whatever colors are in the photo - a plain solid
+                  fill (like the red-200 fallback) would work for text on
+                  its own but photos vary too much to guarantee contrast. */}
+              {profilePhoto && (
+                <span
+                  className="absolute inset-y-0 left-0 right-0 -z-10 bg-gradient-to-t from-stone-900/70 via-stone-900/20 to-transparent"
+                  style={{ clipPath: "polygon(0 0, 100% 0, 70% 100%, 0 100%)" }}
+                />
+              )}
+              {!profilePhoto && <Avatar name={profileName} size={22} />}
+              <span
+                className="font-display uppercase tracking-wide"
+                style={profilePhoto ? { textShadow: "0 1px 3px rgba(0,0,0,0.8)" } : undefined}
+              >
+                {profileLabel}
+              </span>
+              {profilePhoto && isActive && (
+                <span aria-hidden className="h-1 w-6 rounded-full bg-white" />
+              )}
+            </>
+          )}
         </NavLink>
         <div className="flex flex-1 justify-around">
           {tabs.map((tab) => (

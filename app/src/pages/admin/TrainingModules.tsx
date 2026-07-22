@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, useApi } from "../../hooks/useApi";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -122,20 +122,6 @@ function toApiItem(it: DraftItem) {
     sets: it.sets ? Number(it.sets) : null,
     reps: it.reps ? Number(it.reps) : null,
   };
-}
-
-// A quick, DraftItem-shaped summary line - same wording as itemSummary but
-// working off the string-valued draft fields (not yet the numeric,
-// server-shaped TrainingModuleItem) so it's usable before an item is saved.
-function draftItemSummary(it: DraftItem): string {
-  if (it.item_type === "rest") {
-    return it.duration_seconds ? `Rest ${it.duration_seconds}s` : "Rest";
-  }
-  const name = it.name.trim() || "Untitled exercise";
-  if (it.mode === "time") {
-    return it.duration_seconds ? `${name} — ${it.duration_seconds}s` : name;
-  }
-  return it.sets && it.reps ? `${name} — ${it.sets} × ${it.reps}` : name;
 }
 
 // Building or reviewing one exercise/rest item is broken into a handful of
@@ -533,135 +519,163 @@ function CreateModuleWizard({
   );
 }
 
-// Editing an existing module's items: a draggable, collapsed list of
-// steps (tap to expand into the same stage-by-stage editor the create
-// wizard uses, drag the ⠿ handle to reorder) rather than every item's
-// full field set open at once - keeps a module with several steps
-// scannable, and reordering doesn't need its own separate mode.
-function EditModuleItems({
-  items,
-  onChange,
+// Editing an existing module always jumps into the same stage-by-stage
+// wizard the create flow uses, rather than a page where every item is
+// open at once (or sortable) alongside general info - mixing "edit a
+// field" with "reorder everything" on one screen was confusing. Each
+// field auto-saves via PATCH as soon as it's touched (no Finish/submit
+// step - "Finish" here just closes back to the module, since there's
+// nothing left to commit), matching the auto-save convention used
+// everywhere else editing an existing record.
+function EditModuleWizard({
+  module,
+  types,
+  onSave,
+  onDelete,
+  onClose,
   onError,
 }: {
-  items: DraftItem[];
-  onChange: (items: DraftItem[]) => void;
+  module: TrainingModule;
+  types: TrainingModuleType[];
+  onSave: (patch: Record<string, unknown>) => void;
+  onDelete: () => void;
+  onClose: () => void;
   onError: (message: string) => void;
 }) {
-  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [onGeneralInfo, setOnGeneralInfo] = useState(true);
+  const [items, setItems] = useState<DraftItem[]>(module.items.map(toDraftItem));
+  const [itemIndex, setItemIndex] = useState(0);
   const [stageIndex, setStageIndex] = useState(0);
-  const dragIndexRef = useRef<number | null>(null);
 
-  function updateItem(index: number, patch: Partial<DraftItem>) {
-    onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+  const currentItem = !onGeneralInfo ? items[itemIndex] ?? null : null;
+  const stages = currentItem ? stagesFor(currentItem) : [];
+  const stage = stages[stageIndex];
+
+  function saveItems(next: DraftItem[]) {
+    setItems(next);
+    onSave({ items: next.map(toApiItem) });
   }
 
-  function removeItem(index: number) {
-    onChange(items.filter((_, i) => i !== index));
-    setExpandedIndex(null);
+  function updateCurrentItem(patch: Partial<DraftItem>) {
+    saveItems(items.map((it, i) => (i === itemIndex ? { ...it, ...patch } : it)));
   }
 
-  function insertItem() {
-    setExpandedIndex(items.length);
+  function goNext() {
+    if (onGeneralInfo) {
+      setOnGeneralInfo(false);
+      setItemIndex(0);
+      setStageIndex(0);
+      return;
+    }
+    if (!currentItem) return;
+    if (stageIndex < stages.length - 1) {
+      setStageIndex((s) => s + 1);
+    } else if (itemIndex < items.length - 1) {
+      setItemIndex((i) => i + 1);
+      setStageIndex(0);
+    }
+  }
+
+  function goBack() {
+    if (onGeneralInfo) return;
+    if (stageIndex > 0) {
+      setStageIndex((s) => s - 1);
+    } else if (itemIndex > 0) {
+      setStageIndex(stagesFor(items[itemIndex - 1]).length - 1);
+      setItemIndex((i) => i - 1);
+    } else {
+      setOnGeneralInfo(true);
+    }
+  }
+
+  function insertStep() {
+    const next = [...items, { ...EMPTY_EXERCISE }];
+    setItemIndex(next.length - 1);
     setStageIndex(0);
-    onChange([...items, { ...EMPTY_EXERCISE }]);
+    setOnGeneralInfo(false);
+    saveItems(next);
   }
 
-  function toggleExpand(index: number) {
+  function removeStep() {
+    if (!currentItem) return;
+    const next = items.filter((_, i) => i !== itemIndex);
     setStageIndex(0);
-    setExpandedIndex((prev) => (prev === index ? null : index));
+    if (next.length === 0) {
+      setOnGeneralInfo(true);
+      setItemIndex(0);
+    } else {
+      setItemIndex((i) => Math.min(i, next.length - 1));
+    }
+    saveItems(next);
   }
 
-  function handleDrop(targetIndex: number) {
-    const from = dragIndexRef.current;
-    dragIndexRef.current = null;
-    if (from == null || from === targetIndex) return;
-    const next = [...items];
-    const [moved] = next.splice(from, 1);
-    next.splice(targetIndex, 0, moved);
-    onChange(next);
-    setExpandedIndex(null);
-  }
+  const canGoNext =
+    onGeneralInfo || stageIndex < stages.length - 1 || itemIndex < items.length - 1;
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
-      <span className="text-xs font-medium text-stone-600">
-        Exercises &amp; rest ({items.length}) — drag ⠿ to reorder
+    <div className="flex flex-col gap-4">
+      <span className="text-xs font-medium text-stone-500">
+        {onGeneralInfo
+          ? "General info"
+          : `Step ${itemIndex + 1} of ${items.length} · ${stageLabel(stage)}`}
       </span>
 
-      <div className="flex flex-col gap-2">
-        {items.map((item, i) => {
-          const expanded = expandedIndex === i;
-          const stages = stagesFor(item);
-          const stage = stages[Math.min(stageIndex, stages.length - 1)];
-          return (
-            <div
-              key={i}
-              draggable
-              onDragStart={() => {
-                dragIndexRef.current = i;
+      {onGeneralInfo ? (
+        <>
+          <Field label="Title">
+            <input
+              required
+              defaultValue={module.title}
+              onBlur={(e) => {
+                if (e.target.value !== module.title) {
+                  onSave({ title: e.target.value });
+                }
               }}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => handleDrop(i)}
-              className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-3"
-            >
-              <button
-                type="button"
-                onClick={() => toggleExpand(i)}
-                className="flex min-h-[44px] w-full items-center justify-between gap-2 text-left"
-              >
-                <span className="flex items-center gap-2">
-                  <span aria-hidden className="cursor-grab text-stone-400">
-                    ⠿
-                  </span>
-                  <span className="font-medium">{draftItemSummary(item)}</span>
-                </span>
-                <span aria-hidden className="text-stone-400">
-                  {expanded ? "▲" : "▼"}
-                </span>
-              </button>
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Explanation">
+            <textarea
+              defaultValue={module.explanation ?? ""}
+              onBlur={(e) => {
+                if (e.target.value !== (module.explanation ?? "")) {
+                  onSave({ explanation: e.target.value });
+                }
+              }}
+              className="rounded-xl border border-stone-300 px-3 py-2"
+            />
+          </Field>
+          <TypeSelect
+            types={types}
+            value={module.type_id}
+            onChange={(type_id) => onSave({ type_id })}
+          />
+        </>
+      ) : (
+        currentItem && (
+          <ItemStageContent
+            key={`${itemIndex}-${stage}`}
+            item={currentItem}
+            stage={stage}
+            onChange={updateCurrentItem}
+            onError={onError}
+          />
+        )
+      )}
 
-              {expanded && (
-                <>
-                  <span className="text-xs font-medium text-stone-500">
-                    {stageLabel(stage)}
-                  </span>
-                  <ItemStageContent
-                    key={`${i}-${stage}`}
-                    item={item}
-                    stage={stage}
-                    onChange={(patch) => updateItem(i, patch)}
-                    onError={onError}
-                  />
-                  <div className="flex gap-2">
-                    <IconBtn
-                      icon="←"
-                      label="Back"
-                      onClick={() => setStageIndex((s) => Math.max(0, s - 1))}
-                      disabled={stageIndex === 0}
-                    />
-                    <IconBtn
-                      icon="→"
-                      label="Next"
-                      onClick={() =>
-                        setStageIndex((s) => Math.min(stages.length - 1, s + 1))
-                      }
-                      disabled={stageIndex >= stages.length - 1}
-                    />
-                    <IconBtn
-                      icon="🗑"
-                      label="Remove step"
-                      onClick={() => removeItem(i)}
-                      tone="danger"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
+      <div className="flex gap-2">
+        <IconBtn icon="←" label="Back" onClick={goBack} disabled={onGeneralInfo} />
+        <IconBtn icon="→" label="Next" onClick={goNext} disabled={!canGoNext} />
+        {!onGeneralInfo && (
+          <>
+            <IconBtn icon="➕" label="Insert step" onClick={insertStep} />
+            <IconBtn icon="🗑" label="Remove step" onClick={removeStep} tone="danger" />
+          </>
+        )}
+        <IconBtn icon="✓" label="Done" onClick={onClose} tone="primary" />
       </div>
 
-      <IconBtn icon="➕" label="Insert step" onClick={insertItem} />
+      <DeleteButton onClick={onDelete} itemLabel={module.title} />
     </div>
   );
 }
@@ -816,46 +830,15 @@ export default function TrainingModules() {
         title={editing?.title ?? ""}
       >
         {editing && canEdit && (
-          <div className="flex flex-col gap-4">
-            <Field label="Title">
-              <input
-                defaultValue={editing.title}
-                onBlur={(e) => {
-                  if (e.target.value !== editing.title) {
-                    updateModule(editing.id, { title: e.target.value });
-                  }
-                }}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-            <TypeSelect
-              types={types}
-              value={editing.type_id}
-              onChange={(type_id) => updateModule(editing.id, { type_id })}
-            />
-            <Field label="Explanation">
-              <textarea
-                defaultValue={editing.explanation ?? ""}
-                onBlur={(e) => {
-                  if (e.target.value !== (editing.explanation ?? "")) {
-                    updateModule(editing.id, { explanation: e.target.value });
-                  }
-                }}
-                className="rounded-xl border border-stone-300 px-3 py-2"
-              />
-            </Field>
-            <EditModuleItems
-              items={editing.items.map(toDraftItem)}
-              onChange={(next) =>
-                updateModule(editing.id, { items: next.map(toApiItem) })
-              }
-              onError={showToast}
-            />
-            <DeleteButton
-              onClick={() => deleteModule(editing.id)}
-              itemLabel={editing.title}
-            />
-          </div>
+          <EditModuleWizard
+            key={editing.id}
+            module={editing}
+            types={types}
+            onSave={(patch) => updateModule(editing.id, patch)}
+            onDelete={() => deleteModule(editing.id)}
+            onClose={() => setDrawer("closed")}
+            onError={showToast}
+          />
         )}
         {editing && !canEdit && (
           <div className="flex flex-col gap-4">
