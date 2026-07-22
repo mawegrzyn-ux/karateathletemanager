@@ -1155,6 +1155,22 @@ coach-run attendance) — this is personal athlete itinerary planning.
   block occupying part of the tile) — with the overdue marker taking
   priority over the type strip whenever both would apply to the same
   event.
+- **Per-event icon override**: `nk_events.icon` (nullable `VARCHAR(8)`)
+  lets a user override the leading icon for one specific schedule entry
+  instead of always inheriting its event type's shared `nk_event_types`
+  icon — e.g. flagging a single important training session without
+  recoloring the whole "Training" type for the club. `POST`/`PATCH
+  /api/events/:id` validate it's a string of 8 characters or fewer; an
+  explicit empty string on `PATCH` clears the override back to `NULL`
+  (falls back to the type icon) rather than being stored literally.
+  `eventTypeInfo(eventTypes, event)` (`Schedule.tsx`) wraps `typeInfo`
+  and swaps in `event.icon` whenever it's set, and every render site
+  (list rows, Day/Week grids, Month cells) calls it instead of
+  `typeInfo` directly so the override is honored everywhere the type
+  icon would otherwise show. The create/edit drawers get a plain
+  "Icon (optional)" text input (same bare-emoji-input convention as
+  `admin/EventTypes.tsx`), placeholder-hinting the type's default icon,
+  auto-saving on blur in edit mode like every other field.
 - **Events can recur, the same way itinerary items already did**:
   `nk_events.recurrence_id` (mirrors `nk_event_items.recurrence_id`) plus
   a `repeat` object accepted by `POST /api/events`, reusing the exact
