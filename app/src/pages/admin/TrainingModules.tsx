@@ -625,35 +625,37 @@ function CreateModuleWizard({
 
       {stepError && <p className="text-sm text-red-700">{stepError}</p>}
 
-      <div className="flex gap-2">
-        <IconBtn icon="←" label="Back" onClick={goBack} disabled={onGeneralInfo} />
-        <IconBtn icon="→" label="Next" onClick={goNext} disabled={!canGoNext} />
-        <IconBtn
-          icon="✓"
-          label={submitting ? "Saving" : "Finish"}
-          onClick={finish}
-          disabled={submitting}
-          tone="primary"
-        />
-      </div>
-      {!onGeneralInfo && (
+      <div className="sticky bottom-0 -mx-4 mt-2 flex flex-col gap-2 border-t border-stone-200 bg-white px-4 pb-4 pt-3">
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={insertStep}
-            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
-          >
-            + Add step
-          </button>
-          <button
-            type="button"
-            onClick={removeStep}
-            className="min-h-[44px] flex-1 rounded-xl border border-red-200 font-medium text-red-700"
-          >
-            🗑 Remove step
-          </button>
+          <IconBtn icon="←" label="Back" onClick={goBack} disabled={onGeneralInfo} />
+          <IconBtn icon="→" label="Next" onClick={goNext} disabled={!canGoNext} />
+          <IconBtn
+            icon="✓"
+            label={submitting ? "Saving" : "Finish"}
+            onClick={finish}
+            disabled={submitting}
+            tone="primary"
+          />
         </div>
-      )}
+        {!onGeneralInfo && (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={insertStep}
+              className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
+            >
+              + Add step
+            </button>
+            <button
+              type="button"
+              onClick={removeStep}
+              className="min-h-[44px] flex-1 rounded-xl border border-red-200 font-medium text-red-700"
+            >
+              🗑 Remove step
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -825,31 +827,33 @@ function EditModuleWizard({
         )
       )}
 
-      <div className="flex gap-2">
-        <IconBtn icon="←" label="Back" onClick={goBack} disabled={onGeneralInfo} />
-        <IconBtn icon="→" label="Next" onClick={goNext} disabled={!canGoNext} />
-        <IconBtn icon="✓" label="Done" onClick={onClose} tone="primary" />
-      </div>
-      {!onGeneralInfo && (
+      <div className="sticky bottom-0 -mx-4 mt-2 flex flex-col gap-2 border-t border-stone-200 bg-white px-4 pb-4 pt-3">
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={insertStep}
-            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
-          >
-            + Add step
-          </button>
-          <button
-            type="button"
-            onClick={removeStep}
-            className="min-h-[44px] flex-1 rounded-xl border border-red-200 font-medium text-red-700"
-          >
-            🗑 Remove step
-          </button>
+          <IconBtn icon="←" label="Back" onClick={goBack} disabled={onGeneralInfo} />
+          <IconBtn icon="→" label="Next" onClick={goNext} disabled={!canGoNext} />
+          <IconBtn icon="✓" label="Done" onClick={onClose} tone="primary" />
         </div>
-      )}
+        {!onGeneralInfo && (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={insertStep}
+              className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
+            >
+              + Add step
+            </button>
+            <button
+              type="button"
+              onClick={removeStep}
+              className="min-h-[44px] flex-1 rounded-xl border border-red-200 font-medium text-red-700"
+            >
+              🗑 Remove step
+            </button>
+          </div>
+        )}
 
-      <DeleteButton onClick={onDelete} itemLabel={module.title} />
+        <DeleteButton onClick={onDelete} itemLabel={module.title} />
+      </div>
     </div>
   );
 }
