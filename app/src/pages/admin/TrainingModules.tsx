@@ -96,6 +96,18 @@ function toDraftItem(item: TrainingModuleItem): DraftItem {
   };
 }
 
+function draftItemSummary(it: DraftItem) {
+  if (it.item_type === "rest") {
+    return it.duration_seconds ? `Rest ${it.duration_seconds}s` : "Rest";
+  }
+  const name = it.name.trim() || "Untitled exercise";
+  if (it.mode === "time") {
+    return it.duration_seconds ? `${name} — ${it.duration_seconds}s` : name;
+  }
+  if (it.sets && it.reps) return `${name} — ${it.sets} × ${it.reps}`;
+  return name;
+}
+
 function toApiItem(it: DraftItem) {
   if (it.item_type === "rest") {
     return {
@@ -281,6 +293,97 @@ function ItemStageContent({
   }
 }
 
+// Jumping into an *existing* step from the list below skips straight past
+// the "type" stage to the name/description (or, for rest, the duration)
+// stage - the type was already chosen when the step was created, so
+// re-asking it first is just an extra tap. A brand-new step (via "Add
+// step") still starts at stage 0, since its type genuinely isn't decided
+// yet.
+const EXISTING_STEP_STAGE_INDEX = 1;
+
+// The step list shown on the general-info screen of both wizards - lets
+// you see every exercise/rest step at a glance, jump straight into one to
+// edit it, reorder with ▲/▼ (icon buttons rather than drag-and-drop, since
+// this is a touch-first app - see NavTabsEditor for the same reasoning),
+// and remove one without entering it. Restores the at-a-glance step
+// overview that jumping straight into the per-step wizard on open doesn't
+// otherwise provide.
+function StepsList({
+  items,
+  onReorder,
+  onSelect,
+  onRemove,
+}: {
+  items: DraftItem[];
+  onReorder: (next: DraftItem[]) => void;
+  onSelect: (index: number) => void;
+  onRemove: (index: number) => void;
+}) {
+  if (items.length === 0) return null;
+
+  function moveUp(i: number) {
+    if (i <= 0) return;
+    const next = [...items];
+    [next[i - 1], next[i]] = [next[i], next[i - 1]];
+    onReorder(next);
+  }
+
+  function moveDown(i: number) {
+    if (i >= items.length - 1) return;
+    const next = [...items];
+    [next[i + 1], next[i]] = [next[i], next[i + 1]];
+    onReorder(next);
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      <span className="text-xs font-medium text-stone-600">Steps</span>
+      <div className="flex flex-col gap-2">
+        {items.map((item, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2"
+          >
+            <button
+              type="button"
+              onClick={() => onSelect(i)}
+              className="min-h-[44px] flex-1 text-left font-medium"
+            >
+              {draftItemSummary(item)}
+            </button>
+            <button
+              type="button"
+              onClick={() => moveUp(i)}
+              disabled={i === 0}
+              aria-label={`Move step ${i + 1} up`}
+              className="flex h-9 w-9 items-center justify-center text-stone-500 disabled:opacity-30"
+            >
+              ▲
+            </button>
+            <button
+              type="button"
+              onClick={() => moveDown(i)}
+              disabled={i === items.length - 1}
+              aria-label={`Move step ${i + 1} down`}
+              className="flex h-9 w-9 items-center justify-center text-stone-500 disabled:opacity-30"
+            >
+              ▼
+            </button>
+            <button
+              type="button"
+              onClick={() => onRemove(i)}
+              aria-label={`Remove step ${i + 1}`}
+              className="flex h-9 w-9 items-center justify-center text-red-700"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Icon-only nav buttons shared by the create wizard and the edit-flow's
 // per-step editor - back/next/insert/remove/finish, matching the rest of
 // the app's emoji-icon conventions (🗑 for delete, ✓ for a done state).
@@ -453,8 +556,26 @@ function CreateModuleWizard({
   const canGoNext =
     onGeneralInfo || stageIndex < stages.length - 1 || itemIndex < items.length - 1;
 
+  function selectStep(index: number) {
+    setStepError(null);
+    setItemIndex(index);
+    setStageIndex(EXISTING_STEP_STAGE_INDEX);
+    setOnGeneralInfo(false);
+  }
+
+  function removeStepAt(index: number) {
+    setItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      {!onGeneralInfo && currentItem && (
+        <h2 className="text-lg font-bold tracking-tight">
+          {currentItem.item_type === "rest"
+            ? "Rest"
+            : currentItem.name.trim() || "New exercise"}
+        </h2>
+      )}
       <span className="text-xs font-medium text-stone-500">
         {onGeneralInfo
           ? "General info"
@@ -483,6 +604,12 @@ function CreateModuleWizard({
             value={form.type_id}
             onChange={(type_id) => setForm({ ...form, type_id })}
           />
+          <StepsList
+            items={items}
+            onReorder={setItems}
+            onSelect={selectStep}
+            onRemove={removeStepAt}
+          />
         </>
       ) : (
         currentItem && (
@@ -501,12 +628,6 @@ function CreateModuleWizard({
       <div className="flex gap-2">
         <IconBtn icon="←" label="Back" onClick={goBack} disabled={onGeneralInfo} />
         <IconBtn icon="→" label="Next" onClick={goNext} disabled={!canGoNext} />
-        {!onGeneralInfo && (
-          <>
-            <IconBtn icon="➕" label="Insert step" onClick={insertStep} />
-            <IconBtn icon="🗑" label="Remove step" onClick={removeStep} tone="danger" />
-          </>
-        )}
         <IconBtn
           icon="✓"
           label={submitting ? "Saving" : "Finish"}
@@ -515,6 +636,24 @@ function CreateModuleWizard({
           tone="primary"
         />
       </div>
+      {!onGeneralInfo && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={insertStep}
+            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
+          >
+            + Add step
+          </button>
+          <button
+            type="button"
+            onClick={removeStep}
+            className="min-h-[44px] flex-1 rounded-xl border border-red-200 font-medium text-red-700"
+          >
+            🗑 Remove step
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -612,8 +751,25 @@ function EditModuleWizard({
   const canGoNext =
     onGeneralInfo || stageIndex < stages.length - 1 || itemIndex < items.length - 1;
 
+  function selectStep(index: number) {
+    setItemIndex(index);
+    setStageIndex(EXISTING_STEP_STAGE_INDEX);
+    setOnGeneralInfo(false);
+  }
+
+  function removeStepAt(index: number) {
+    saveItems(items.filter((_, i) => i !== index));
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      {!onGeneralInfo && currentItem && (
+        <h2 className="text-lg font-bold tracking-tight">
+          {currentItem.item_type === "rest"
+            ? "Rest"
+            : currentItem.name.trim() || "New exercise"}
+        </h2>
+      )}
       <span className="text-xs font-medium text-stone-500">
         {onGeneralInfo
           ? "General info"
@@ -650,6 +806,12 @@ function EditModuleWizard({
             value={module.type_id}
             onChange={(type_id) => onSave({ type_id })}
           />
+          <StepsList
+            items={items}
+            onReorder={saveItems}
+            onSelect={selectStep}
+            onRemove={removeStepAt}
+          />
         </>
       ) : (
         currentItem && (
@@ -666,14 +828,26 @@ function EditModuleWizard({
       <div className="flex gap-2">
         <IconBtn icon="←" label="Back" onClick={goBack} disabled={onGeneralInfo} />
         <IconBtn icon="→" label="Next" onClick={goNext} disabled={!canGoNext} />
-        {!onGeneralInfo && (
-          <>
-            <IconBtn icon="➕" label="Insert step" onClick={insertStep} />
-            <IconBtn icon="🗑" label="Remove step" onClick={removeStep} tone="danger" />
-          </>
-        )}
         <IconBtn icon="✓" label="Done" onClick={onClose} tone="primary" />
       </div>
+      {!onGeneralInfo && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={insertStep}
+            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
+          >
+            + Add step
+          </button>
+          <button
+            type="button"
+            onClick={removeStep}
+            className="min-h-[44px] flex-1 rounded-xl border border-red-200 font-medium text-red-700"
+          >
+            🗑 Remove step
+          </button>
+        </div>
+      )}
 
       <DeleteButton onClick={onDelete} itemLabel={module.title} />
     </div>
