@@ -494,16 +494,21 @@ coach-run attendance) — this is personal athlete itinerary planning.
   plan is an ordered sequence of `nk_training_module_items`
   (`module_id`, `position`, `item_type` — `exercise` or `rest`, `name`,
   `explanation`, `video_url`, `image_url`, `sets`, `reps`,
-  `duration_seconds`), replaced as a whole unit on write (same pattern
-  as club membership `PUT`s). An `exercise` item carries its own
-  name/explanation/optional video and/or image link, and is measured
-  either by `sets`+`reps` or by `duration_seconds` (not both); a `rest`
-  item just carries `duration_seconds`. Validation is lenient — only
+  `duration_seconds`, `distance_meters`), replaced as a whole unit on
+  write (same pattern as club membership `PUT`s). An `exercise` item
+  carries its own name/explanation/optional video and/or image link,
+  and is measured by exactly one of: `sets`+`reps`, `duration_seconds`
+  (time), or `distance_meters` (e.g. a 400m sprint or 5000m run) — never
+  more than one of the three; a `rest` item just carries
+  `duration_seconds`. The wizard's "Measured by" select
+  (`ItemStageContent`'s `"measure"` stage) picks which of the three the
+  "details" stage that follows asks for. Validation is lenient — only
   `item_type` is required, so a plan (including an exercise's name) can
   be built up field-by-field without every in-progress item needing to
-  be fully filled in yet — but `sets` (max 50), `reps` (max 1000), and
-  `duration_seconds` (max 6 hours) are bounded, both client-side (input
-  `max`) and server-side, to catch nonsensical values.
+  be fully filled in yet — but `sets` (max 50), `reps` (max 1000),
+  `duration_seconds` (max 6 hours), and `distance_meters` (max 100km)
+  are all bounded, both client-side (input `max`) and server-side, to
+  catch nonsensical values.
   `api/src/routes/trainingModules.js` — `GET` is open to any
   authenticated user (used by the Schedule item picker),
   `POST`/`PATCH`/`DELETE` require `authorize("coach")` (coach or admin).

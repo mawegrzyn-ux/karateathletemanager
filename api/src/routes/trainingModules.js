@@ -9,6 +9,7 @@ const ITEM_TYPES = ["exercise", "rest"];
 const MAX_SETS = 50;
 const MAX_REPS = 1000;
 const MAX_DURATION_SECONDS = 6 * 60 * 60; // 6 hours
+const MAX_DISTANCE_METERS = 100000; // 100km
 
 const MODULE_QUERY = `
   SELECT tm.id, tm.title, tm.explanation, tm.type_id, tmt.name AS type_name,
@@ -18,7 +19,8 @@ const MODULE_QUERY = `
         'id', i.id, 'position', i.position, 'item_type', i.item_type,
         'name', i.name, 'explanation', i.explanation, 'video_url', i.video_url,
         'image_url', i.image_url,
-        'sets', i.sets, 'reps', i.reps, 'duration_seconds', i.duration_seconds
+        'sets', i.sets, 'reps', i.reps, 'duration_seconds', i.duration_seconds,
+        'distance_meters', i.distance_meters
       ) ORDER BY i.position) FILTER (WHERE i.id IS NOT NULL),
       '[]'
     ) AS items
@@ -47,6 +49,7 @@ async function insertItems(client, moduleId, items) {
     const sets = it.sets != null ? Number(it.sets) : null;
     const reps = it.reps != null ? Number(it.reps) : null;
     const duration = it.duration_seconds != null ? Number(it.duration_seconds) : null;
+    const distance = it.distance_meters != null ? Number(it.distance_meters) : null;
     if (sets != null && (!Number.isInteger(sets) || sets <= 0 || sets > MAX_SETS)) {
       throw { status: 400, message: `sets must be a whole number between 1 and ${MAX_SETS}` };
     }
@@ -62,11 +65,20 @@ async function insertItems(client, moduleId, items) {
         message: `duration must be a whole number of seconds between 1 and ${MAX_DURATION_SECONDS}`,
       };
     }
+    if (
+      distance != null &&
+      (!Number.isInteger(distance) || distance <= 0 || distance > MAX_DISTANCE_METERS)
+    ) {
+      throw {
+        status: 400,
+        message: `distance must be a whole number of meters between 1 and ${MAX_DISTANCE_METERS}`,
+      };
+    }
 
     await client.query(
       `INSERT INTO nk_training_module_items
-         (module_id, position, item_type, name, explanation, video_url, image_url, sets, reps, duration_seconds)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+         (module_id, position, item_type, name, explanation, video_url, image_url, sets, reps, duration_seconds, distance_meters)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         moduleId,
         i,
@@ -78,6 +90,7 @@ async function insertItems(client, moduleId, items) {
         sets,
         reps,
         duration,
+        distance,
       ]
     );
   }

@@ -13,6 +13,7 @@ export interface TrainingModuleItem {
   sets: number | null;
   reps: number | null;
   duration_seconds: number | null;
+  distance_meters: number | null;
 }
 
 export interface TrainingModule {
@@ -29,6 +30,9 @@ export function itemSummary(it: TrainingModuleItem) {
     return it.duration_seconds ? `Rest ${it.duration_seconds}s` : "Rest";
   }
   const name = it.name?.trim() || "Untitled exercise";
+  if (it.distance_meters != null) {
+    return `${name} — ${it.distance_meters}m`;
+  }
   if (it.duration_seconds != null && it.sets == null) {
     return `${name} — ${it.duration_seconds}s`;
   }
