@@ -989,6 +989,11 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                   // while drop-shadow follows the actual painted
                   // (post-clip) shape.
                   const sideShadow = "drop-shadow(0 2px 2px rgba(28,25,23,0.35))";
+                  // A stronger, deeper shadow than the left icon segment's -
+                  // the result segment needs to read as the more prominent
+                  // of the two end caps, since it's the one carrying the
+                  // pass/fail/trophy signal.
+                  const resultShadow = "drop-shadow(0 3px 3px rgba(20,20,18,0.45))";
                   const addPostAction = {
                     label: "📝 Add post",
                     onTrigger: () =>
@@ -1012,108 +1017,137 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                       onSwipeFailed={() => swipeEventStatus(e, "failed")}
                       deepSwipeActions={deepSwipeActions}
                     >
-                      <div className="isolate flex overflow-hidden rounded-md shadow-card">
-                        {isOverdue(e) ? (
-                          <div
-                            aria-hidden
-                            className="relative z-10 flex w-12 shrink-0 items-center justify-center bg-red-600 text-5xl font-black leading-none text-red-50"
-                            style={{
-                              clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
-                              filter: sideShadow,
-                            }}
-                          >
-                            !
-                          </div>
-                        ) : (
-                          <div
-                            aria-hidden
-                            className="relative z-10 flex w-12 shrink-0 items-center justify-center text-xl"
-                            style={{
-                              backgroundColor: info.bg_color,
-                              clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
-                              filter: sideShadow,
-                            }}
-                          >
-                            {info.icon}
-                          </div>
-                        )}
-                        <button
-                          onClick={() => setDrawer(e)}
-                          className={`relative my-1 -ml-3 flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 rounded-sm py-3 pl-5 pr-4 text-left shadow-sm ${
-                            e.my_status === "failed"
-                              ? "bg-red-50"
-                              : e.my_status === "completed"
-                              ? "bg-green-50"
-                              : "bg-white"
-                          }`}
-                        >
-                          <span
-                            className={`font-medium ${
-                              e.my_status === "completed"
-                                ? "text-green-300"
-                                : e.my_status === "failed"
-                                ? "text-red-700"
-                                : ""
-                            }`}
-                          >
-                            {e.title}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <Badge>{info.label}</Badge>
-                            <span className="text-xs text-stone-500">
-                              {occ.totalDays === 1 || e.daily_times ? (
-                                <>
-                                  {e.start_time ? toTimeInput(e.start_time) : ""}
-                                  {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
-                                </>
-                              ) : (
-                                <>
-                                  {occ.dayIndex === 1 && e.start_time
-                                    ? `from ${toTimeInput(e.start_time)}`
-                                    : ""}
-                                  {occ.dayIndex === occ.totalDays && e.end_time
-                                    ? `until ${toTimeInput(e.end_time)}`
-                                    : ""}
-                                </>
-                              )}
-                              {occ.totalDays > 1
-                                ? ` · Day ${occ.dayIndex} of ${occ.totalDays}`
-                                : ""}
-                            </span>
-                          </div>
-                        </button>
-                        {(showTrophy ||
-                          e.my_status === "completed" ||
-                          e.my_status === "failed") && (
-                          <div
-                            aria-hidden
-                            className={`relative z-10 -ml-3 flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 text-center ${
-                              showTrophy
-                                ? "bg-amber-100 text-amber-800"
-                                : e.my_status === "completed"
-                                ? "bg-green-100 text-green-700"
-                                : "bg-red-100 text-red-700"
-                            }`}
-                            style={{
-                              clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%)",
-                              filter: sideShadow,
-                            }}
-                          >
-                            {showTrophy ? (
-                              <>
-                                <span className="text-xl leading-none">🏆</span>
-                                <span className="text-xs font-semibold leading-none">
-                                  {e.my_result_place}
-                                </span>
-                              </>
-                            ) : e.my_status === "completed" ? (
-                              <span className="text-3xl leading-none">✓</span>
+                      {(dragX) => {
+                        // The two end caps don't slide as one rigid block
+                        // with the center card - each stays put on the side
+                        // matching the swipe direction, so a left swipe
+                        // pins the icon (only the card+result peel left,
+                        // uncovering the ✓ hint) and a right swipe pins the
+                        // result segment (only the icon+card peel right,
+                        // uncovering the ✗ hint) - vice versa. The center
+                        // card always tracks the drag fully, so its overlap
+                        // with whichever end is momentarily static only
+                        // grows (hidden under that segment's z-10), never
+                        // opening a gap.
+                        const segTransition =
+                          dragX === 0 ? "transform 150ms ease-out" : "none";
+                        const iconTranslate = Math.max(0, dragX);
+                        const resultTranslate = Math.min(0, dragX);
+                        return (
+                          <div className="isolate flex overflow-hidden rounded-md shadow-card">
+                            {isOverdue(e) ? (
+                              <div
+                                aria-hidden
+                                className="relative z-10 flex w-12 shrink-0 items-center justify-center bg-red-600 text-5xl font-black leading-none text-red-50"
+                                style={{
+                                  clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
+                                  filter: sideShadow,
+                                  transform: `translateX(${iconTranslate}px)`,
+                                  transition: segTransition,
+                                }}
+                              >
+                                !
+                              </div>
                             ) : (
-                              <span className="text-3xl leading-none">✗</span>
+                              <div
+                                aria-hidden
+                                className="relative z-10 flex w-12 shrink-0 items-center justify-center text-xl"
+                                style={{
+                                  backgroundColor: info.bg_color,
+                                  clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
+                                  filter: sideShadow,
+                                  transform: `translateX(${iconTranslate}px)`,
+                                  transition: segTransition,
+                                }}
+                              >
+                                {info.icon}
+                              </div>
+                            )}
+                            <button
+                              onClick={() => setDrawer(e)}
+                              className={`relative my-1 -ml-3 flex min-h-[44px] w-full flex-1 flex-col items-start gap-1 rounded-sm py-3 pl-5 pr-4 text-left shadow-sm ${
+                                e.my_status === "failed"
+                                  ? "bg-red-50"
+                                  : e.my_status === "completed"
+                                  ? "bg-green-50"
+                                  : "bg-white"
+                              }`}
+                              style={{
+                                transform: `translateX(${dragX}px)`,
+                                transition: segTransition,
+                              }}
+                            >
+                              <span
+                                className={`font-medium ${
+                                  e.my_status === "completed"
+                                    ? "text-green-300"
+                                    : e.my_status === "failed"
+                                    ? "text-red-700"
+                                    : ""
+                                }`}
+                              >
+                                {e.title}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <Badge>{info.label}</Badge>
+                                <span className="text-xs text-stone-500">
+                                  {occ.totalDays === 1 || e.daily_times ? (
+                                    <>
+                                      {e.start_time ? toTimeInput(e.start_time) : ""}
+                                      {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
+                                    </>
+                                  ) : (
+                                    <>
+                                      {occ.dayIndex === 1 && e.start_time
+                                        ? `from ${toTimeInput(e.start_time)}`
+                                        : ""}
+                                      {occ.dayIndex === occ.totalDays && e.end_time
+                                        ? `until ${toTimeInput(e.end_time)}`
+                                        : ""}
+                                    </>
+                                  )}
+                                  {occ.totalDays > 1
+                                    ? ` · Day ${occ.dayIndex} of ${occ.totalDays}`
+                                    : ""}
+                                </span>
+                              </div>
+                            </button>
+                            {(showTrophy ||
+                              e.my_status === "completed" ||
+                              e.my_status === "failed") && (
+                              <div
+                                aria-hidden
+                                className={`relative z-10 -ml-3 flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 text-center ${
+                                  showTrophy
+                                    ? "bg-amber-100 text-amber-800"
+                                    : e.my_status === "completed"
+                                    ? "bg-green-200 text-green-800"
+                                    : "bg-red-100 text-red-700"
+                                }`}
+                                style={{
+                                  clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%)",
+                                  filter: resultShadow,
+                                  transform: `translateX(${resultTranslate}px)`,
+                                  transition: segTransition,
+                                }}
+                              >
+                                {showTrophy ? (
+                                  <>
+                                    <span className="text-xl leading-none">🏆</span>
+                                    <span className="text-xs font-semibold leading-none">
+                                      {e.my_result_place}
+                                    </span>
+                                  </>
+                                ) : e.my_status === "completed" ? (
+                                  <span className="text-3xl leading-none">✓</span>
+                                ) : (
+                                  <span className="text-3xl leading-none">✗</span>
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
-                      </div>
+                        );
+                      }}
                     </SwipeableRow>
                   );
                 })}
@@ -2642,7 +2676,14 @@ function SwipeableRow({
   className,
   deepSwipeActions,
 }: {
-  children: ReactNode;
+  // A plain ReactNode slides as one rigid block (translateX(dragX)) - the
+  // original behavior, still used by ItemsSection's rows. Passing a
+  // function instead hands the caller the live dragX so it can give
+  // individual segments their own transform - see the List view's tile,
+  // where the icon segment stays put during a left swipe and the result
+  // segment stays put during a right swipe, rather than the whole tile
+  // translating as a unit.
+  children: ReactNode | ((dragX: number) => ReactNode);
   onSwipeComplete: () => void;
   onSwipeFailed: () => void;
   disabled?: boolean;
@@ -2809,12 +2850,12 @@ function SwipeableRow({
           }
         }}
         style={{
-          transform: `translateX(${dragX}px)`,
+          transform: typeof children === "function" ? undefined : `translateX(${dragX}px)`,
           touchAction: cyclable && pastDeep ? "none" : "pan-y",
           transition: dragX === 0 ? "transform 150ms ease-out" : "none",
         }}
       >
-        {children}
+        {typeof children === "function" ? children(dragX) : children}
       </div>
     </div>
   );
