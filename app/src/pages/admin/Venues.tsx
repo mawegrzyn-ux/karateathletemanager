@@ -1,6 +1,13 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useApi } from "../../hooks/useApi";
-import { Spinner, Drawer, AddButton, DeleteButton, Field } from "../../components/ui";
+import {
+  Spinner,
+  Drawer,
+  AddButton,
+  DeleteButton,
+  Field,
+  AddressField,
+} from "../../components/ui";
 
 interface Venue {
   id: number;
@@ -8,9 +15,19 @@ interface Venue {
   name: string;
   address: string | null;
   notes: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
 }
 
-const EMPTY_FORM = { name: "", address: "", notes: "" };
+const EMPTY_FORM = {
+  name: "",
+  address: "",
+  notes: "",
+  contact_name: "",
+  contact_phone: "",
+  contact_email: "",
+};
 
 export default function Venues() {
   const api = useApi();
@@ -117,17 +134,38 @@ export default function Venues() {
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
-          <Field label="Address">
-            <input
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
+          <AddressField
+            label="Address"
+            value={form.address}
+            onChange={(address) => setForm({ ...form, address })}
+          />
           <Field label="Notes">
             <input
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Contact name">
+            <input
+              value={form.contact_name}
+              onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Contact phone">
+            <input
+              type="tel"
+              value={form.contact_phone}
+              onChange={(e) => setForm({ ...form, contact_phone: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Contact email">
+            <input
+              type="email"
+              value={form.contact_email}
+              onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
@@ -158,23 +196,52 @@ export default function Venues() {
                 className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
-            <Field label="Address">
-              <input
-                defaultValue={editing.address ?? ""}
-                onBlur={(e) => {
-                  if (e.target.value !== (editing.address ?? "")) {
-                    updateVenue(editing.id, { address: e.target.value });
-                  }
-                }}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
+            <AddressField
+              label="Address"
+              value={editing.address ?? ""}
+              onChange={(address) => updateVenue(editing.id, { address })}
+            />
             <Field label="Notes">
               <input
                 defaultValue={editing.notes ?? ""}
                 onBlur={(e) => {
                   if (e.target.value !== (editing.notes ?? "")) {
                     updateVenue(editing.id, { notes: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Contact name">
+              <input
+                defaultValue={editing.contact_name ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (editing.contact_name ?? "")) {
+                    updateVenue(editing.id, { contact_name: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Contact phone">
+              <input
+                type="tel"
+                defaultValue={editing.contact_phone ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (editing.contact_phone ?? "")) {
+                    updateVenue(editing.id, { contact_phone: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Contact email">
+              <input
+                type="email"
+                defaultValue={editing.contact_email ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (editing.contact_email ?? "")) {
+                    updateVenue(editing.id, { contact_email: e.target.value });
                   }
                 }}
                 className="min-h-[44px] rounded-xl border border-stone-300 px-3"

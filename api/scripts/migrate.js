@@ -1002,6 +1002,15 @@ const migrations = [
   `ALTER TABLE nk_athlete_posts DROP CONSTRAINT IF EXISTS nk_athlete_posts_share_competition_result_id_fkey`,
   `ALTER TABLE nk_athlete_posts ADD CONSTRAINT nk_athlete_posts_share_competition_result_id_fkey
      FOREIGN KEY (share_competition_result_id) REFERENCES nk_competition_results(id) ON DELETE CASCADE`,
+
+  // A venue's on-site contact - who to call/email if something comes up
+  // about the space itself (a facility manager, front desk, etc.), not
+  // any single event. Kept on nk_venues rather than a separate table
+  // since it's one contact per venue, not a list.
+  `ALTER TABLE nk_venues
+     ADD COLUMN IF NOT EXISTS contact_name  VARCHAR(150),
+     ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(50),
+     ADD COLUMN IF NOT EXISTS contact_email VARCHAR(200)`,
 ];
 
 async function migrate() {

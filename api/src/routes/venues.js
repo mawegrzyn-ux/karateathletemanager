@@ -17,11 +17,13 @@ router.get(
   asyncHandler(async (req, res) => {
     const { rows } = await pool.query(
       req.user.is_admin
-        ? `SELECT v.id, v.name, v.address, v.club_id, c.name AS club_name
+        ? `SELECT v.id, v.name, v.address, v.club_id, c.name AS club_name,
+                  v.contact_name, v.contact_phone, v.contact_email
            FROM nk_venues v
            LEFT JOIN nk_clubs c ON c.id = v.club_id
            ORDER BY v.club_id IS NOT NULL, c.name NULLS FIRST, v.name`
-        : `SELECT v.id, v.name, v.address, v.club_id, c.name AS club_name
+        : `SELECT v.id, v.name, v.address, v.club_id, c.name AS club_name,
+                  v.contact_name, v.contact_phone, v.contact_email
            FROM nk_venues v
            LEFT JOIN nk_clubs c ON c.id = v.club_id
            WHERE v.club_id IS NULL

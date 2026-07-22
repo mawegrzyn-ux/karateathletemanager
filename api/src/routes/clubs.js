@@ -450,7 +450,7 @@ router.delete(
   })
 );
 
-const VENUE_FIELDS = `id, club_id, name, address, notes, created_at`;
+const VENUE_FIELDS = `id, club_id, name, address, notes, contact_name, contact_phone, contact_email, created_at`;
 
 router.get(
   "/:id/venues",
@@ -469,14 +469,23 @@ router.post(
     if (!(await isClubAdmin(req.user, req.params.id))) {
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
-    const { name, address, notes } = req.body ?? {};
+    const { name, address, notes, contact_name, contact_phone, contact_email } =
+      req.body ?? {};
     if (typeof name !== "string" || name.trim().length === 0) {
       return res.status(400).json({ error: { message: "Name is required" } });
     }
     const { rows } = await pool.query(
-      `INSERT INTO nk_venues (club_id, name, address, notes)
-       VALUES ($1, $2, $3, $4) RETURNING ${VENUE_FIELDS}`,
-      [req.params.id, name, address ?? null, notes ?? null]
+      `INSERT INTO nk_venues (club_id, name, address, notes, contact_name, contact_phone, contact_email)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${VENUE_FIELDS}`,
+      [
+        req.params.id,
+        name,
+        address ?? null,
+        notes ?? null,
+        contact_name ?? null,
+        contact_phone ?? null,
+        contact_email ?? null,
+      ]
     );
     res.status(201).json({ venue: rows[0] });
   })
@@ -488,15 +497,32 @@ router.patch(
     if (!(await isClubAdmin(req.user, req.params.id))) {
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
-    const { name, address, notes } = req.body ?? {};
+    const fields = {
+      name: req.body?.name,
+      address: req.body?.address,
+      notes: req.body?.notes,
+      contact_name: req.body?.contact_name,
+      contact_phone: req.body?.contact_phone,
+      contact_email: req.body?.contact_email,
+    };
+    const setClauses = [];
+    const values = [];
+    for (const [key, value] of Object.entries(fields)) {
+      if (key in (req.body ?? {})) {
+        values.push(value);
+        setClauses.push(`${key} = $${values.length}`);
+      }
+    }
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: { message: "No fields to update" } });
+    }
+    values.push(req.params.venueId, req.params.id);
+
     const { rows } = await pool.query(
-      `UPDATE nk_venues SET
-         name    = COALESCE($1, name),
-         address = COALESCE($2, address),
-         notes   = COALESCE($3, notes)
-       WHERE id = $4 AND club_id = $5
+      `UPDATE nk_venues SET ${setClauses.join(", ")}
+       WHERE id = $${values.length - 1} AND club_id = $${values.length}
        RETURNING ${VENUE_FIELDS}`,
-      [name, address, notes, req.params.venueId, req.params.id]
+      values
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: { message: "Venue not found" } });
