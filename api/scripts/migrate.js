@@ -1011,6 +1011,26 @@ const migrations = [
      ADD COLUMN IF NOT EXISTS contact_name  VARCHAR(150),
      ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(50),
      ADD COLUMN IF NOT EXISTS contact_email VARCHAR(200)`,
+
+  // A shared, admin-managed lookup of training module categories (Cardio,
+  // Strength, etc.) - same shape as nk_karate_styles: a plain name list a
+  // module optionally tags itself with, managed from its own admin page
+  // rather than free text so the set stays consistent across modules.
+  `CREATE TABLE IF NOT EXISTS nk_training_module_types (
+     id         SERIAL PRIMARY KEY,
+     name       VARCHAR(100) NOT NULL UNIQUE,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  // Starting list - admin can add more (Mobility, Agility, etc.) via the
+  // admin Training Types page.
+  `INSERT INTO nk_training_module_types (name) VALUES
+     ('Cardio'), ('Strength'), ('Plyometrics'), ('Explosive'),
+     ('Flexibility'), ('Balance'), ('Technique'), ('Endurance')
+   ON CONFLICT (name) DO NOTHING`,
+
+  `ALTER TABLE nk_training_modules
+     ADD COLUMN IF NOT EXISTS type_id INTEGER REFERENCES nk_training_module_types(id) ON DELETE SET NULL`,
 ];
 
 async function migrate() {

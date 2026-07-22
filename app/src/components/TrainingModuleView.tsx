@@ -19,6 +19,8 @@ export interface TrainingModule {
   id: number;
   title: string;
   explanation: string | null;
+  type_id: number | null;
+  type_name: string | null;
   items: TrainingModuleItem[];
 }
 
@@ -43,6 +45,11 @@ export function itemSummary(it: TrainingModuleItem) {
 export function TrainingModuleView({ module }: { module: TrainingModule }) {
   return (
     <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      {module.type_name && (
+        <span className="w-fit rounded-full bg-stone-200 px-2 py-0.5 text-xs font-medium text-stone-700">
+          {module.type_name}
+        </span>
+      )}
       {module.explanation && (
         <p className="px-1 text-sm text-stone-600">{module.explanation}</p>
       )}

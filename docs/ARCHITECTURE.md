@@ -510,6 +510,51 @@ coach-run attendance) — this is personal athlete itinerary planning.
   For editors of the module library, the page surfaces any save failure
   (bad bounds, network error) via a `Toast`, since every field edit
   auto-saves immediately and previously failed silently.
+- **Creating a module is a step-by-step wizard; editing one stays a
+  single scrolling form.** `CreateModuleWizard` (`admin/TrainingModules.tsx`)
+  replaces the old "New training module" drawer's one long form: step 0
+  is the module's own Title/Explanation/Type, then one step per
+  exercise/rest item (reusing `ItemFields`, extracted from
+  `ModuleItemsEditor` so both the wizard and the existing all-at-once
+  edit-flow editor share the same field markup instead of duplicating
+  it). "Next" on step 0 validates the title, seeds a first blank
+  exercise item if none exist yet, and advances; each item step has
+  "Back", "+ Next step" (append another blank item and advance to it),
+  "Remove this step", and "Finish" (submits everything gathered so far,
+  reachable from any item step, not just the last). All state
+  (`step`/`form`/`items`) lives inside `CreateModuleWizard` itself and
+  the component is only mounted while the create drawer is open, so
+  each open starts fresh with no reset boilerplate needed in the parent.
+  **Fixed: switching steps showed the previous item's stale field
+  values.** `ItemFields`' inputs are uncontrolled (`defaultValue` +
+  `onBlur`, matching every other auto-saving form in the app) so mid-
+  edit keystrokes don't fight the cursor - but that means React doesn't
+  refresh their displayed value when a *different* item swaps into the
+  same position without unmounting. `<ItemFields key={step} .../>` in
+  the wizard forces a remount on every step change so each step's inputs
+  always reflect that step's actual item, not leftover DOM state from
+  the previous one (this only affects the single-item-at-a-time wizard;
+  `ModuleItemsEditor`'s all-at-once list already keys each item's block
+  by its stable index).
+- **Training module types.** A shared, admin-managed lookup
+  (`nk_training_module_types`: `id`, `name`) — same shape as
+  `nk_karate_styles` — for tagging a module with a category (Cardio,
+  Strength, Plyometrics, Explosive, Flexibility, Balance, Technique,
+  Endurance seeded as a starting list; admin can add more via its own
+  page). `nk_training_modules.type_id` references it
+  (`ON DELETE SET NULL`, so deleting a type in use un-tags rather than
+  blocking or cascading). `api/src/routes/trainingModuleTypes.js` -
+  `GET` open to any authenticated user, `POST`/`PATCH`/`DELETE` admin-
+  only (no natural per-record scoping like clubs have, matching
+  `karateStyles.js`/`katas.js`). `admin/TrainingModuleTypes.tsx` is a
+  plain name-only list+drawer (`/admin/training-module-types`,
+  admin-only, "Manage training types" tile in `More.tsx`'s Admin
+  section alongside Katas/Karate styles). A `TypeSelect` dropdown
+  (shared between the wizard's step 0 and the existing module's edit
+  drawer) lets a module optionally pick one type; `TrainingModuleView`
+  (the shared read-only view) renders it as a small badge above the
+  explanation, and the admin list row shows it as a `Badge` next to the
+  title.
 - **Media uploads**: `video_url`/`image_url` on an exercise item accept
   either a pasted link or an uploaded file, via `MediaField` — a shared
   component in `components/ui.tsx` (also used for athlete/coach photos,
