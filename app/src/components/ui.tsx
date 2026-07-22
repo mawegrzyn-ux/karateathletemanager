@@ -81,7 +81,9 @@ export function MediaField({
   onUploadingChange?: (uploading: boolean) => void;
 }) {
   const [uploading, setUploading] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -99,7 +101,106 @@ export function MediaField({
     }
   }
 
-  const youTubeId = kind === "video" ? extractYouTubeId(value) : null;
+  // Images skip the URL-paste field entirely - just the photo itself (or an
+  // empty tap target) with small overlay icons, since every image on this
+  // app comes from an upload/camera rather than a pasted link (unlike video,
+  // where pasting a YouTube link is the common case). Both hidden file
+  // inputs point at the same handler; the only difference is `capture`,
+  // which is what actually steers a mobile browser to the camera app
+  // instead of the photo library.
+  if (kind === "image") {
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-stone-700">{label}</span>
+        <div className="relative">
+          {value ? (
+            <img
+              src={value}
+              alt={`${label} preview`}
+              className="max-h-40 w-full rounded-xl object-cover"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="flex h-40 w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-stone-300 text-stone-500"
+            >
+              <span className="text-2xl leading-none">📷</span>
+              <span className="text-sm font-medium">Add photo</span>
+            </button>
+          )}
+          {value && (
+            <div className="absolute right-2 top-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => onChange("")}
+                aria-label={`Remove ${label.toLowerCase()}`}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900/60 text-white"
+              >
+                🗑
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                aria-label={`Edit ${label.toLowerCase()}`}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900/60 text-white"
+              >
+                ✏️
+              </button>
+            </div>
+          )}
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-stone-900/50 text-sm font-medium text-white">
+              Uploading…
+            </div>
+          )}
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFile}
+          className="hidden"
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFile}
+          className="hidden"
+        />
+
+        <Modal open={pickerOpen} onClose={() => setPickerOpen(false)}>
+          <div className="flex flex-col gap-2 p-2">
+            <button
+              type="button"
+              onClick={() => {
+                setPickerOpen(false);
+                cameraInputRef.current?.click();
+              }}
+              className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700"
+            >
+              📷 Take photo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPickerOpen(false);
+                fileInputRef.current?.click();
+              }}
+              className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700"
+            >
+              🖼 Choose from library
+            </button>
+          </div>
+        </Modal>
+      </div>
+    );
+  }
+
+  const youTubeId = extractYouTubeId(value);
 
   return (
     <Field label={label}>
@@ -109,11 +210,7 @@ export function MediaField({
             key={value}
             defaultValue={value}
             onBlur={(e) => onChange(e.target.value)}
-            placeholder={
-              kind === "video"
-                ? "Paste a YouTube or video link"
-                : "Paste an image link"
-            }
+            placeholder="Paste a YouTube or video link"
             className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
           />
           <button
@@ -127,7 +224,7 @@ export function MediaField({
           <input
             ref={fileInputRef}
             type="file"
-            accept={kind === "video" ? "video/*" : "image/*"}
+            accept="video/*"
             onChange={handleFile}
             className="hidden"
           />
@@ -139,16 +236,12 @@ export function MediaField({
             title="Video preview"
             allowFullScreen
           />
-        ) : kind === "video" && value ? (
-          // eslint-disable-next-line jsx-a11y/media-has-caption
-          <video src={value} controls className="w-full rounded-xl" />
-        ) : kind === "image" && value ? (
-          <img
-            src={value}
-            alt={`${label} preview`}
-            className="max-h-40 w-full rounded-xl object-cover"
-          />
-        ) : null}
+        ) : (
+          value && (
+            // eslint-disable-next-line jsx-a11y/media-has-caption
+            <video src={value} controls className="w-full rounded-xl" />
+          )
+        )}
       </div>
     </Field>
   );
