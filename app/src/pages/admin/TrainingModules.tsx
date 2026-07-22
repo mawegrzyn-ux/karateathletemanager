@@ -27,6 +27,7 @@ import {
 const MAX_SETS = 50;
 const MAX_REPS = 1000;
 const MAX_DURATION_SECONDS = 6 * 60 * 60; // 6 hours
+const MAX_DISTANCE_METERS = 100000; // 100km
 
 interface TrainingModuleType {
   id: number;
@@ -66,10 +67,11 @@ interface DraftItem {
   explanation: string;
   video_url: string;
   image_url: string;
-  mode: "reps" | "time";
+  mode: "reps" | "time" | "distance";
   sets: string;
   reps: string;
   duration_seconds: string;
+  distance_meters: string;
 }
 
 const EMPTY_FORM = { title: "", explanation: "", type_id: null as number | null };
@@ -84,20 +86,29 @@ const EMPTY_EXERCISE: DraftItem = {
   sets: "",
   reps: "",
   duration_seconds: "",
+  distance_meters: "",
 };
 
 function toDraftItem(item: TrainingModuleItem): DraftItem {
+  const mode =
+    item.distance_meters != null
+      ? "distance"
+      : item.duration_seconds != null && item.sets == null
+      ? "time"
+      : "reps";
   return {
     item_type: item.item_type,
     name: item.name ?? "",
     explanation: item.explanation ?? "",
     video_url: item.video_url ?? "",
     image_url: item.image_url ?? "",
-    mode: item.duration_seconds != null && item.sets == null ? "time" : "reps",
+    mode,
     sets: item.sets != null ? String(item.sets) : "",
     reps: item.reps != null ? String(item.reps) : "",
     duration_seconds:
       item.duration_seconds != null ? String(item.duration_seconds) : "",
+    distance_meters:
+      item.distance_meters != null ? String(item.distance_meters) : "",
   };
 }
 
@@ -106,6 +117,9 @@ function draftItemSummary(it: DraftItem) {
     return it.duration_seconds ? `Rest ${it.duration_seconds}s` : "Rest";
   }
   const name = it.name.trim() || "Untitled exercise";
+  if (it.mode === "distance") {
+    return it.distance_meters ? `${name} — ${it.distance_meters}m` : name;
+  }
   if (it.mode === "time") {
     return it.duration_seconds ? `${name} — ${it.duration_seconds}s` : name;
   }
@@ -118,6 +132,16 @@ function toApiItem(it: DraftItem) {
     return {
       item_type: "rest",
       duration_seconds: it.duration_seconds ? Number(it.duration_seconds) : null,
+    };
+  }
+  if (it.mode === "distance") {
+    return {
+      item_type: "exercise",
+      name: it.name,
+      explanation: it.explanation || null,
+      video_url: it.video_url || null,
+      image_url: it.image_url || null,
+      distance_meters: it.distance_meters ? Number(it.distance_meters) : null,
     };
   }
   if (it.mode === "time") {
@@ -229,11 +253,14 @@ function ItemStageContent({
         <Field label="Measured by">
           <select
             value={item.mode}
-            onChange={(e) => onChange({ mode: e.target.value as "reps" | "time" })}
+            onChange={(e) =>
+              onChange({ mode: e.target.value as "reps" | "time" | "distance" })
+            }
             className="min-h-[44px] rounded-xl border border-stone-300 px-3"
           >
             <option value="reps">Sets &amp; reps</option>
             <option value="time">Time</option>
+            <option value="distance">Distance</option>
           </select>
         </Field>
       );
@@ -247,6 +274,20 @@ function ItemStageContent({
               max={MAX_DURATION_SECONDS}
               defaultValue={item.duration_seconds}
               onBlur={(e) => onChange({ duration_seconds: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+        );
+      }
+      if (item.mode === "distance") {
+        return (
+          <Field label="Distance (meters)">
+            <input
+              type="number"
+              min={1}
+              max={MAX_DISTANCE_METERS}
+              defaultValue={item.distance_meters}
+              onBlur={(e) => onChange({ distance_meters: e.target.value })}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>

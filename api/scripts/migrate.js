@@ -1041,6 +1041,10 @@ const migrations = [
   // the user object, see userFields.js).
   `ALTER TABLE nk_users ADD COLUMN IF NOT EXISTS nav_tabs JSONB`,
   `ALTER TABLE nk_clubs ADD COLUMN IF NOT EXISTS forced_nav_tabs JSONB`,
+
+  // A training module exercise "measured by" distance instead of sets/reps
+  // or time - e.g. a 400m sprint or a 5000m run.
+  `ALTER TABLE nk_training_module_items ADD COLUMN IF NOT EXISTS distance_meters INTEGER`,
 ];
 
 async function migrate() {
