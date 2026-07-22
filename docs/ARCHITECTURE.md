@@ -1230,6 +1230,36 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `text-xl`/`text-xs`) for readability at a glance, and `sideShadow`'s
   opacity went from 0.25 to 0.35 (blur 1.5px → 2px) since the original
   was barely perceptible against the tile's light background.
+- **Asymmetric swipe: the end cap on the swipe's own side stays put.**
+  The three chevron segments previously slid as one rigid block
+  (`SwipeableRow` applied a single `translateX(dragX)` to the whole
+  tile). `SwipeableRow`'s `children` prop now also accepts a function
+  `(dragX) => ReactNode` — when passed a function instead of a plain
+  node, `SwipeableRow` skips its own wrapper transform and calls it with
+  the live `dragX` so the List view's tile can give each of its three
+  segments an independent transform: the icon segment uses
+  `Math.max(0, dragX)` (stays at 0 during a left swipe, tracks the drag
+  during a right swipe) and the result segment uses `Math.min(0, dragX)`
+  (mirror image), while the center card always uses the full `dragX`.
+  A left swipe therefore pins the icon and only the card+result peel
+  left to uncover the ✓/deep-action hint; a right swipe pins the result
+  segment and only the icon+card peel right to uncover the ✗ hint —
+  vice versa. No gap ever opens at the seam between segments: whichever
+  end cap is momentarily static is the one the moving segment is
+  sliding *toward* (further under its `z-10` chevron overlap), never the
+  one it's pulling away from; the only real gap opens at the tile's
+  outer edge, which is exactly where the hint is meant to show through.
+  Each segment reuses the same "snap back over 150ms once `dragX` hits 0,
+  no transition mid-drag" rule `SwipeableRow` already used for its own
+  wrapper. The `ItemsSection` row (no chevron segments, just a plain
+  card) still passes a plain `ReactNode` and gets the original
+  single-block slide, unaffected.
+  Separately, the result segment was made visually heavier as its own
+  ask — a `resultShadow` constant (`drop-shadow(0 3px 3px
+  rgba(20,20,18,0.45))`, deeper/blurrier than the icon segment's shared
+  `sideShadow`) applies only there, and the completed (✓) state's
+  background/text deepened from `bg-green-100`/`text-green-700` to
+  `bg-green-200`/`text-green-800`.
 - **Competition-result share card: plain text, soft accent-color post
   break.** `ShareBadge`'s `competition_result` card
   (`AthleteSocialProfile.tsx`) has no background/border/frame of its
