@@ -634,6 +634,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       );
       setEvents((prev) => mergeEvents(prev, res.events));
       loadedFromRef.current = from;
+      feedbackTick(500);
     } catch {
       // leave the window as-is; the next scroll near the edge retries
     } finally {
@@ -656,6 +657,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       );
       setEvents((prev) => mergeEvents(prev, res.events));
       loadedToRef.current = to;
+      feedbackTick(500);
     } catch {
       // leave the window as-is; the next scroll near the edge retries
     } finally {
@@ -1205,7 +1207,10 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
 
       {viewMode === "list" && (
         <button
-          onClick={() => scrollToToday("smooth")}
+          onClick={() => {
+            feedbackConfirm(500);
+            scrollToToday("smooth");
+          }}
           aria-label="Jump to today"
           className="fixed bottom-24 right-4 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-red-600 text-lg text-white shadow-lg"
         >

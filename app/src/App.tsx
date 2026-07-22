@@ -102,8 +102,12 @@ function Shell() {
                   (on top of, i.e. hiding) these escaped negative-z children -
                   so the fallback has to be another escaping negative-z
                   sibling instead, ordered behind the clipped one below by
-                  using a more-negative z-index. */}
-              <span className="absolute inset-y-0 left-0 right-0 -z-20 bg-stone-100" />
+                  using a more-negative z-index. Matches the tab strip's own
+                  `bg-white/95 backdrop-blur` exactly (not the page's plain
+                  `bg-stone-100`) so the wedge outside the diagonal cut reads
+                  as a continuation of that same bar rather than a
+                  differently-shaded patch next to it. */}
+              <span className="absolute inset-y-0 left-0 right-0 -z-20 bg-white/95 backdrop-blur" />
               <span
                 className="absolute inset-y-0 left-0 right-0 -z-10 bg-red-200 bg-cover bg-center"
                 style={{

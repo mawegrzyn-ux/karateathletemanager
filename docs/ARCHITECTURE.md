@@ -642,6 +642,29 @@ coach-run attendance) — this is personal athlete itinerary planning.
   etc.) before it reaches the proxy, 404ing the image instead of serving
   it — this bit us in production once already; don't drop the `^~` when
   touching this file.
+- **`MediaField`'s image mode has no URL-paste field at all** - unlike
+  video (where pasting a YouTube link is the common case), every image
+  on this app comes from an upload or the camera, so `kind="image"`
+  renders just the photo itself (or an empty dashed-border "📷 Add
+  photo" tap target) with two small floating icon buttons overlaid in
+  its corner once a photo is set: 🗑 clears it back to that empty state,
+  ✏️ reopens the same picker as tapping the empty state does. Both open
+  a small `Modal` action sheet ("📷 Take photo" / "🖼 Choose from
+  library") backed by two hidden file inputs pointed at the same
+  `handleFile` - the only difference between them is the `capture`
+  attribute, which is what actually steers a mobile browser toward the
+  camera app instead of the photo library. **Fixed: tapping "Choose
+  from library" reopened the action sheet it had just closed.** The
+  image-mode markup used to be wrapped in the shared `Field` component,
+  which renders a real `<label>` - clicking any descendant of a label
+  can make the browser also replay a click on the label's *implicitly
+  associated* control (its first labelable descendant), and here that
+  was the empty-state "Add photo" button, whose own handler reopens the
+  picker. Image mode now renders its own plain `<div>` + `<span>` for
+  the field label instead of going through `Field`, since its several
+  explicit tap targets don't need or want a wrapping label's implicit
+  click-forwarding. (`kind="video"` still uses `Field` as before -
+  a single text input has no such conflict.)
 - **Katas**: `nk_katas` (`name` unique, `style`, `wkf_number`) is an
   admin-managed reference list, seeded via migration with the full
   official WKF Kata Name/Order List — 102 kata names numbered 1-102 in
@@ -1408,6 +1431,17 @@ coach-run attendance) — this is personal athlete itinerary planning.
   fires once on release, only when an action actually triggers (swipe
   complete/fail, or a deep action), giving a distinctly firmer
   "committed" pulse versus the lighter in-progress ticks.
+- **The same feedback extended to scroll interactions**, not just swipe.
+  List view's lazy-load pagination (`loadMorePast`/`loadMoreFuture`, the
+  near-top/near-bottom scroll thresholds documented above) fires
+  `feedbackTick(500)` right as a new page of events successfully merges
+  in, giving a physical cue that more content just loaded rather than
+  the scroll silently continuing. The "Jump to today" floating button
+  fires `feedbackConfirm(500)` on tap, matching the "committed action"
+  weight used for a triggered swipe. Continuous native scrolling itself
+  is deliberately left alone - ticking on every scroll pixel would be
+  a constant buzz rather than useful feedback; only these discrete,
+  boundary-crossing moments get one.
 
 Self-service email/password registration, gated by admin approval — not
 third-party OAuth.
@@ -1733,6 +1767,14 @@ unchanged.
   the `NavLink` (behind the `-z-10` clipped color/photo layer and
   scrim). That correctly fills only the wedge outside the clip-path
   while leaving the diagonal shape itself untouched.
+  **Second fix: that fallback still read as a differently-colored
+  patch next to the tab strip.** `bg-stone-100` is the page's own flat
+  background color, but the tab strip's actual rendered color is
+  `bg-white/95` blended over that same `bg-stone-100` backdrop - visibly
+  closer to white than plain stone-100 on its own. The wedge's fallback
+  span now uses that exact same `bg-white/95 backdrop-blur` instead, so
+  it reads as a seamless continuation of the tab strip rather than a
+  subtly different shade of grey next to it.
 
 ### Osu — admin chatbot & MCP server
 
