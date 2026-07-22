@@ -1707,10 +1707,23 @@ unchanged.
   `<nav>` element's own `bg-white/95`, so a stray white sliver sat right
   at the diagonal seam. `bg-white/95 backdrop-blur` (and the safe-area
   bottom padding) moved off `<nav>` itself and onto the tab-strip
-  container div instead, while the Profile `NavLink` got its own
-  `bg-stone-100` (the app's base background color) to sit behind its
-  clipped layers — the sliver now blends into the page background
-  instead of standing out as an opaque white patch.
+  container div instead, to isolate the fix to just the Profile tab's
+  own box. **First attempt regressed the diagonal shape entirely** (a
+  plain grey box, no red/photo cut at all) by adding `bg-stone-100`
+  directly to the Profile `NavLink`: that `<a>` is `position: relative`
+  with no `z-index`, so it never establishes its own stacking context,
+  which means its `-z-10` clipped children don't stack against *its*
+  background at all — they escape to the nearest ancestor that *is* one
+  (`<nav>`, always a stacking context since it's `fixed`), landing in
+  that ancestor's z-index:auto layer alongside the `<a>` itself, which
+  paints *after* (on top of, i.e. hiding) the escaped `-z-10` children.
+  The fallback fill has to be another escaping negative-z sibling
+  instead, ordered behind the existing ones by using a more-negative
+  z-index: an extra `<span className="absolute inset-y-0 left-0
+  right-0 -z-20 bg-stone-100" />`, unclipped, as the first child inside
+  the `NavLink` (behind the `-z-10` clipped color/photo layer and
+  scrim). That correctly fills only the wedge outside the clip-path
+  while leaving the diagonal shape itself untouched.
 
 ### Osu — admin chatbot & MCP server
 

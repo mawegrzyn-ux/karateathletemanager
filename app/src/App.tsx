@@ -82,7 +82,7 @@ function Shell() {
         <NavLink
           to="/profile"
           className={({ isActive }) =>
-            `relative flex min-h-[44px] w-24 flex-col items-center justify-center gap-0.5 bg-stone-100 pb-[env(safe-area-inset-bottom)] pl-2 pr-5 text-xs font-medium transition-colors ${
+            `relative flex min-h-[44px] w-24 flex-col items-center justify-center gap-0.5 pb-[env(safe-area-inset-bottom)] pl-2 pr-5 text-xs font-medium transition-colors ${
               profilePhoto
                 ? "text-white"
                 : isActive
@@ -93,6 +93,17 @@ function Shell() {
         >
           {({ isActive }) => (
             <>
+              {/* This `<a>` doesn't establish its own stacking context (no
+                  z-index, just position:relative), so its -z children don't
+                  stack against *its* background - they escape to the nearest
+                  ancestor that does (`<nav>`, which is `fixed` and so always
+                  one). Giving a fallback fill to the `<a>` itself would sit
+                  in that ancestor's z-index:auto layer, which paints *after*
+                  (on top of, i.e. hiding) these escaped negative-z children -
+                  so the fallback has to be another escaping negative-z
+                  sibling instead, ordered behind the clipped one below by
+                  using a more-negative z-index. */}
+              <span className="absolute inset-y-0 left-0 right-0 -z-20 bg-stone-100" />
               <span
                 className="absolute inset-y-0 left-0 right-0 -z-10 bg-red-200 bg-cover bg-center"
                 style={{
