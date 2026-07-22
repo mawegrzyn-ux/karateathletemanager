@@ -589,6 +589,15 @@ coach-run attendance) — this is personal athlete itinerary planning.
   since an existing item's type was already decided when it was
   created and re-asking it first is just an extra tap; only a brand
   new item via Add step still starts at stage 0.
+- **Fixed: the Back/Next/Finish/Add-step/Remove-step controls ran
+  straight into the exercise fields above them with no visual break,**
+  reading as part of the same form rather than navigation. Both
+  wizards now wrap that whole button block (plus the whole-module
+  `DeleteButton` in the edit wizard) in a `sticky bottom-0` footer with
+  its own `border-t` and `bg-white` — visually separated from the
+  fields by the divider, and pinned to the bottom of the drawer's
+  scrollable area rather than just trailing off wherever the current
+  stage's content happens to end.
 - **Training module types.** A shared, admin-managed lookup
   (`nk_training_module_types`: `id`, `name`) — same shape as
   `nk_karate_styles` — for tagging a module with a category (Cardio,
