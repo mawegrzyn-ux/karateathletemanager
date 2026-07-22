@@ -24,6 +24,9 @@ export interface User {
   athlete_name: string | null;
   coach_name: string | null;
   referee_name: string | null;
+  athlete_photo_url: string | null;
+  coach_photo_url: string | null;
+  referee_photo_url: string | null;
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
