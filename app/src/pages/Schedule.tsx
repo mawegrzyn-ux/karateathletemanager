@@ -2984,18 +2984,40 @@ function QuickPostDrawer({
   onClose: () => void;
 }) {
   const api = useApi();
+  const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   function showMediaError(message: string) {
     setMediaError(message);
     setTimeout(() => setMediaError(null), 4000);
   }
 
+  // Minimal formatting toolbar: wraps the current textarea selection in
+  // **/* markers (rendered back into <strong>/<em> in the feed) rather
+  // than pulling in a rich-text editor dependency - same approach as the
+  // main post composer's Bold/Italic buttons.
+  function wrapSelection(marker: string) {
+    const el = bodyRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? body.length;
+    const end = el.selectionEnd ?? body.length;
+    const selected = body.slice(start, end);
+    const next = `${body.slice(0, start)}${marker}${selected}${marker}${body.slice(end)}`;
+    setBody(next);
+    const cursor = selected ? end + marker.length * 2 : start + marker.length;
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(cursor, cursor);
+    });
+  }
+
   useEffect(() => {
+    setTitle("");
     setBody(event ? `${typeLabel} · ${dateLabel(event.start_date)} · ${event.title}` : "");
     setPhotoUrl("");
     setUploadingPhoto(false);
@@ -3008,6 +3030,7 @@ function QuickPostDrawer({
     setSubmitting(true);
     try {
       await api.post(`/athletes/${athleteId}/posts`, {
+        title: title.trim() || undefined,
         body: body.trim() || undefined,
         image_url: photoUrl || undefined,
         share_kind: "event",
@@ -3022,8 +3045,33 @@ function QuickPostDrawer({
   return (
     <Drawer open={event !== null} onClose={onClose} title="Add post">
       <form onSubmit={submit} className="flex flex-col gap-4">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Title (optional)"
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+        />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => wrapSelection("**")}
+            aria-label="Bold"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-stone-300 font-bold"
+          >
+            B
+          </button>
+          <button
+            type="button"
+            onClick={() => wrapSelection("*")}
+            aria-label="Italic"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-stone-300 italic"
+          >
+            I
+          </button>
+        </div>
         <Field label="What's on your mind?">
           <textarea
+            ref={bodyRef}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             className="min-h-[120px] rounded-xl border border-stone-300 px-3 py-2"
