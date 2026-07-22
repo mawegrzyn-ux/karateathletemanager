@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, useApi } from "../../hooks/useApi";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -9,6 +9,7 @@ import {
   Field,
   MediaField,
   Toast,
+  Badge,
 } from "../../components/ui";
 import {
   TrainingModuleView,
@@ -22,6 +23,38 @@ const MAX_SETS = 50;
 const MAX_REPS = 1000;
 const MAX_DURATION_SECONDS = 6 * 60 * 60; // 6 hours
 
+interface TrainingModuleType {
+  id: number;
+  name: string;
+}
+
+function TypeSelect({
+  types,
+  value,
+  onChange,
+}: {
+  types: TrainingModuleType[];
+  value: number | null;
+  onChange: (id: number | null) => void;
+}) {
+  return (
+    <Field label="Type">
+      <select
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+      >
+        <option value="">No type</option>
+        {types.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
 interface DraftItem {
   item_type: ItemType;
   name: string;
@@ -34,7 +67,7 @@ interface DraftItem {
   duration_seconds: string;
 }
 
-const EMPTY_FORM = { title: "", explanation: "" };
+const EMPTY_FORM = { title: "", explanation: "", type_id: null as number | null };
 
 const EMPTY_EXERCISE: DraftItem = {
   item_type: "exercise",
@@ -103,6 +136,124 @@ function toApiItem(it: DraftItem) {
   };
 }
 
+// The type-select + type-dependent fields for a single item - shared by
+// ModuleItemsEditor (all items open at once, editing an existing module)
+// and CreateModuleWizard (one item per step, building a new module).
+function ItemFields({
+  item,
+  onChange,
+  onError,
+}: {
+  item: DraftItem;
+  onChange: (patch: Partial<DraftItem>) => void;
+  onError: (message: string) => void;
+}) {
+  return (
+    <>
+      <Field label="Type">
+        <select
+          value={item.item_type}
+          onChange={(e) => onChange({ item_type: e.target.value as ItemType })}
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+        >
+          <option value="exercise">Exercise</option>
+          <option value="rest">Rest</option>
+        </select>
+      </Field>
+
+      {item.item_type === "exercise" ? (
+        <>
+          <Field label="Name">
+            <input
+              required
+              defaultValue={item.name}
+              onBlur={(e) => onChange({ name: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Explanation">
+            <textarea
+              defaultValue={item.explanation}
+              onBlur={(e) => onChange({ explanation: e.target.value })}
+              className="rounded-xl border border-stone-300 px-3 py-2"
+            />
+          </Field>
+          <MediaField
+            label="Video"
+            kind="video"
+            value={item.video_url}
+            onChange={(url) => onChange({ video_url: url })}
+            onError={onError}
+          />
+          <MediaField
+            label="Image"
+            kind="image"
+            value={item.image_url}
+            onChange={(url) => onChange({ image_url: url })}
+            onError={onError}
+          />
+          <Field label="Measured by">
+            <select
+              value={item.mode}
+              onChange={(e) => onChange({ mode: e.target.value as "reps" | "time" })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            >
+              <option value="reps">Sets &amp; reps</option>
+              <option value="time">Time</option>
+            </select>
+          </Field>
+          {item.mode === "reps" ? (
+            <div className="flex gap-2">
+              <Field label="Sets">
+                <input
+                  type="number"
+                  min={1}
+                  max={MAX_SETS}
+                  defaultValue={item.sets}
+                  onBlur={(e) => onChange({ sets: e.target.value })}
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                />
+              </Field>
+              <Field label="Reps">
+                <input
+                  type="number"
+                  min={1}
+                  max={MAX_REPS}
+                  defaultValue={item.reps}
+                  onBlur={(e) => onChange({ reps: e.target.value })}
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+                />
+              </Field>
+            </div>
+          ) : (
+            <Field label="Duration (seconds)">
+              <input
+                type="number"
+                min={1}
+                max={MAX_DURATION_SECONDS}
+                defaultValue={item.duration_seconds}
+                onBlur={(e) => onChange({ duration_seconds: e.target.value })}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+          )}
+        </>
+      ) : (
+        <Field label="Duration (seconds)">
+          <input
+            type="number"
+            min={1}
+            max={MAX_DURATION_SECONDS}
+            defaultValue={item.duration_seconds}
+            onBlur={(e) => onChange({ duration_seconds: e.target.value })}
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+          />
+        </Field>
+      )}
+    </>
+  );
+}
+
 function ModuleItemsEditor({
   items,
   onChange,
@@ -132,17 +283,10 @@ function ModuleItemsEditor({
             key={i}
             className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-3"
           >
-            <div className="flex items-center gap-2">
-              <select
-                value={item.item_type}
-                onChange={(e) =>
-                  updateItem(i, { item_type: e.target.value as ItemType })
-                }
-                className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
-              >
-                <option value="exercise">Exercise</option>
-                <option value="rest">Rest</option>
-              </select>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-stone-500">
+                Step {i + 1}
+              </span>
               <button
                 type="button"
                 onClick={() => removeItem(i)}
@@ -152,104 +296,11 @@ function ModuleItemsEditor({
                 ✕
               </button>
             </div>
-
-            {item.item_type === "exercise" ? (
-              <>
-                <Field label="Name">
-                  <input
-                    required
-                    defaultValue={item.name}
-                    onBlur={(e) => updateItem(i, { name: e.target.value })}
-                    className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                  />
-                </Field>
-                <Field label="Explanation">
-                  <textarea
-                    defaultValue={item.explanation}
-                    onBlur={(e) =>
-                      updateItem(i, { explanation: e.target.value })
-                    }
-                    className="rounded-xl border border-stone-300 px-3 py-2"
-                  />
-                </Field>
-                <MediaField
-                  label="Video"
-                  kind="video"
-                  value={item.video_url}
-                  onChange={(url) => updateItem(i, { video_url: url })}
-                  onError={onError}
-                />
-                <MediaField
-                  label="Image"
-                  kind="image"
-                  value={item.image_url}
-                  onChange={(url) => updateItem(i, { image_url: url })}
-                  onError={onError}
-                />
-                <Field label="Measured by">
-                  <select
-                    value={item.mode}
-                    onChange={(e) =>
-                      updateItem(i, { mode: e.target.value as "reps" | "time" })
-                    }
-                    className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                  >
-                    <option value="reps">Sets &amp; reps</option>
-                    <option value="time">Time</option>
-                  </select>
-                </Field>
-                {item.mode === "reps" ? (
-                  <div className="flex gap-2">
-                    <Field label="Sets">
-                      <input
-                        type="number"
-                        min={1}
-                        max={MAX_SETS}
-                        defaultValue={item.sets}
-                        onBlur={(e) => updateItem(i, { sets: e.target.value })}
-                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                      />
-                    </Field>
-                    <Field label="Reps">
-                      <input
-                        type="number"
-                        min={1}
-                        max={MAX_REPS}
-                        defaultValue={item.reps}
-                        onBlur={(e) => updateItem(i, { reps: e.target.value })}
-                        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                      />
-                    </Field>
-                  </div>
-                ) : (
-                  <Field label="Duration (seconds)">
-                    <input
-                      type="number"
-                      min={1}
-                      max={MAX_DURATION_SECONDS}
-                      defaultValue={item.duration_seconds}
-                      onBlur={(e) =>
-                        updateItem(i, { duration_seconds: e.target.value })
-                      }
-                      className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                    />
-                  </Field>
-                )}
-              </>
-            ) : (
-              <Field label="Duration (seconds)">
-                <input
-                  type="number"
-                  min={1}
-                  max={MAX_DURATION_SECONDS}
-                  defaultValue={item.duration_seconds}
-                  onBlur={(e) =>
-                    updateItem(i, { duration_seconds: e.target.value })
-                  }
-                  className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-                />
-              </Field>
-            )}
+            <ItemFields
+              item={item}
+              onChange={(patch) => updateItem(i, patch)}
+              onError={onError}
+            />
           </div>
         ))}
       </div>
@@ -274,22 +325,218 @@ function ModuleItemsEditor({
   );
 }
 
+// Building a new module is a step-by-step wizard rather than one long
+// scrolling form: step 0 is the module's own title/explanation, then one
+// step per exercise/rest item, added one at a time via "Next step" until
+// the coach taps "Finish" to submit everything gathered so far. Mounted
+// only while the create drawer is open (see TrainingModules below), so
+// each open gets fresh internal state for free.
+function CreateModuleWizard({
+  types,
+  onCreated,
+  onToast,
+}: {
+  types: TrainingModuleType[];
+  onCreated: (m: TrainingModule) => void;
+  onToast: (message: string) => void;
+}) {
+  const api = useApi();
+  const [step, setStep] = useState(0); // 0 = general info, N = items[N - 1]
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [items, setItems] = useState<DraftItem[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [stepError, setStepError] = useState<string | null>(null);
+
+  const currentItem = step > 0 ? items[step - 1] : null;
+
+  function updateCurrentItem(patch: Partial<DraftItem>) {
+    setItems((prev) =>
+      prev.map((it, i) => (i === step - 1 ? { ...it, ...patch } : it))
+    );
+  }
+
+  function currentItemValid() {
+    if (!currentItem) return true;
+    return currentItem.item_type === "rest" || currentItem.name.trim() !== "";
+  }
+
+  function goNextFromGeneralInfo() {
+    if (!form.title.trim()) {
+      setStepError("Title is required");
+      return;
+    }
+    setStepError(null);
+    if (items.length === 0) {
+      setItems([{ ...EMPTY_EXERCISE }]);
+    }
+    setStep(1);
+  }
+
+  function addStep() {
+    if (!currentItemValid()) {
+      setStepError("Name is required");
+      return;
+    }
+    setStepError(null);
+    setItems((prev) => [...prev, { ...EMPTY_EXERCISE }]);
+    setStep((s) => s + 1);
+  }
+
+  function removeCurrentStep() {
+    setItems((prev) => prev.filter((_, i) => i !== step - 1));
+    setStep((s) => Math.max(0, s - 1));
+    setStepError(null);
+  }
+
+  async function finish() {
+    if (!currentItemValid()) {
+      setStepError("Name is required");
+      return;
+    }
+    setStepError(null);
+    setSubmitting(true);
+    try {
+      const { module: created } = await api.post<{ module: TrainingModule }>(
+        "/training-modules",
+        {
+          title: form.title,
+          explanation: form.explanation,
+          type_id: form.type_id,
+          items: items.map(toApiItem),
+        }
+      );
+      onCreated(created);
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const totalItemSteps = Math.max(items.length, step);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <span className="text-xs font-medium text-stone-500">
+        {step === 0
+          ? `Step 1 of ${totalItemSteps + 1} · General info`
+          : `Step ${step + 1} of ${totalItemSteps + 1} · Exercise/rest`}
+      </span>
+
+      {step === 0 ? (
+        <>
+          <Field label="Title">
+            <input
+              required
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Explanation">
+            <textarea
+              value={form.explanation}
+              onChange={(e) => setForm({ ...form, explanation: e.target.value })}
+              className="rounded-xl border border-stone-300 px-3 py-2"
+            />
+          </Field>
+          <TypeSelect
+            types={types}
+            value={form.type_id}
+            onChange={(type_id) => setForm({ ...form, type_id })}
+          />
+        </>
+      ) : (
+        currentItem && (
+          // Keyed on step so switching to a different (or freshly-added,
+          // blank) item remounts the fields instead of reusing the same
+          // DOM inputs - they're uncontrolled (defaultValue + onBlur, so
+          // a mid-step edit doesn't fight the user's cursor), which means
+          // React won't otherwise refresh their displayed value when the
+          // underlying item changes out from under them.
+          <ItemFields
+            key={step}
+            item={currentItem}
+            onChange={updateCurrentItem}
+            onError={onToast}
+          />
+        )
+      )}
+
+      {stepError && <p className="text-sm text-red-700">{stepError}</p>}
+
+      <div className="flex gap-2">
+        {step > 0 && (
+          <button
+            type="button"
+            onClick={() => setStep((s) => s - 1)}
+            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
+          >
+            Back
+          </button>
+        )}
+        {step === 0 ? (
+          <button
+            type="button"
+            onClick={goNextFromGeneralInfo}
+            className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white"
+          >
+            Next
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={addStep}
+            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
+          >
+            + Next step
+          </button>
+        )}
+      </div>
+
+      {step > 0 && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={removeCurrentStep}
+            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-red-700"
+          >
+            Remove this step
+          </button>
+          <button
+            type="button"
+            onClick={finish}
+            disabled={submitting}
+            className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+          >
+            {submitting ? "Saving..." : "Finish"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TrainingModules() {
   const api = useApi();
   const { user } = useAuth();
   const canEdit = !!user?.is_admin || user?.role === "coach";
   const [modules, setModules] = useState<TrainingModule[] | null>(null);
+  const [types, setTypes] = useState<TrainingModuleType[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [drawer, setDrawer] = useState<"closed" | "create" | TrainingModule>(
     "closed"
   );
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [formItems, setFormItems] = useState<DraftItem[]>([]);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     load();
+    api
+      .get<{ types: TrainingModuleType[] }>("/training-module-types")
+      .then((res) => setTypes(res.types))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function showToast(message: string) {
@@ -309,28 +556,12 @@ export default function TrainingModules() {
   }
 
   function openCreate() {
-    setForm(EMPTY_FORM);
-    setFormItems([]);
     setDrawer("create");
   }
 
-  async function createModule(e: FormEvent) {
-    e.preventDefault();
-    if (!form.title.trim()) return;
-    try {
-      const { module: created } = await api.post<{ module: TrainingModule }>(
-        "/training-modules",
-        {
-          title: form.title,
-          explanation: form.explanation,
-          items: formItems.map(toApiItem),
-        }
-      );
-      setModules((prev) => (prev ? [...prev, created] : [created]));
-      setDrawer("closed");
-    } catch (err) {
-      showError(err);
-    }
+  function handleCreated(created: TrainingModule) {
+    setModules((prev) => (prev ? [...prev, created] : [created]));
+    setDrawer("closed");
   }
 
   async function updateModule(id: number, patch: Record<string, unknown>) {
@@ -396,7 +627,10 @@ export default function TrainingModules() {
             onClick={() => setDrawer(m)}
             className="flex min-h-[44px] flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 text-left shadow-card"
           >
-            <span className="font-medium">{m.title}</span>
+            <span className="flex items-center gap-2">
+              <span className="font-medium">{m.title}</span>
+              {m.type_name && <Badge>{m.type_name}</Badge>}
+            </span>
             {m.items.length > 0 && (
               <span className="text-xs text-stone-500">
                 {m.items.map(itemSummary).join(", ")}
@@ -417,34 +651,13 @@ export default function TrainingModules() {
           onClose={() => setDrawer("closed")}
           title="New training module"
         >
-          <form onSubmit={createModule} className="flex flex-col gap-4">
-            <Field label="Title">
-              <input
-                required
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
-            <Field label="Explanation">
-              <textarea
-                value={form.explanation}
-                onChange={(e) => setForm({ ...form, explanation: e.target.value })}
-                className="rounded-xl border border-stone-300 px-3 py-2"
-              />
-            </Field>
-            <ModuleItemsEditor
-              items={formItems}
-              onChange={setFormItems}
-              onError={showToast}
+          {drawer === "create" && (
+            <CreateModuleWizard
+              types={types}
+              onCreated={handleCreated}
+              onToast={showToast}
             />
-            <button
-              type="submit"
-              className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
-            >
-              Create
-            </button>
-          </form>
+          )}
         </Drawer>
       )}
 
@@ -466,6 +679,11 @@ export default function TrainingModules() {
                 className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
+            <TypeSelect
+              types={types}
+              value={editing.type_id}
+              onChange={(type_id) => updateModule(editing.id, { type_id })}
+            />
             <Field label="Explanation">
               <textarea
                 defaultValue={editing.explanation ?? ""}

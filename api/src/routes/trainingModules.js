@@ -11,7 +11,8 @@ const MAX_REPS = 1000;
 const MAX_DURATION_SECONDS = 6 * 60 * 60; // 6 hours
 
 const MODULE_QUERY = `
-  SELECT tm.id, tm.title, tm.explanation, tm.created_at, tm.updated_at,
+  SELECT tm.id, tm.title, tm.explanation, tm.type_id, tmt.name AS type_name,
+    tm.created_at, tm.updated_at,
     COALESCE(
       json_agg(json_build_object(
         'id', i.id, 'position', i.position, 'item_type', i.item_type,
@@ -22,8 +23,9 @@ const MODULE_QUERY = `
       '[]'
     ) AS items
   FROM nk_training_modules tm
+  LEFT JOIN nk_training_module_types tmt ON tmt.id = tm.type_id
   LEFT JOIN nk_training_module_items i ON i.module_id = tm.id
-  GROUP BY tm.id
+  GROUP BY tm.id, tmt.name
 `;
 
 router.use(authorize());
@@ -106,7 +108,7 @@ router.post(
   "/",
   authorize("coach"),
   asyncHandler(async (req, res) => {
-    const { title, explanation, items } = req.body ?? {};
+    const { title, explanation, type_id, items } = req.body ?? {};
 
     if (typeof title !== "string" || title.trim().length === 0) {
       return res.status(400).json({ error: { message: "Title is required" } });
@@ -116,10 +118,10 @@ router.post(
     try {
       await client.query("BEGIN");
       const { rows } = await client.query(
-        `INSERT INTO nk_training_modules (title, explanation)
-         VALUES ($1, $2)
+        `INSERT INTO nk_training_modules (title, explanation, type_id)
+         VALUES ($1, $2, $3)
          RETURNING id`,
-        [title, explanation ?? null]
+        [title, explanation ?? null, type_id ?? null]
       );
       const moduleId = rows[0].id;
       await insertItems(client, moduleId, items);
@@ -146,9 +148,9 @@ router.patch(
   authorize("coach"),
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
-    const { title, explanation, items } = body;
+    const { title, explanation, type_id, items } = body;
 
-    const fields = { title, explanation };
+    const fields = { title, explanation, type_id };
     const setClauses = [];
     const values = [];
     for (const [key, value] of Object.entries(fields)) {

@@ -61,6 +61,11 @@ export default function More() {
             <Tile to="/admin/coach-roles" icon="🏷️" label="Coach roles" />
             <Tile to="/admin/katas" icon="📜" label="Katas" />
             <Tile to="/admin/karate-styles" icon="🥋" label="Karate styles" />
+            <Tile
+              to="/admin/training-module-types"
+              icon="💪"
+              label="Training types"
+            />
             <Tile to="/admin/venues" icon="📍" label="Venues" />
             <Tile to="/admin/app-icon" icon="🖼️" label="App icon" />
             <Tile to="/osu" icon="🤖" label="Osu" />
