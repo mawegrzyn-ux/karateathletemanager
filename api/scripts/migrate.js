@@ -1050,6 +1050,24 @@ const migrations = [
   // one specific schedule entry instead of always showing its event type's
   // shared icon (nk_event_types.icon).
   `ALTER TABLE nk_events ADD COLUMN IF NOT EXISTS icon VARCHAR(8)`,
+
+  // Icon inheritance chain for training-linked schedule entries: a
+  // training module type gets a default icon, a module can override it
+  // with its own icon, and a schedule event can override both with its
+  // own nk_events.icon (already added above) - Schedule.tsx resolves
+  // event icon -> module icon -> module type icon -> event type icon.
+  `ALTER TABLE nk_training_module_types ADD COLUMN IF NOT EXISTS icon VARCHAR(8)`,
+  // Best-effort default icons for the standard seeded types, only
+  // backfilled where an admin hasn't already set one of their own.
+  `UPDATE nk_training_module_types SET icon = '🏃' WHERE name = 'Cardio' AND icon IS NULL`,
+  `UPDATE nk_training_module_types SET icon = '🏋️' WHERE name = 'Strength' AND icon IS NULL`,
+  `UPDATE nk_training_module_types SET icon = '🦘' WHERE name = 'Plyometrics' AND icon IS NULL`,
+  `UPDATE nk_training_module_types SET icon = '⚡' WHERE name = 'Explosive' AND icon IS NULL`,
+  `UPDATE nk_training_module_types SET icon = '🤸' WHERE name = 'Flexibility' AND icon IS NULL`,
+  `UPDATE nk_training_module_types SET icon = '🧘' WHERE name = 'Balance' AND icon IS NULL`,
+  `UPDATE nk_training_module_types SET icon = '🥋' WHERE name = 'Technique' AND icon IS NULL`,
+  `UPDATE nk_training_module_types SET icon = '⏱️' WHERE name = 'Endurance' AND icon IS NULL`,
+  `ALTER TABLE nk_training_modules ADD COLUMN IF NOT EXISTS icon VARCHAR(8)`,
 ];
 
 async function migrate() {

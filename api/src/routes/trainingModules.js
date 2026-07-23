@@ -13,6 +13,7 @@ const MAX_DISTANCE_METERS = 100000; // 100km
 
 const MODULE_QUERY = `
   SELECT tm.id, tm.title, tm.explanation, tm.type_id, tmt.name AS type_name,
+    tm.icon, tmt.icon AS type_icon,
     tm.created_at, tm.updated_at,
     COALESCE(
       json_agg(json_build_object(
@@ -27,8 +28,12 @@ const MODULE_QUERY = `
   FROM nk_training_modules tm
   LEFT JOIN nk_training_module_types tmt ON tmt.id = tm.type_id
   LEFT JOIN nk_training_module_items i ON i.module_id = tm.id
-  GROUP BY tm.id, tmt.name
+  GROUP BY tm.id, tmt.name, tmt.icon
 `;
+
+function validIcon(icon) {
+  return icon == null || (typeof icon === "string" && icon.length <= 8);
+}
 
 router.use(authorize());
 
@@ -121,20 +126,25 @@ router.post(
   "/",
   authorize("coach"),
   asyncHandler(async (req, res) => {
-    const { title, explanation, type_id, items } = req.body ?? {};
+    const { title, explanation, type_id, icon, items } = req.body ?? {};
 
     if (typeof title !== "string" || title.trim().length === 0) {
       return res.status(400).json({ error: { message: "Title is required" } });
+    }
+    if (!validIcon(icon)) {
+      return res
+        .status(400)
+        .json({ error: { message: "icon must be a string of 8 characters or fewer" } });
     }
 
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
       const { rows } = await client.query(
-        `INSERT INTO nk_training_modules (title, explanation, type_id)
-         VALUES ($1, $2, $3)
+        `INSERT INTO nk_training_modules (title, explanation, type_id, icon)
+         VALUES ($1, $2, $3, $4)
          RETURNING id`,
-        [title, explanation ?? null, type_id ?? null]
+        [title, explanation ?? null, type_id ?? null, icon || null]
       );
       const moduleId = rows[0].id;
       await insertItems(client, moduleId, items);
@@ -161,14 +171,20 @@ router.patch(
   authorize("coach"),
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
-    const { title, explanation, type_id, items } = body;
+    const { title, explanation, type_id, icon, items } = body;
 
-    const fields = { title, explanation, type_id };
+    if ("icon" in body && !validIcon(icon)) {
+      return res
+        .status(400)
+        .json({ error: { message: "icon must be a string of 8 characters or fewer" } });
+    }
+
+    const fields = { title, explanation, type_id, icon };
     const setClauses = [];
     const values = [];
     for (const [key, value] of Object.entries(fields)) {
       if (key in body) {
-        values.push(value);
+        values.push(key === "icon" && value === "" ? null : value);
         setClauses.push(`${key} = $${values.length}`);
       }
     }

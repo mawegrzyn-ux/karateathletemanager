@@ -5,9 +5,10 @@ import { Spinner, Drawer, AddButton, DeleteButton, Field } from "../../component
 interface TrainingModuleType {
   id: number;
   name: string;
+  icon: string | null;
 }
 
-const EMPTY_FORM = { name: "" };
+const EMPTY_FORM = { name: "", icon: "" };
 
 export default function TrainingModuleTypes() {
   const api = useApi();
@@ -97,8 +98,9 @@ export default function TrainingModuleTypes() {
           <button
             key={t.id}
             onClick={() => setDrawer(t)}
-            className="flex min-h-[44px] items-center rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
+            className="flex min-h-[44px] items-center gap-2 rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
           >
+            {t.icon && <span aria-hidden>{t.icon}</span>}
             {t.name}
           </button>
         ))}
@@ -118,6 +120,13 @@ export default function TrainingModuleTypes() {
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <Field label="Icon (optional)">
+            <input
+              value={form.icon}
+              onChange={(e) => setForm({ ...form, icon: e.target.value })}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
@@ -143,6 +152,18 @@ export default function TrainingModuleTypes() {
                 onBlur={(e) => {
                   if (e.target.value !== editing.name) {
                     updateType(editing.id, { name: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Icon (optional)">
+              <input
+                key={editing.icon ?? ""}
+                defaultValue={editing.icon ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (editing.icon ?? "")) {
+                    updateType(editing.id, { icon: e.target.value });
                   }
                 }}
                 className="min-h-[44px] rounded-xl border border-stone-300 px-3"
