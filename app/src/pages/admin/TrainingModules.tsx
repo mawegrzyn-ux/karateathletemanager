@@ -816,14 +816,12 @@ function EditModuleWizard({
   module,
   types,
   onSave,
-  onDelete,
   onClose,
   onError,
 }: {
   module: TrainingModule;
   types: TrainingModuleType[];
   onSave: (patch: Record<string, unknown>) => void;
-  onDelete: () => void;
   onClose: () => void;
   onError: (message: string) => void;
 }) {
@@ -881,19 +879,6 @@ function EditModuleWizard({
     saveItems(next);
   }
 
-  function removeActivity() {
-    if (!currentItem) return;
-    const next = items.filter((_, i) => i !== itemIndex);
-    setStageIndex(0);
-    if (next.length === 0) {
-      setOnGeneralInfo(true);
-      setItemIndex(0);
-    } else {
-      setItemIndex((i) => Math.min(i, next.length - 1));
-    }
-    saveItems(next);
-  }
-
   const canGoNext =
     onGeneralInfo || stageIndex < stages.length - 1 || itemIndex < items.length - 1;
 
@@ -908,111 +893,101 @@ function EditModuleWizard({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {!onGeneralInfo && currentItem && (
-        <h2 className="text-lg font-bold tracking-tight">
-          {currentItem.item_type === "rest"
-            ? "Rest"
-            : currentItem.name.trim() || "New exercise"}
-        </h2>
-      )}
-      <span className="text-xs font-medium text-stone-500">
-        {onGeneralInfo
-          ? "General info"
-          : `Activity ${itemIndex + 1} of ${items.length} · ${stageLabel(stage)}`}
-      </span>
-
-      {onGeneralInfo ? (
-        <>
-          <Field label="Title">
-            <input
-              required
-              defaultValue={module.title}
-              onBlur={(e) => {
-                if (e.target.value !== module.title) {
-                  onSave({ title: e.target.value });
-                }
-              }}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          <Field label="Explanation">
-            <textarea
-              defaultValue={module.explanation ?? ""}
-              onBlur={(e) => {
-                if (e.target.value !== (module.explanation ?? "")) {
-                  onSave({ explanation: e.target.value });
-                }
-              }}
-              className="rounded-xl border border-stone-300 px-3 py-2"
-            />
-          </Field>
-          <TypeSelect
-            types={types}
-            value={module.type_id}
-            onChange={(type_id) => onSave({ type_id })}
-          />
-          <Field label="Icon (optional)">
-            <input
-              key={module.icon ?? ""}
-              defaultValue={module.icon ?? ""}
-              onBlur={(e) => {
-                if (e.target.value !== (module.icon ?? "")) {
-                  onSave({ icon: e.target.value });
-                }
-              }}
-              placeholder={
-                types.find((t) => t.id === module.type_id)?.icon ?? undefined
-              }
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          <ActivitiesList
-            items={items}
-            onReorder={saveItems}
-            onSelect={selectActivity}
-            onRemove={removeActivityAt}
-          />
-        </>
-      ) : (
-        currentItem && (
-          <ItemStageContent
-            key={`${itemIndex}-${stage}`}
-            item={currentItem}
-            stage={stage}
-            onChange={updateCurrentItem}
-            onError={onError}
-          />
-        )
-      )}
-
-      <div className="sticky bottom-0 -mx-4 mt-2 flex flex-col gap-2 border-t border-stone-200 bg-white px-4 pb-4 pt-3">
-        <div className="flex gap-2">
-          <IconBtn icon="←" label="Back" onClick={goBack} disabled={onGeneralInfo} />
-          <IconBtn icon="→" label="Next" onClick={goNext} disabled={!canGoNext} />
-          <IconBtn icon="✓" label="Done" onClick={onClose} tone="primary" />
-        </div>
-        {!onGeneralInfo && (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={insertActivity}
-              className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
-            >
-              + Add activity
-            </button>
-            <button
-              type="button"
-              onClick={removeActivity}
-              className="min-h-[44px] flex-1 rounded-xl border border-red-200 font-medium text-red-700"
-            >
-              🗑 Remove activity
-            </button>
-          </div>
+    <div className="flex h-full flex-col">
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
+        {!onGeneralInfo && currentItem && (
+          <h2 className="text-lg font-bold tracking-tight">
+            {currentItem.item_type === "rest"
+              ? "Rest"
+              : currentItem.name.trim() || "New exercise"}
+          </h2>
         )}
+        <span className="text-xs font-medium text-stone-500">
+          {onGeneralInfo
+            ? "General info"
+            : `Activity ${itemIndex + 1} of ${items.length} · ${stageLabel(stage)}`}
+        </span>
 
-        {onGeneralInfo && (
-          <DeleteButton onClick={onDelete} itemLabel={module.title} />
+        {onGeneralInfo ? (
+          <>
+            <Field label="Title">
+              <input
+                required
+                defaultValue={module.title}
+                onBlur={(e) => {
+                  if (e.target.value !== module.title) {
+                    onSave({ title: e.target.value });
+                  }
+                }}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <Field label="Explanation">
+              <textarea
+                defaultValue={module.explanation ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (module.explanation ?? "")) {
+                    onSave({ explanation: e.target.value });
+                  }
+                }}
+                className="rounded-xl border border-stone-300 px-3 py-2"
+              />
+            </Field>
+            <TypeSelect
+              types={types}
+              value={module.type_id}
+              onChange={(type_id) => onSave({ type_id })}
+            />
+            <Field label="Icon (optional)">
+              <input
+                key={module.icon ?? ""}
+                defaultValue={module.icon ?? ""}
+                onBlur={(e) => {
+                  if (e.target.value !== (module.icon ?? "")) {
+                    onSave({ icon: e.target.value });
+                  }
+                }}
+                placeholder={
+                  types.find((t) => t.id === module.type_id)?.icon ?? undefined
+                }
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+            </Field>
+            <ActivitiesList
+              items={items}
+              onReorder={saveItems}
+              onSelect={selectActivity}
+              onRemove={removeActivityAt}
+            />
+          </>
+        ) : (
+          currentItem && (
+            <ItemStageContent
+              key={`${itemIndex}-${stage}`}
+              item={currentItem}
+              stage={stage}
+              onChange={updateCurrentItem}
+              onError={onError}
+            />
+          )
+        )}
+      </div>
+
+      <div className="-mx-4 mt-2 flex flex-col gap-2 border-t border-stone-200 bg-white px-4 pt-3">
+        {onGeneralInfo ? (
+          <button
+            type="button"
+            onClick={insertActivity}
+            className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700"
+          >
+            + Add activity
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            <IconBtn icon="←" label="Back" onClick={goBack} />
+            <IconBtn icon="→" label="Next" onClick={goNext} disabled={!canGoNext} />
+            <IconBtn icon="✓" label="Done" onClick={onClose} tone="primary" />
+          </div>
         )}
       </div>
     </div>
@@ -1124,12 +1099,25 @@ export default function TrainingModules() {
 
       <div className="flex flex-col gap-2">
         {filtered.map((m) => (
-          <button
+          <div
             key={m.id}
-            onClick={() => setDrawer(m)}
-            className="flex min-h-[44px] flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 text-left shadow-card"
+            className="relative flex min-h-[44px] flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 shadow-card"
           >
-            <span className="flex items-center gap-2">
+            {canEdit && (
+              <div className="absolute right-2 top-2 z-10">
+                <DeleteButton
+                  onClick={() => deleteModule(m.id)}
+                  itemLabel={m.title}
+                  iconOnly
+                />
+              </div>
+            )}
+            <button
+              onClick={() => setDrawer(m)}
+              aria-label={`Open ${m.title}`}
+              className="absolute inset-0 rounded-2xl text-left"
+            />
+            <span className="flex items-center gap-2 pr-8">
               {moduleIcon(m) && <span aria-hidden>{moduleIcon(m)}</span>}
               <span className="font-medium">{m.title}</span>
               {m.type_name && <Badge>{m.type_name}</Badge>}
@@ -1139,7 +1127,7 @@ export default function TrainingModules() {
                 {m.items.map(itemSummary).join(", ")}
               </span>
             )}
-          </button>
+          </div>
         ))}
         {filtered.length === 0 && (
           <p className="px-1 py-2 text-sm text-stone-500">
@@ -1175,7 +1163,6 @@ export default function TrainingModules() {
             module={editing}
             types={types}
             onSave={(patch) => updateModule(editing.id, patch)}
-            onDelete={() => deleteModule(editing.id)}
             onClose={() => setDrawer("closed")}
             onError={showToast}
           />
