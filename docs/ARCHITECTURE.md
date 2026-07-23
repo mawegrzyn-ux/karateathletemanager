@@ -602,9 +602,34 @@ coach-run attendance) — this is personal athlete itinerary planning.
   patches for title/explanation/type), so there's no separate
   create-only "Finish" submit step — its ✓ button here just closes the
   drawer, since by the time you'd tap it everything is already saved.
-  ← Back/→ Next/+ Add activity/🗑 Remove activity behave identically to
-  the create wizard. The general-info screen no longer counts as a
-  step, matching creation's convention. Each exercise/rest item is now
+  Unlike the create wizard, the edit flow's footer content differs by
+  stage rather than always showing the same Back/Next/Finish row: the
+  General Info screen shows only a **+ Add activity** button (adding is
+  the one activity-list action that isn't already available inline via
+  `ActivitiesList`'s own 🗑/⠿ per-row controls, so it needed a footer
+  button; Back/Next/Done and Remove activity would be redundant there
+  since there's nothing to navigate to or remove yet), while an
+  activity's own stage screens show the ← Back/→ Next/✓ Done row and
+  drop **+ Add activity**/**🗑 Remove activity** entirely (adding jumps
+  you into the new activity anyway, and removing one you're not
+  currently looking at doesn't make sense from inside a different
+  activity's screen — both actions live only on General Info now,
+  reachable via ← Back). The module's own delete action also moved out
+  of this drawer entirely, onto an icon-only `DeleteButton` on the
+  module's own list row (see below) — full-module delete didn't need
+  to live inside the same footer as per-activity navigation, and
+  removing it freed the General Info screen to end with just the one
+  clear "+ Add activity" action. Both the general-info and activity
+  footers are laid out as a true flex child (`h-full flex-col` wrapper,
+  `flex-1 overflow-y-auto` content pane, un-flexed footer) rather than
+  `sticky bottom-0` — sticky only pins while scrolling past it, so on a
+  short screen (few fields, no activities yet) the footer used to sit
+  wherever the content ended, with a dead gap below it down to the
+  drawer's true bottom edge; the flex layout keeps it flush against the
+  bottom of the drawer regardless of content length, with a `border-t`
+  divider separating it from the scrollable content above. The
+  general-info screen no longer counts as a step, matching creation's
+  convention. Each exercise/rest item is now
   called an **activity** in every user-facing string — the breadcrumb
   reads "Activity N of M" (was "Step N of M"), and the footer buttons
   read "Add activity"/"Remove activity" (were "Add step"/"Remove
@@ -652,17 +677,39 @@ coach-run attendance) — this is personal athlete itinerary planning.
 - **Fixed: the Back/Next/Finish/Add-activity/Remove-activity controls
   ran straight into the exercise fields above them with no visual
   break,** reading as part of the same form rather than navigation.
-  Both wizards wrap that whole button block in a `sticky bottom-0`
-  footer with its own `border-t` and `bg-white` — visually separated
-  from the fields by the divider, and pinned to the bottom of the
-  drawer's scrollable area rather than just trailing off wherever the
-  current stage's content happens to end. **The whole-module
-  `DeleteButton` only renders on the General Info screen** of the edit
-  wizard, not on every individual activity's screen the way it
-  originally did — showing it next to "Remove activity" (a similarly-
-  styled red/trash control that deletes just the current activity, not
-  the whole module) on every activity screen read as two competing
-  delete actions and invited tapping the wrong one.
+  Both wizards wrap that whole button block in a footer with its own
+  `border-t` and `bg-white` — visually separated from the fields by the
+  divider (the create wizard still uses `sticky bottom-0` for this; the
+  edit wizard was later upgraded to the `h-full flex-col` layout
+  described above for true bottom-anchoring regardless of content
+  length, see "Fixed: the edit wizard's footer..." below). The
+  whole-module delete action lives on the module's own list row (an
+  icon-only `DeleteButton` in the tile's top-right corner, `absolute
+  right-2 top-2 z-10` — the same overlay pattern `PostCard` uses for a
+  social post's edit/delete pair) rather than inside the edit drawer at
+  all, so it's never competing for attention with the activity-level
+  Back/Next/Remove-activity controls the way it originally did when it
+  lived in the same footer.
+- **Fixed: the edit wizard's footer used to sit wherever the content
+  ended rather than anchored to the drawer's bottom edge** — `sticky
+  bottom-0` only pins an element once you've scrolled past its natural
+  position, so on a short General Info screen (a module with no
+  activities yet, say) the footer just trailed off after the last
+  field, leaving a dead gap of empty space below it down to the
+  drawer's true bottom. `EditModuleWizard`'s root now uses `flex h-full
+  flex-col` with the scrollable fields in a `flex-1 overflow-y-auto`
+  pane and the footer as an un-flexed final child, so the footer is
+  always flush against the bottom of the drawer no matter how little
+  content is above it. The footer's own content also now differs by
+  stage instead of always showing the same row: General Info shows
+  only **+ Add activity** (adding an activity is the one action
+  `ActivitiesList`'s own inline 🗑/⠿ controls don't already cover), and
+  an activity's own stage screens show only ← Back/→ Next/✓ Done — **+
+  Add activity**/**🗑 Remove activity** were dropped from the activity
+  screens entirely, since both actions are reachable from General Info
+  (Add jumps straight into the new activity; removing one already has
+  its own 🗑 on that activity's row in `ActivitiesList`) and duplicating
+  them on every activity screen was redundant.
 - **Training module types.** A shared, admin-managed lookup
   (`nk_training_module_types`: `id`, `name`) — same shape as
   `nk_karate_styles` — for tagging a module with a category (Cardio,
