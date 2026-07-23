@@ -22,7 +22,16 @@ export interface TrainingModule {
   explanation: string | null;
   type_id: number | null;
   type_name: string | null;
+  icon: string | null;
+  type_icon: string | null;
   items: TrainingModuleItem[];
+}
+
+// A module's effective icon: its own override if set, else its type's
+// default icon (null if neither is set - callers fall back further, e.g.
+// to the schedule event type's icon).
+export function moduleIcon(module: Pick<TrainingModule, "icon" | "type_icon">) {
+  return module.icon ?? module.type_icon ?? null;
 }
 
 export function itemSummary(it: TrainingModuleItem) {

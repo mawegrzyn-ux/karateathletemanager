@@ -682,6 +682,29 @@ coach-run attendance) — this is personal athlete itinerary planning.
   (the shared read-only view) renders it as a small badge above the
   explanation, and the admin list row shows it as a `Badge` next to the
   title.
+- **Training icon inheritance chain**: a schedule entry's leading icon
+  can now come from three levels instead of only its event type -
+  `nk_training_module_types.icon`, `nk_training_modules.icon`, and
+  `nk_events.icon` (added earlier for the standalone per-event override)
+  - resolved in priority order: event icon > module icon > module type
+  icon > event type icon (`inheritedIcon()`/`eventTypeInfo()` in
+  `Schedule.tsx`). Both new `icon` columns are nullable `VARCHAR(8)`,
+  validated the same way as the event-level one; a type's icon is
+  seeded with a best-effort default per standard type (Cardio 🏃,
+  Strength 🏋️, Plyometrics 🦘, Explosive ⚡, Flexibility 🤸, Balance 🧘,
+  Technique 🥋, Endurance ⏱️ - only backfilled where `icon IS NULL`, so
+  it never clobbers an admin's own edit on a rerun) and freely editable
+  afterward from the same `admin/TrainingModuleTypes.tsx` page. A module
+  without its own icon inherits its type's icon (`moduleIcon()` in
+  `TrainingModuleView.tsx`); `trainingModules.js`'s `MODULE_QUERY` joins
+  in `tmt.icon AS type_icon` alongside the module's own `icon` so the
+  frontend can resolve the fallback without a second lookup. Both admin
+  pages (`TrainingModuleTypes.tsx`, `TrainingModules.tsx`) get a plain
+  "Icon (optional)" text input following the same bare-emoji convention
+  as `admin/EventTypes.tsx`; the module's icon input placeholder-hints
+  its selected type's icon, and the event drawer's icon input hints the
+  full inherited icon (through the module too, not just the type) via
+  `inheritedIcon()`, so a user always sees what they'd be overriding.
 - **Media uploads**: `video_url`/`image_url` on an exercise item accept
   either a pasted link or an uploaded file, via `MediaField` — a shared
   component in `components/ui.tsx` (also used for athlete/coach photos,

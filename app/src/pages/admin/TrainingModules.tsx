@@ -19,6 +19,7 @@ import {
 import {
   TrainingModuleView,
   itemSummary,
+  moduleIcon,
   type TrainingModule,
   type TrainingModuleItem,
   type TrainingModuleItemType as ItemType,
@@ -32,6 +33,7 @@ const MAX_DISTANCE_METERS = 100000; // 100km
 interface TrainingModuleType {
   id: number;
   name: string;
+  icon: string | null;
 }
 
 function TypeSelect({
@@ -53,6 +55,7 @@ function TypeSelect({
         <option value="">No type</option>
         {types.map((t) => (
           <option key={t.id} value={t.id}>
+            {t.icon ? `${t.icon} ` : ""}
             {t.name}
           </option>
         ))}
@@ -74,7 +77,12 @@ interface DraftItem {
   distance_meters: string;
 }
 
-const EMPTY_FORM = { title: "", explanation: "", type_id: null as number | null };
+const EMPTY_FORM = {
+  title: "",
+  explanation: "",
+  type_id: null as number | null,
+  icon: "",
+};
 
 const EMPTY_EXERCISE: DraftItem = {
   item_type: "exercise",
@@ -669,6 +677,7 @@ function CreateModuleWizard({
           title: form.title,
           explanation: form.explanation,
           type_id: form.type_id,
+          icon: form.icon,
           items: items.map(toApiItem),
         }
       );
@@ -731,6 +740,14 @@ function CreateModuleWizard({
             value={form.type_id}
             onChange={(type_id) => setForm({ ...form, type_id })}
           />
+          <Field label="Icon (optional)">
+            <input
+              value={form.icon}
+              onChange={(e) => setForm({ ...form, icon: e.target.value })}
+              placeholder={types.find((t) => t.id === form.type_id)?.icon ?? undefined}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
           <ActivitiesList
             items={items}
             onReorder={setItems}
@@ -935,6 +952,21 @@ function EditModuleWizard({
             value={module.type_id}
             onChange={(type_id) => onSave({ type_id })}
           />
+          <Field label="Icon (optional)">
+            <input
+              key={module.icon ?? ""}
+              defaultValue={module.icon ?? ""}
+              onBlur={(e) => {
+                if (e.target.value !== (module.icon ?? "")) {
+                  onSave({ icon: e.target.value });
+                }
+              }}
+              placeholder={
+                types.find((t) => t.id === module.type_id)?.icon ?? undefined
+              }
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
           <ActivitiesList
             items={items}
             onReorder={saveItems}
@@ -1098,6 +1130,7 @@ export default function TrainingModules() {
             className="flex min-h-[44px] flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 text-left shadow-card"
           >
             <span className="flex items-center gap-2">
+              {moduleIcon(m) && <span aria-hidden>{moduleIcon(m)}</span>}
               <span className="font-medium">{m.title}</span>
               {m.type_name && <Badge>{m.type_name}</Badge>}
             </span>

@@ -21,7 +21,11 @@ import {
   MediaField,
   Toast,
 } from "../components/ui";
-import { TrainingModuleView, type TrainingModule } from "../components/TrainingModuleView";
+import {
+  TrainingModuleView,
+  moduleIcon,
+  type TrainingModule,
+} from "../components/TrainingModuleView";
 import { EventCompetitionResults } from "../components/CompetitionResults";
 import { todayStr, addDaysStr, dateLabel, groupByDate } from "../utils/dates";
 import { feedbackTick, feedbackConfirm } from "../utils/feedback";
@@ -172,12 +176,35 @@ function typeInfo(eventTypes: EventTypeRow[], clubId: number | null, key: string
   };
 }
 
-// Same as typeInfo, but honors a per-event custom icon override (event.icon)
-// when the user has set one for this specific schedule entry, instead of
-// always showing the event type's shared icon.
-function eventTypeInfo(eventTypes: EventTypeRow[], event: Event) {
+// The icon a schedule entry would show if it had no icon override of its
+// own: a training event linked to a training module inherits that
+// module's icon (which itself falls back to its training module type's
+// icon, see moduleIcon()), otherwise it's the shared event type icon.
+function inheritedIcon(
+  eventTypes: EventTypeRow[],
+  modules: TrainingModule[],
+  clubId: number | null,
+  eventType: string,
+  trainingModuleId: number | null
+) {
+  if (trainingModuleId) {
+    const inherited = moduleIcon(
+      modules.find((m) => m.id === trainingModuleId) ?? { icon: null, type_icon: null }
+    );
+    if (inherited) return inherited;
+  }
+  return typeInfo(eventTypes, clubId, eventType).icon;
+}
+
+// Same as typeInfo, but resolves the icon through the full inheritance
+// chain: a per-event custom icon override (event.icon) always wins,
+// otherwise falls back to inheritedIcon() above.
+function eventTypeInfo(eventTypes: EventTypeRow[], event: Event, modules: TrainingModule[]) {
   const info = typeInfo(eventTypes, event.club_id, event.event_type);
-  return event.icon ? { ...info, icon: event.icon } : info;
+  const icon = event.icon
+    ? event.icon
+    : inheritedIcon(eventTypes, modules, event.club_id, event.event_type, event.training_module_id);
+  return { ...info, icon };
 }
 
 const EMPTY_FORM = {
@@ -1016,7 +1043,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                 </h2>
                 {occurrences.map((occ) => {
                   const e = occ.event;
-                  const info = eventTypeInfo(eventTypes, e);
+                  const info = eventTypeInfo(eventTypes, e, modules);
                   const showTrophy =
                     e.event_type === "competition" && e.my_result_place;
                   // filter: drop-shadow (not box-shadow) since these
@@ -1209,6 +1236,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           setFocusedDate={setFocusedDate}
           events={filteredEvents}
           eventTypes={eventTypes}
+          modules={modules}
           onGoToDay={(date) => {
             setFocusedDate(date);
             setViewMode("day");
@@ -1222,6 +1250,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           setFocusedDate={setFocusedDate}
           events={filteredEvents}
           eventTypes={eventTypes}
+          modules={modules}
           onOpenEvent={setDrawer}
         />
       )}
@@ -1232,6 +1261,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           setFocusedDate={setFocusedDate}
           events={filteredEvents}
           eventTypes={eventTypes}
+          modules={modules}
           onOpenEvent={setDrawer}
           onReschedule={(event, start_time, end_time) =>
             updateEventTime(event, start_time, end_time)
@@ -1308,7 +1338,13 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             <input
               value={form.icon}
               onChange={(e) => setForm({ ...form, icon: e.target.value })}
-              placeholder={typeInfo(eventTypes, form.club_id, form.event_type).icon}
+              placeholder={inheritedIcon(
+                eventTypes,
+                modules,
+                form.club_id,
+                form.event_type,
+                form.training_module_id
+              )}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
@@ -1814,7 +1850,13 @@ function EventDetail({
                   updateEvent({ icon: e.target.value });
                 }
               }}
-              placeholder={typeInfo(eventTypes, event.club_id, event.event_type).icon}
+              placeholder={inheritedIcon(
+                eventTypes,
+                modules,
+                event.club_id,
+                event.event_type,
+                event.training_module_id
+              )}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
@@ -1944,8 +1986,8 @@ function EventDetail({
         <>
           <div className="flex items-center gap-2">
             <Badge>
-              {eventTypeInfo(eventTypes, event).icon}{" "}
-              {eventTypeInfo(eventTypes, event).label}
+              {eventTypeInfo(eventTypes, event, modules).icon}{" "}
+              {eventTypeInfo(eventTypes, event, modules).label}
             </Badge>
             <span className="text-sm text-stone-500">
               {toDateInput(event.start_date)}
@@ -2234,12 +2276,14 @@ function MonthView({
   setFocusedDate,
   events,
   eventTypes,
+  modules,
   onGoToDay,
 }: {
   focusedDate: string;
   setFocusedDate: (date: string) => void;
   events: Event[];
   eventTypes: EventTypeRow[];
+  modules: TrainingModule[];
   onGoToDay: (date: string) => void;
 }) {
   const monthStart = startOfMonth(focusedDate);
@@ -2286,7 +2330,7 @@ function MonthView({
               <div className="flex flex-wrap justify-center gap-0.5 leading-none">
                 {dayEvents.slice(0, 3).map((e) => (
                   <span key={e.id} title={e.title}>
-                    {eventTypeInfo(eventTypes, e).icon}
+                    {eventTypeInfo(eventTypes, e, modules).icon}
                   </span>
                 ))}
                 {dayEvents.length > 3 && (
@@ -2308,12 +2352,14 @@ function WeekView({
   setFocusedDate,
   events,
   eventTypes,
+  modules,
   onOpenEvent,
 }: {
   focusedDate: string;
   setFocusedDate: (date: string) => void;
   events: Event[];
   eventTypes: EventTypeRow[];
+  modules: TrainingModule[];
   onOpenEvent: (event: Event) => void;
 }) {
   const weekStart = startOfWeek(focusedDate);
@@ -2391,7 +2437,7 @@ function WeekView({
                         onClick={() => onOpenEvent(e)}
                         className="text-xs leading-none"
                       >
-                        {eventTypeInfo(eventTypes, e).icon}
+                        {eventTypeInfo(eventTypes, e, modules).icon}
                       </button>
                     ))}
                   </div>
@@ -2418,7 +2464,7 @@ function WeekView({
                   const end = timeToMinutes(e.end_time) ?? start + 30;
                   const left = ((start - DAY_START_HOUR * 60) / 60) * WEEK_HOUR_WIDTH;
                   const width = Math.max(((end - start) / 60) * WEEK_HOUR_WIDTH, 44);
-                  const info = eventTypeInfo(eventTypes, e);
+                  const info = eventTypeInfo(eventTypes, e, modules);
                   return (
                     <button
                       key={e.id}
@@ -2448,6 +2494,7 @@ function DayView({
   setFocusedDate,
   events,
   eventTypes,
+  modules,
   onOpenEvent,
   onReschedule,
 }: {
@@ -2455,6 +2502,7 @@ function DayView({
   setFocusedDate: (date: string) => void;
   events: Event[];
   eventTypes: EventTypeRow[];
+  modules: TrainingModule[];
   onOpenEvent: (event: Event) => void;
   onReschedule: (event: Event, start_time: string, end_time: string) => void;
 }) {
@@ -2556,7 +2604,7 @@ function DayView({
       {allDayEvents.length > 0 && (
         <div className="flex flex-col gap-1">
           {allDayEvents.map((e) => {
-            const info = eventTypeInfo(eventTypes, e);
+            const info = eventTypeInfo(eventTypes, e, modules);
             return (
               <button
                 key={e.id}
@@ -2618,7 +2666,7 @@ function DayView({
               ((start - DAY_START_HOUR * 60) / 60) * HOUR_HEIGHT +
               (isDragging ? (drag.offsetMin / 60) * HOUR_HEIGHT : 0);
             const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, 32);
-            const info = eventTypeInfo(eventTypes, e);
+            const info = eventTypeInfo(eventTypes, e, modules);
             const overdue = isOverdue(e);
             return (
               <div
