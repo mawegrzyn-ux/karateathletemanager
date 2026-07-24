@@ -381,7 +381,14 @@ coach-run attendance) — this is personal athlete itinerary planning.
     left-4` floating button instead, mirroring the position (opposite
     corner) and `bottom-24` offset (clears the bottom tab nav) of the
     List view's existing "Jump to today" FAB at `bottom-24 right-4`, so
-    the two never overlap regardless of view mode.
+    the two never overlap regardless of view mode. The bar's background
+    and shadow were later matched to `App.tsx`'s bottom tab nav —
+    `bg-white/95 backdrop-blur` instead of the page's plain `bg-stone-100`,
+    plus the same `shadow-[...]` values the nav uses but with both
+    y-offsets flipped positive (the nav's shadow falls upward above a
+    bottom bar; this one falls downward below a top bar), so the two
+    fixed/sticky chrome bars read as one consistent surface rather than
+    the header blending into the grey page background it sits on.
   - **List**: events are grouped into date-headed sections ("Today",
     "Tomorrow", or a formatted date). On first load the view
     auto-scrolls the "Today" section (or the nearest future date) into

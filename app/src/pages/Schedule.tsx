@@ -908,10 +908,15 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 flex flex-col bg-stone-100 pb-2">
-        {/* Edge-to-edge and flush with the very top of the scroll area (no
-            pt-4 above it), so the red wedge reads as one continuous bar
-            rather than a title floating above a separate tab strip. The
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 flex flex-col bg-white/95 pb-2 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_20px_-6px_rgba(28,25,23,0.10)] backdrop-blur">
+        {/* Same bg-white/95 + backdrop-blur treatment as the bottom tab nav
+            in App.tsx (rather than the page's plain bg-stone-100), with a
+            matching shadow - the nav's is signed negative (0_-1px.../
+            0_-8px...) since its shadow falls upward above a bottom bar;
+            this one flips both to positive since it falls downward below a
+            top bar. Edge-to-edge and flush with the very top of the scroll
+            area (no pt-4 above it), so the red wedge reads as one continuous
+            bar rather than a title floating above a separate tab strip. The
             SCHEDULE wedge is a permanent brand label (not a selectable tab,
             unlike List/Day/Week/Month next to it), styled the same
             slanted-parallelogram way the tab strip used to style whichever
