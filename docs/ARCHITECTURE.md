@@ -358,37 +358,68 @@ coach-run attendance) — this is personal athlete itinerary planning.
   control (all client-side, no new endpoints) sits above the event list
   in `ScheduleManager`. All four operate on the same `events` array —
   there's no separate "calendar" data source.
-  - **Header redesign: title + tabs + filter merged into one bar,
-    "+" moved to a floating button.** The page used to stack a
-    "Schedule" title row (with the `AddButton` at its right), a search
-    row (with a 🏷️ type-filter icon at its trailing edge), and a
-    separate edge-to-edge tab strip where the active tab was rendered
-    as a solid red parallelogram. That's now one merged top bar: a
-    permanent red "SCHEDULE" wedge (`clip-path` parallelogram, same
-    slant this strip already used for whichever tab was active) reading
-    as a brand label rather than a tab, followed by the four view-mode
-    tabs as plain text (bold + dark when active, muted grey otherwise,
-    no per-tab clip-path needed anymore since they're not colored
-    blocks), followed by a filter icon at the bar's trailing edge (an
-    inline SVG funnel now, not the 🏷️ emoji originally used here — see
-    the List view bullet below for why, and for the search input and
-    "Hide completed" toggle that later moved into the same filter
-    drawer this icon opens). The bar is the sticky header's first
-    element, flush with the top of the scroll area (no `pt-4` above it)
-    so it reads as one continuous strip. The `AddButton` no longer lives
-    inline in
-    a title row (there's no title row anymore) - it's a `fixed bottom-24
-    left-4` floating button instead, mirroring the position (opposite
-    corner) and `bottom-24` offset (clears the bottom tab nav) of the
-    List view's existing "Jump to today" FAB at `bottom-24 right-4`, so
-    the two never overlap regardless of view mode. The bar's background
-    and shadow were later matched to `App.tsx`'s bottom tab nav —
-    `bg-white/95 backdrop-blur` instead of the page's plain `bg-stone-100`,
-    plus the same `shadow-[...]` values the nav uses but with both
-    y-offsets flipped positive (the nav's shadow falls upward above a
-    bottom bar; this one falls downward below a top bar), so the two
-    fixed/sticky chrome bars read as one consistent surface rather than
-    the header blending into the grey page background it sits on.
+  - **Header: one icon-only bar (title/tabs/search/filter), "+" as a
+    floating button.** The page used to stack a "Schedule" title row
+    (with the `AddButton` at its right), a search row (with a type-filter
+    icon at its trailing edge), and a separate edge-to-edge tab strip
+    where the active tab was rendered as a solid red parallelogram. All
+    of that collapsed into one merged top bar, through a few rounds of
+    iteration:
+    - A permanent red "SCHEDULE" wedge (`clip-path` parallelogram, the
+      same slant the tab strip used to style whichever tab was active)
+      reads as a brand label rather than a tab - it went through text →
+      emoji (📅) as every other label in the bar moved to icon-only (see
+      next point), landing on an `sr-only` "Schedule" span for screen
+      readers since there's no visible text left to announce it.
+    - The four view-mode tabs (List/Day/Week/Month) are icon-only
+      (`VIEW_MODE_ICONS`, `NavIcon` wrapper) rather than words - no
+      Unicode emoji distinguishes "day" from "week" from "month"
+      cleanly, so these are hand-rolled inline SVGs (list → hamburger
+      lines, day → an empty square, week → a 3-column box, month → a
+      calendar glyph with header ticks), each with an `aria-label`
+      (`"${mode} view"`) replacing the lost visible text. The active tab
+      gets a `bg-stone-100` pill instead of the bold-text treatment
+      words could use.
+    - A filter icon sits at the bar's trailing edge - also a hand-rolled
+      inline SVG funnel (`polygon points="22 3 2 3 10 12.46 10 19 14 21
+      14 12.46 22 3"`), since no matching emoji exists either. It opens a
+      `Drawer` with a "Hide completed" checkbox (`hideCompleted`, filters
+      out any event whose `my_status === "completed"` - a no-op for
+      coach/admin views where `my_status` is always `null`) and the
+      type-tile grid (`typeFilterOptions`/`typeFilters`); its badge count
+      (`activeFilterCount` = `typeFilters.size` + 1 if hiding completed)
+      and its own close button (`fixed bottom-6 left-6`, inside the
+      Drawer) both reflect every active filter. Search briefly lived
+      inside this same drawer, then moved back out ("one U-turn") to its
+      own dedicated search icon + slide-down row (see below) once the
+      drawer's job settled on being strictly type/completion filtering.
+    - A dedicated search icon (magnifying-glass `NavIcon`, positioned
+      before the filter icon) toggles `searchOpen`, which shows/hides a
+      search input in a row of its own directly below the icon bar - a
+      CSS grid-template-rows transition (`grid-rows-[0fr]` ↔
+      `grid-rows-[1fr]` on an `overflow-hidden` wrapper) animates the
+      slide open/closed, since `height` can't be transitioned to/from
+      `auto` without JS measurement; this is that trick instead. The
+      icon turns red while open. The search `<input>` itself still
+      drives the same `query` state `filteredEvents` already read.
+    - The bar is the sticky header's first element, flush with the top
+      of the scroll area and with no bottom padding on the header
+      container either (a stray `pb-2` used to leave a sliver of white
+      beneath the wedge, breaking the red into two visually disconnected
+      blocks instead of one solid block spanning the bar's full height).
+    - The `AddButton` doesn't live inline in a title row anymore (there
+      is no title row) - it's a `fixed bottom-24 left-4` floating button
+      instead, mirroring the position (opposite corner) and `bottom-24`
+      offset (clears the bottom tab nav) of List view's existing "Jump
+      to today" FAB at `bottom-24 right-4`, so the two never overlap.
+    - The bar's background and shadow match `App.tsx`'s bottom tab nav —
+      `bg-white/95 backdrop-blur` instead of the page's plain
+      `bg-stone-100`, plus the same `shadow-[...]` values the nav uses
+      but with both y-offsets flipped positive (the nav's shadow falls
+      upward above a bottom bar; this one falls downward below a top
+      bar) - so the two fixed/sticky chrome bars read as one consistent
+      surface rather than the header blending into the grey page
+      background it sits on.
   - **List**: events are grouped into date-headed sections ("Today",
     "Tomorrow", or a formatted date). On first load the view
     auto-scrolls the "Today" section (or the nearest future date) into
@@ -1354,21 +1385,19 @@ coach-run attendance) — this is personal athlete itinerary planning.
   (no separate date, e.g. an itinerary item's "End time") it stays a
   plain time `<input>`.
 - **List view: search, type filter, hide-completed, and multi-day events
-  on every spanned day**: the header's filter icon (an inline SVG funnel
-  — no matching Unicode emoji exists, so this is the one hand-rolled
-  icon in an otherwise bare-emoji app, kept intentionally tiny/single-use
-  rather than reaching for an icon library) opens a `Drawer` combining
-  everything that shapes what the list shows: a search input (moved here
-  from its own row on the main page — the filter drawer is now the one
-  place all of List/Day/Week/Month's filtering lives), a "Hide completed"
-  checkbox (`hideCompleted`, filters out any event whose `my_status ===
-  "completed"` — a no-op for coach/admin views, where `my_status` is
-  always `null`; only meaningful for an athlete's own schedule), and a
-  grid of type tiles (icon + label, `TileGrid`-style, options built from
-  whichever `event_type` keys are actually present in the loaded window)
-  — tapping a tile toggles it in/out of a `typeFilters: Set<string>`, so
-  multiple types can be selected at once; an empty set shows everything.
-  All three combine in one `filteredEvents` memo. The filter icon's badge
+  on every spanned day**: the header's search icon opens a slide-down
+  search row (see above) driving `query`, and the filter icon opens a
+  `Drawer` with a "Hide completed" checkbox (`hideCompleted`, filters
+  out any event whose `my_status === "completed"` — a no-op for
+  coach/admin views, where `my_status` is always `null`; only meaningful
+  for an athlete's own schedule) and a grid of type tiles (icon + label,
+  `TileGrid`-style, options built from whichever `event_type` keys are
+  actually present in the loaded window) — tapping a tile toggles it
+  in/out of a `typeFilters: Set<string>`, so multiple types can be
+  selected at once; an empty set shows everything. All three (search,
+  type, completion) combine in one `filteredEvents` memo, even though
+  search and the other two now live behind separate icons rather than
+  one combined drawer. The filter icon's badge
   (`activeFilterCount` = `typeFilters.size` + 1 if hiding completed) and
   the drawer's own close button (bottom-left, `fixed bottom-6 left-6` —
   mirrors the main page's `AddButton` sitting bottom-left too) reflect

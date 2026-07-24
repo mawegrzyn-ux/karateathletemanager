@@ -125,6 +125,56 @@ interface EventTypeRow {
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+// Shared stroke-icon wrapper for the header's nav icons (view-mode
+// switcher, search, filter) - no matching Unicode emoji exists for
+// "list view"/"day view"/etc., so these are hand-rolled inline SVGs
+// rather than an icon library, kept to this one small, single-use set.
+function NavIcon({ children }: { children: ReactNode }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+      aria-hidden
+    >
+      {children}
+    </svg>
+  );
+}
+
+const VIEW_MODE_ICONS: Record<"list" | "day" | "week" | "month", ReactNode> = {
+  list: (
+    <>
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
+    </>
+  ),
+  day: <rect x="4" y="4" width="16" height="16" rx="2" />,
+  week: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <line x1="9" y1="4" x2="9" y2="20" />
+      <line x1="15" y1="4" x2="15" y2="20" />
+    </>
+  ),
+  month: (
+    <>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </>
+  ),
+};
+
 // event_type/item_type used to be a fixed global enum (this exact list);
 // now each club has its own nk_event_types library (standard + custom,
 // with its own icon/bg_color), fetched into `eventTypes` and looked up via
@@ -510,6 +560,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set());
   const [hideCompleted, setHideCompleted] = useState(false);
   const [typeFilterDrawerOpen, setTypeFilterDrawerOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [drawer, setDrawer] = useState<"closed" | "create" | Event>("closed");
   const [resultDrawerEvent, setResultDrawerEvent] = useState<Event | null>(
     null
@@ -908,65 +959,100 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 flex flex-col bg-white/95 pb-2 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_20px_-6px_rgba(28,25,23,0.10)] backdrop-blur">
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 flex flex-col bg-white/95 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_20px_-6px_rgba(28,25,23,0.10)] backdrop-blur">
         {/* Same bg-white/95 + backdrop-blur treatment as the bottom tab nav
             in App.tsx (rather than the page's plain bg-stone-100), with a
             matching shadow - the nav's is signed negative (0_-1px.../
             0_-8px...) since its shadow falls upward above a bottom bar;
             this one flips both to positive since it falls downward below a
             top bar. Edge-to-edge and flush with the very top of the scroll
-            area (no pt-4 above it), so the red wedge reads as one continuous
-            bar rather than a title floating above a separate tab strip. The
-            SCHEDULE wedge is a permanent brand label (not a selectable tab,
-            unlike List/Day/Week/Month next to it), styled the same
-            slanted-parallelogram way the tab strip used to style whichever
-            tab was active. Search moved into the filter drawer (see below)
-            alongside the type/completion filters, so this bar's own row is
-            the only thing left in the sticky header now. */}
+            area (no pt-4 above it) and no bottom padding on this container
+            either, so the red wedge's own row IS the header's full height -
+            a trailing pb-2 here used to leave a sliver of white beneath the
+            wedge that broke up the red into two visually disconnected
+            blocks. The SCHEDULE wedge is a permanent brand label (not a
+            selectable tab, unlike List/Day/Week/Month next to it), styled
+            the same slanted-parallelogram way the tab strip used to style
+            whichever tab was active - now an emoji instead of text, matching
+            the icon-only treatment applied to every other label in this bar
+            (see VIEW_MODE_ICONS above: no Unicode emoji distinguishes "day"
+            from "week" from "month" cleanly, so those are hand-rolled SVGs
+            instead). Search reverted back out of the filter drawer to its
+            own slide-down row (see below) after a "one U-turn" - the search
+            icon toggles it rather than search living inline in the bar
+            itself, keeping the bar's tab row from getting cramped. */}
         <div className="flex items-stretch">
           <div
-            className="flex shrink-0 items-center bg-red-600 pl-4 pr-5 text-base font-bold tracking-tight text-white"
+            className="flex shrink-0 items-center bg-red-600 pl-4 pr-5 text-lg text-white"
             style={{ clipPath: "polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%)" }}
           >
-            SCHEDULE
+            <span aria-hidden>📅</span>
+            <span className="sr-only">Schedule</span>
           </div>
           <div className="flex flex-1 items-center gap-1 overflow-x-auto px-2">
             {(["list", "day", "week", "month"] as const).map((mode) => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
-                className={`min-h-[44px] shrink-0 px-2 text-sm capitalize transition-colors ${
-                  viewMode === mode ? "font-bold text-stone-900" : "text-stone-500"
+                aria-label={`${mode} view`}
+                className={`flex min-h-[44px] shrink-0 items-center justify-center rounded-lg px-2.5 transition-colors ${
+                  viewMode === mode ? "bg-stone-100 text-stone-900" : "text-stone-400"
                 }`}
               >
-                {mode}
+                <NavIcon>{VIEW_MODE_ICONS[mode]}</NavIcon>
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={() => setSearchOpen((v) => !v)}
+            aria-label="Search"
+            className={`flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center ${
+              searchOpen ? "text-red-600" : "text-stone-600"
+            }`}
+          >
+            <NavIcon>
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </NavIcon>
+          </button>
           <button
             type="button"
             onClick={() => setTypeFilterDrawerOpen(true)}
             aria-label="Filter"
             className="relative flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center pr-3 text-stone-600"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-5 w-5"
-              aria-hidden
-            >
+            <NavIcon>
               <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-            </svg>
+            </NavIcon>
             {activeFilterCount > 0 && (
               <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-semibold text-white">
                 {activeFilterCount}
               </span>
             )}
           </button>
+        </div>
+
+        {/* Slides down/up via a CSS grid-template-rows transition (0fr <->
+            1fr) rather than animating height directly, which can't animate
+            to/from "auto" - the classic grid-accordion trick, so no JS
+            height measurement needed. */}
+        <div
+          className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+            searchOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+          }`}
+        >
+          <div className="overflow-hidden">
+            <div className="px-4 pb-2 pt-1">
+              <input
+                autoFocus={searchOpen}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search schedule..."
+                className="min-h-[44px] w-full rounded-xl border border-stone-300 px-3"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -985,12 +1071,6 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
         title="Filter schedule"
       >
         <div className="flex flex-col gap-4">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search schedule..."
-            className="min-h-[44px] w-full rounded-xl border border-stone-300 px-3"
-          />
           <label className="flex min-h-[44px] items-center gap-2 rounded-xl bg-stone-50 px-3 text-sm font-medium text-stone-700">
             <input
               type="checkbox"
