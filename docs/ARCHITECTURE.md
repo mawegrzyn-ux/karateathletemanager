@@ -358,19 +358,28 @@ coach-run attendance) — this is personal athlete itinerary planning.
   control (all client-side, no new endpoints) sits above the event list
   in `ScheduleManager`. All four operate on the same `events` array —
   there's no separate "calendar" data source.
-  - **Rhomboid, edge-to-edge buttons**: each of the four toggle buttons
-    is a parallelogram via `clip-path: polygon(...)`, not a CSS
-    `transform: skew` — skewing the box would tilt its label text too,
-    which a clip only on the background/border avoids. The first and
-    last buttons only slant their *inner* edge (the outer one stays
-    square against the screen edge); every interior slant uses the same
-    12px offset so adjacent buttons' cut lines coincide exactly,
-    interlocking into one continuous strip with no gap or overlap. The
-    row itself is `-mx-4` inside the sticky header's own `px-4` (one
-    level of cancellation deeper than the header's own `-mx-4` against
-    the page's `p-4`), so it's the one element in that header that
-    bleeds fully to both screen edges instead of sitting inset like the
-    title row and search bar above it.
+  - **Header redesign: title + tabs + filter merged into one bar,
+    "+" moved to a floating button.** The page used to stack a
+    "Schedule" title row (with the `AddButton` at its right), a search
+    row (with a 🏷️ type-filter icon at its trailing edge), and a
+    separate edge-to-edge tab strip where the active tab was rendered
+    as a solid red parallelogram. That's now one merged top bar: a
+    permanent red "SCHEDULE" wedge (`clip-path` parallelogram, same
+    slant this strip already used for whichever tab was active) reading
+    as a brand label rather than a tab, followed by the four view-mode
+    tabs as plain text (bold + dark when active, muted grey otherwise,
+    no per-tab clip-path needed anymore since they're not colored
+    blocks), followed by the 🏷️ type-filter icon at the bar's trailing
+    edge. The search input moves to its own full-width row below, with
+    no trailing icon (the filter icon lives in the bar above now). The
+    bar is the sticky header's first element, flush with the top of the
+    scroll area (no `pt-4` above it, unlike the search row) so it reads
+    as one continuous strip. The `AddButton` no longer lives inline in
+    a title row (there's no title row anymore) - it's a `fixed bottom-24
+    left-4` floating button instead, mirroring the position (opposite
+    corner) and `bottom-24` offset (clears the bottom tab nav) of the
+    List view's existing "Jump to today" FAB at `bottom-24 right-4`, so
+    the two never overlap regardless of view mode.
   - **List**: events are grouped into date-headed sections ("Today",
     "Tomorrow", or a formatted date). On first load the view
     auto-scrolls the "Today" section (or the nearest future date) into
