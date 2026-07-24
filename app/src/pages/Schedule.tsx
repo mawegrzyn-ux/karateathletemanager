@@ -901,66 +901,66 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 flex flex-col gap-3 bg-stone-100 px-4 pb-2 pt-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">Schedule</h1>
-          <AddButton onClick={openCreate} />
-        </div>
-
-        <div className="flex gap-2">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search schedule..."
-            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
-          />
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 flex flex-col gap-3 bg-stone-100 pb-2">
+        {/* Edge-to-edge and flush with the very top of the scroll area (no
+            pt-4 above it, unlike the search row below), so the red wedge
+            reads as one continuous bar rather than a title floating above
+            a separate tab strip. The SCHEDULE wedge is a permanent brand
+            label (not a selectable tab, unlike List/Day/Week/Month next to
+            it), styled the same slanted-parallelogram way the tab strip
+            used to style whichever tab was active. */}
+        <div className="flex items-stretch">
+          <div
+            className="flex shrink-0 items-center bg-red-600 pl-4 pr-5 text-base font-bold tracking-tight text-white"
+            style={{ clipPath: "polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%)" }}
+          >
+            SCHEDULE
+          </div>
+          <div className="flex flex-1 items-center gap-1 overflow-x-auto px-2">
+            {(["list", "day", "week", "month"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`min-h-[44px] shrink-0 px-2 text-sm capitalize transition-colors ${
+                  viewMode === mode ? "font-bold text-stone-900" : "text-stone-500"
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => setTypeFilterDrawerOpen(true)}
             aria-label="Filter by type"
-            className="relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg"
+            className="relative flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center pr-3 text-lg text-stone-600"
           >
             🏷️
             {typeFilters.size > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-semibold text-white">
+              <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-semibold text-white">
                 {typeFilters.size}
               </span>
             )}
           </button>
         </div>
 
-        {/* Edge-to-edge, unlike the rest of this sticky header's px-4-inset
-            rows above - -mx-4 cancels that padding for just this bar. Each
-            button is a parallelogram (clip-path, not a CSS transform:skew -
-            skewing the box would also tilt its text) with a 12px slant; the
-            first/last buttons only slant their inner edge so the strip's
-            outer corners stay square against the screen edges, and adjacent
-            buttons' slants share the same line so they interlock with no
-            gap or overlap. */}
-        <div className="-mx-4 flex bg-stone-200">
-          {(["list", "day", "week", "month"] as const).map((mode, i, arr) => {
-            const clipPath =
-              i === 0
-                ? "polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%)"
-                : i === arr.length - 1
-                ? "polygon(12px 0, 100% 0, 100% 100%, 0 100%)"
-                : "polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)";
-            return (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                style={{ clipPath }}
-                className={`min-h-[44px] flex-1 px-2 text-sm font-medium capitalize transition-colors ${
-                  viewMode === mode
-                    ? "bg-red-600 text-white shadow-sm"
-                    : "text-stone-600"
-                }`}
-              >
-                {mode}
-              </button>
-            );
-          })}
+        <div className="px-4">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search schedule..."
+            className="min-h-[44px] w-full rounded-xl border border-stone-300 px-3"
+          />
         </div>
+      </div>
+
+      {/* Floating "+" replaces the old header-row AddButton now that the
+          top bar's right edge is taken by the type-filter icon - bottom-left
+          (opposite the list view's "Jump to today" FAB on the right) so
+          they never overlap, and bottom-24 clears the bottom tab nav the
+          same way that button's offset does. */}
+      <div className="fixed bottom-24 left-4 z-20">
+        <AddButton onClick={openCreate} />
       </div>
 
       <Drawer
