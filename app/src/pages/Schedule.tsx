@@ -508,6 +508,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set());
+  const [hideCompleted, setHideCompleted] = useState(false);
   const [typeFilterDrawerOpen, setTypeFilterDrawerOpen] = useState(false);
   const [drawer, setDrawer] = useState<"closed" | "create" | Event>("closed");
   const [resultDrawerEvent, setResultDrawerEvent] = useState<Event | null>(
@@ -541,9 +542,10 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
         .toLowerCase()
         .includes(q);
       const matchesType = typeFilters.size === 0 || typeFilters.has(e.event_type);
-      return matchesQuery && matchesType;
+      const matchesCompletion = !hideCompleted || e.my_status !== "completed";
+      return matchesQuery && matchesType && matchesCompletion;
     });
-  }, [events, query, typeFilters, eventTypes]);
+  }, [events, query, typeFilters, hideCompleted, eventTypes]);
 
   const typeFilterOptions = useMemo(() => {
     const seen = new Map<string, { label: string; icon: string; bg_color: string }>();
@@ -561,6 +563,11 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       .map(([key, info]) => ({ key, ...info }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [events, eventTypes]);
+
+  // Drives the filter icon's badge count - every active filter (types
+  // selected, plus the hide-completed toggle) counts as one, matching how
+  // many taps it'd take to clear everything back to the default view.
+  const activeFilterCount = typeFilters.size + (hideCompleted ? 1 : 0);
 
   function toggleTypeFilter(key: string) {
     setTypeFilters((prev) => {
@@ -901,14 +908,16 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 flex flex-col gap-3 bg-stone-100 pb-2">
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 flex flex-col bg-stone-100 pb-2">
         {/* Edge-to-edge and flush with the very top of the scroll area (no
-            pt-4 above it, unlike the search row below), so the red wedge
-            reads as one continuous bar rather than a title floating above
-            a separate tab strip. The SCHEDULE wedge is a permanent brand
-            label (not a selectable tab, unlike List/Day/Week/Month next to
-            it), styled the same slanted-parallelogram way the tab strip
-            used to style whichever tab was active. */}
+            pt-4 above it), so the red wedge reads as one continuous bar
+            rather than a title floating above a separate tab strip. The
+            SCHEDULE wedge is a permanent brand label (not a selectable tab,
+            unlike List/Day/Week/Month next to it), styled the same
+            slanted-parallelogram way the tab strip used to style whichever
+            tab was active. Search moved into the filter drawer (see below)
+            alongside the type/completion filters, so this bar's own row is
+            the only thing left in the sticky header now. */}
         <div className="flex items-stretch">
           <div
             className="flex shrink-0 items-center bg-red-600 pl-4 pr-5 text-base font-bold tracking-tight text-white"
@@ -932,30 +941,32 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           <button
             type="button"
             onClick={() => setTypeFilterDrawerOpen(true)}
-            aria-label="Filter by type"
-            className="relative flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center pr-3 text-lg text-stone-600"
+            aria-label="Filter"
+            className="relative flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center pr-3 text-stone-600"
           >
-            🏷️
-            {typeFilters.size > 0 && (
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-5 w-5"
+              aria-hidden
+            >
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
+            {activeFilterCount > 0 && (
               <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-semibold text-white">
-                {typeFilters.size}
+                {activeFilterCount}
               </span>
             )}
           </button>
         </div>
-
-        <div className="px-4">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search schedule..."
-            className="min-h-[44px] w-full rounded-xl border border-stone-300 px-3"
-          />
-        </div>
       </div>
 
       {/* Floating "+" replaces the old header-row AddButton now that the
-          top bar's right edge is taken by the type-filter icon - bottom-left
+          top bar's right edge is taken by the filter icon - bottom-left
           (opposite the list view's "Jump to today" FAB on the right) so
           they never overlap, and bottom-24 clears the bottom tab nav the
           same way that button's offset does. */}
@@ -966,16 +977,30 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       <Drawer
         open={typeFilterDrawerOpen}
         onClose={() => setTypeFilterDrawerOpen(false)}
-        title="Filter by type"
+        title="Filter schedule"
       >
         <div className="flex flex-col gap-4">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search schedule..."
+            className="min-h-[44px] w-full rounded-xl border border-stone-300 px-3"
+          />
+          <label className="flex min-h-[44px] items-center gap-2 rounded-xl bg-stone-50 px-3 text-sm font-medium text-stone-700">
+            <input
+              type="checkbox"
+              checked={hideCompleted}
+              onChange={(e) => setHideCompleted(e.target.checked)}
+            />
+            Hide completed
+          </label>
           {typeFilters.size > 0 && (
             <button
               type="button"
               onClick={() => setTypeFilters(new Set())}
               className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700"
             >
-              Clear filters
+              Clear type filters
             </button>
           )}
           <div className="grid grid-cols-3 gap-3">
@@ -1016,7 +1041,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           type="button"
           onClick={() => setTypeFilterDrawerOpen(false)}
           aria-label="Close filters"
-          className="fixed bottom-6 right-6 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-red-600 text-lg text-white shadow-lg"
+          className="fixed bottom-6 left-6 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-red-600 text-lg text-white shadow-lg"
         >
           ↩
         </button>
