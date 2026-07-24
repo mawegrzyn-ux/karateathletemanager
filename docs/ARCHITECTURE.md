@@ -369,12 +369,14 @@ coach-run attendance) — this is personal athlete itinerary planning.
     as a brand label rather than a tab, followed by the four view-mode
     tabs as plain text (bold + dark when active, muted grey otherwise,
     no per-tab clip-path needed anymore since they're not colored
-    blocks), followed by the 🏷️ type-filter icon at the bar's trailing
-    edge. The search input moves to its own full-width row below, with
-    no trailing icon (the filter icon lives in the bar above now). The
-    bar is the sticky header's first element, flush with the top of the
-    scroll area (no `pt-4` above it, unlike the search row) so it reads
-    as one continuous strip. The `AddButton` no longer lives inline in
+    blocks), followed by a filter icon at the bar's trailing edge (an
+    inline SVG funnel now, not the 🏷️ emoji originally used here — see
+    the List view bullet below for why, and for the search input and
+    "Hide completed" toggle that later moved into the same filter
+    drawer this icon opens). The bar is the sticky header's first
+    element, flush with the top of the scroll area (no `pt-4` above it)
+    so it reads as one continuous strip. The `AddButton` no longer lives
+    inline in
     a title row (there's no title row anymore) - it's a `fixed bottom-24
     left-4` floating button instead, mirroring the position (opposite
     corner) and `bottom-24` offset (clears the bottom tab nav) of the
@@ -1344,15 +1346,27 @@ coach-run attendance) — this is personal athlete itinerary planning.
   renders its own label `<span>` instead. Where a field only has a time
   (no separate date, e.g. an itinerary item's "End time") it stays a
   plain time `<input>`.
-- **List view: type filter, and multi-day events on every spanned day**:
-  a small icon button (🏷️, badge-counted when active) next to the search
-  input opens a `Drawer` of type tiles (icon + label, `TileGrid`-style,
-  options built from whichever `event_type` keys are actually present in
-  the loaded window) — tapping a tile toggles it in/out of a
-  `typeFilters: Set<string>`, so multiple types can be selected at once;
-  an empty set shows everything. Combined with the existing text search
-  in one `filteredEvents` memo. A multi-day event used to render only
-  once, under its `start_date` — `expandEventsForList`/
+- **List view: search, type filter, hide-completed, and multi-day events
+  on every spanned day**: the header's filter icon (an inline SVG funnel
+  — no matching Unicode emoji exists, so this is the one hand-rolled
+  icon in an otherwise bare-emoji app, kept intentionally tiny/single-use
+  rather than reaching for an icon library) opens a `Drawer` combining
+  everything that shapes what the list shows: a search input (moved here
+  from its own row on the main page — the filter drawer is now the one
+  place all of List/Day/Week/Month's filtering lives), a "Hide completed"
+  checkbox (`hideCompleted`, filters out any event whose `my_status ===
+  "completed"` — a no-op for coach/admin views, where `my_status` is
+  always `null`; only meaningful for an athlete's own schedule), and a
+  grid of type tiles (icon + label, `TileGrid`-style, options built from
+  whichever `event_type` keys are actually present in the loaded window)
+  — tapping a tile toggles it in/out of a `typeFilters: Set<string>`, so
+  multiple types can be selected at once; an empty set shows everything.
+  All three combine in one `filteredEvents` memo. The filter icon's badge
+  (`activeFilterCount` = `typeFilters.size` + 1 if hiding completed) and
+  the drawer's own close button (bottom-left, `fixed bottom-6 left-6` —
+  mirrors the main page's `AddButton` sitting bottom-left too) reflect
+  every active filter, not just types. A multi-day event used to render
+  only once, under its `start_date` — `expandEventsForList`/
   `groupOccurrencesByDate` now expand each event into one occurrence per
   date it spans before grouping, so it shows up under every day in its
   range, each tagged "Day n of x" (e.g. "Day 2 of 4") appended to its
