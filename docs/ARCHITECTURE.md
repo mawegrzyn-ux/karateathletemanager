@@ -759,6 +759,29 @@ coach-run attendance) — this is personal athlete itinerary planning.
   (Add jumps straight into the new activity; removing one already has
   its own 🗑 on that activity's row in `ActivitiesList`) and duplicating
   them on every activity screen was redundant.
+- **Fixed: an activity's own stage screen didn't show how many activities
+  the module had, or how far into that activity's own stages you were.**
+  `EditModuleWizard`'s per-activity header now renders the activity's
+  name followed by the module's total activity count in parentheses
+  (`Push ups (2)`), with a `{stageIndex + 1} of {stages.length}` caption
+  in small text below it — replacing the old single-line `Activity N of
+  M · {stageLabel}` caption (which conflated "which activity" with
+  "which stage" in one string). **Fixed: closing an activity's stage
+  screen — via ✓ Done or the drawer's own ✕ — exited straight to the
+  training modules list instead of returning to General Info,** even
+  though ← Back already handled this correctly one stage/activity at a
+  time. ✓ Done now always calls `setOnGeneralInfo(true)` directly rather
+  than the drawer-closing `onClose` it previously reused. The drawer's
+  own ✕ (rendered by `Drawer` itself in the parent `TrainingModules`
+  component, outside `EditModuleWizard`) needed the same fix but has no
+  visibility into the wizard's internal stage state, so `onGeneralInfo`/
+  `setOnGeneralInfo` were lifted out of `EditModuleWizard` into
+  `TrainingModules` as controlled props (reset to `true` every time a
+  module row is opened, replacing the free reset `useState(true)`
+  previously got from the wizard's `key={editing.id}` remount): the
+  parent's `Drawer onClose` now checks this lifted flag and returns to
+  General Info instead of closing when an activity is open, only
+  actually closing the drawer once General Info itself is showing.
 - **Training module types.** A shared, admin-managed lookup
   (`nk_training_module_types`: `id`, `name`) — same shape as
   `nk_karate_styles` — for tagging a module with a category (Cardio,
