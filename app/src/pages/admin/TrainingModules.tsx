@@ -816,16 +816,17 @@ function EditModuleWizard({
   module,
   types,
   onSave,
-  onClose,
+  onGeneralInfo,
+  setOnGeneralInfo,
   onError,
 }: {
   module: TrainingModule;
   types: TrainingModuleType[];
   onSave: (patch: Record<string, unknown>) => void;
-  onClose: () => void;
+  onGeneralInfo: boolean;
+  setOnGeneralInfo: (v: boolean) => void;
   onError: (message: string) => void;
 }) {
-  const [onGeneralInfo, setOnGeneralInfo] = useState(true);
   const [items, setItems] = useState<DraftItem[]>(module.items.map(toDraftItem));
   const [itemIndex, setItemIndex] = useState(0);
   const [stageIndex, setStageIndex] = useState(0);
@@ -896,17 +897,23 @@ function EditModuleWizard({
     <div className="flex h-full flex-col">
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
         {!onGeneralInfo && currentItem && (
-          <h2 className="text-lg font-bold tracking-tight">
-            {currentItem.item_type === "rest"
-              ? "Rest"
-              : currentItem.name.trim() || "New exercise"}
-          </h2>
+          <div className="flex flex-col gap-0.5">
+            <h2 className="text-lg font-bold tracking-tight">
+              {currentItem.item_type === "rest"
+                ? "Rest"
+                : currentItem.name.trim() || "New exercise"}{" "}
+              <span className="text-base font-normal text-stone-500">
+                ({items.length})
+              </span>
+            </h2>
+            <span className="text-xs text-stone-500">
+              {stageIndex + 1} of {stages.length}
+            </span>
+          </div>
         )}
-        <span className="text-xs font-medium text-stone-500">
-          {onGeneralInfo
-            ? "General info"
-            : `Activity ${itemIndex + 1} of ${items.length} · ${stageLabel(stage)}`}
-        </span>
+        {onGeneralInfo && (
+          <span className="text-xs font-medium text-stone-500">General info</span>
+        )}
 
         {onGeneralInfo ? (
           <>
@@ -986,7 +993,12 @@ function EditModuleWizard({
           <div className="flex gap-2">
             <IconBtn icon="←" label="Back" onClick={goBack} />
             <IconBtn icon="→" label="Next" onClick={goNext} disabled={!canGoNext} />
-            <IconBtn icon="✓" label="Done" onClick={onClose} tone="primary" />
+            <IconBtn
+              icon="✓"
+              label="Done"
+              onClick={() => setOnGeneralInfo(true)}
+              tone="primary"
+            />
           </div>
         )}
       </div>
@@ -1005,6 +1017,7 @@ export default function TrainingModules() {
   const [drawer, setDrawer] = useState<"closed" | "create" | TrainingModule>(
     "closed"
   );
+  const [editGeneralInfo, setEditGeneralInfo] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1113,7 +1126,10 @@ export default function TrainingModules() {
               </div>
             )}
             <button
-              onClick={() => setDrawer(m)}
+              onClick={() => {
+                setEditGeneralInfo(true);
+                setDrawer(m);
+              }}
               aria-label={`Open ${m.title}`}
               className="absolute inset-0 rounded-2xl text-left"
             />
@@ -1154,7 +1170,9 @@ export default function TrainingModules() {
 
       <Drawer
         open={editing !== null}
-        onClose={() => setDrawer("closed")}
+        onClose={() =>
+          editGeneralInfo ? setDrawer("closed") : setEditGeneralInfo(true)
+        }
         title={editing?.title ?? ""}
       >
         {editing && canEdit && (
@@ -1163,7 +1181,8 @@ export default function TrainingModules() {
             module={editing}
             types={types}
             onSave={(patch) => updateModule(editing.id, patch)}
-            onClose={() => setDrawer("closed")}
+            onGeneralInfo={editGeneralInfo}
+            setOnGeneralInfo={setEditGeneralInfo}
             onError={showToast}
           />
         )}
