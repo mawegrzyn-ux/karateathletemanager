@@ -10,6 +10,7 @@ import {
   MediaField,
   Toast,
 } from "../../components/ui";
+import { ProfileInviteLink } from "../../components/ProfileInviteLink";
 
 interface Referee {
   id: number;
@@ -268,6 +269,10 @@ export default function Referees() {
                 className="rounded-xl border border-stone-300 px-3 py-2"
               />
             </Field>
+            <ProfileInviteLink
+              endpoint={`/admin/referees/${editing.id}/invite-link`}
+              showClubPicker={false}
+            />
             <label className="flex items-center gap-2 text-sm text-stone-600">
               <input
                 type="checkbox"

@@ -1885,6 +1885,88 @@ still `'pending'`, staged on `nk_users` itself the same way
   someone registering as an athlete via a join link is the athlete, not
   a parent, so the child-PIN UI doesn't apply to them.
 
+### Profile invite links
+
+A different problem from the club join link above: that one lets a
+stranger self-register as a brand-new athlete. This one lets an admin or
+club admin invite a specific *existing* `nk_athletes`/`nk_coaches`/
+`nk_referees` record (added to the roster ahead of time, with no login of
+its own yet) to get its own account — pre-linked to that exact profile,
+optionally pre-joined to a club, and approved immediately rather than
+landing in `pending`. There's no mailer anywhere in this app (checked —
+no nodemailer/SMTP/any email-sending dependency), so "send a link to an
+email address" means generate a link tied to that email for the admin to
+copy and share themselves, not an actual sent email.
+
+- `nk_profile_invites` (`profile_type` — `'athlete'|'coach'|'referee'`,
+  `profile_id`, `email`, `club_id` nullable, `token` unique, `expires_at`)
+  is a single shared table for all three profile types rather than
+  triplicating invite columns across three tables — `profile_id` isn't a
+  foreign key since which table it points at depends on `profile_type`.
+  A unique constraint on `(profile_type, profile_id)` means generating a
+  new invite for a profile replaces any still-pending one, same
+  "regenerate replaces" convention as `nk_clubs.join_token`; unlike that
+  token, an invite expires (14 days — `api/src/utils/profileInvites.js`'s
+  `INVITE_TTL_INTERVAL`) since it's tied to one specific recipient rather
+  than shared indefinitely.
+- `GET/POST/DELETE /api/athletes/:id/invite-link`,
+  `/api/admin/coaches/:id/invite-link`, and
+  `/api/admin/referees/:id/invite-link` (thin wrappers in each profile's
+  own route file around `getInvite`/`createInvite`/`deleteInvite` from
+  `profileInvites.js`) read the current invite, generate/regenerate one
+  from a submitted `{email, club_id?}`, or revoke it.
+- **Permission**: `canManageProfileInvite(user, profileType, profileId,
+  clubId)` in `permissions.js` — a global admin always can. A club-admin
+  coach can, for an athlete/coach, if either the profile already belongs
+  to a club they administer, *or* the invite's own target `club_id` is
+  one they administer (covers inviting someone brand new straight into
+  your own club, which the "already a member" check alone couldn't).
+  Referees have no club-membership concept anywhere else in the app, so
+  there's no club-admin path for them at all — inviting a referee is
+  always admin-only, matching `referees.js`'s existing POST/DELETE.
+- `GET /api/public/invites/:token` (`publicProfileInvites.js`,
+  unauthenticated, same reasoning as `publicJoin.js`) resolves a token to
+  the invited profile's name, type, and club name (if any) — never
+  exposing anything else about the profile.
+- Surfaced as an "Invite to create account" section (`ProfileInviteLink`,
+  a component shared across `Athletes.tsx`, `admin/Coaches.tsx`, and
+  `admin/Referees.tsx` rather than three near-duplicates) near the bottom
+  of each profile's edit drawer — email input + (for athlete/coach only;
+  `showClubPicker={false}` for referees) a club search picker when no
+  invite is pending, or the link + Copy/Revoke once one exists. A 403
+  from its initial `GET` (not a club admin of any relevant club) makes
+  the whole section render nothing, rather than showing a control that
+  would just fail — there's no separate client-side permission
+  computation to keep in sync with the server's.
+- `POST /api/auth/register` accepts an `invite_token` instead of
+  `email`/`wants_*`/`requested_club_id` when redeeming one (checked
+  first, before any of the normal-registration validation) —
+  `registerViaInvite` in `auth.js` looks the token up
+  (`findInviteByToken`), and in one transaction: inserts `nk_users` with
+  `status='active'` and the matching `athlete_id`/`coach_id`/`referee_id`
+  set directly (skips `activateUser` entirely, since that function's job
+  is *creating* a new profile from `wants_*` flags — here the profile
+  already exists and just needs linking), inserts the
+  `nk_user_athletes`/`nk_user_coaches`/`nk_user_referees` join row,
+  inserts into `nk_athlete_clubs`/`nk_coach_clubs` if the invite carries
+  a `club_id` (skipped for referees, which have no such table), then
+  consumes (deletes) the invite so the link can't be redeemed twice.
+  Always uses the invite's own stored `email`, ignoring whatever the
+  registration form submitted, so the created account's email can't
+  drift from what the invite was generated for.
+- `Register.tsx` reads an `?invite=` query param (parallel to `?join=`)
+  and resolves it via the public endpoint on mount. While resolving: a
+  loading line; on success: email is pre-filled and locked (read-only)
+  to the invite's own email, the checkboxes/club-picker/join-link banner
+  are all replaced by a "You're creating an account for **{name}** as
+  {an athlete|a coach|a referee}[ at **{club}**]. You'll be approved
+  automatically." banner, and submission sends only `invite_token`; on an
+  invalid/expired token, unlike the join-link's graceful fallback to
+  plain registration, the form doesn't render at all — just an error and
+  a link to log in, since (unlike a club join link) the whole point was
+  linking to one specific profile, and falling through to an unrelated
+  self-registration wouldn't honor what the link was for.
+
 ### Referee profiles
 
 `nk_referees` is a third self-service profile type, a deliberately
