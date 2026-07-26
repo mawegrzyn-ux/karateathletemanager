@@ -50,6 +50,7 @@ export interface RegisterOptions {
   wants_coach?: boolean;
   wants_referee?: boolean;
   requested_club_id?: number | null;
+  invite_token?: string;
 }
 
 export interface Child {

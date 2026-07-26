@@ -1068,6 +1068,31 @@ const migrations = [
   `UPDATE nk_training_module_types SET icon = '🥋' WHERE name = 'Technique' AND icon IS NULL`,
   `UPDATE nk_training_module_types SET icon = '⏱️' WHERE name = 'Endurance' AND icon IS NULL`,
   `ALTER TABLE nk_training_modules ADD COLUMN IF NOT EXISTS icon VARCHAR(8)`,
+
+  // Profile invites: lets an admin/club-admin generate a shareable link
+  // for a specific existing athlete/coach/referee record, so the person
+  // it belongs to can create their own login pre-linked to that record
+  // (and, optionally, pre-joined to a club) without going through the
+  // normal self-registration + pending-approval flow. `profile_id` isn't
+  // an FK since it points at one of three different tables depending on
+  // `profile_type`; the unique constraint on (profile_type, profile_id)
+  // means generating a new invite for the same profile replaces any
+  // still-pending one, same "regenerate replaces" convention as
+  // nk_clubs.join_token.
+  `CREATE TABLE IF NOT EXISTS nk_profile_invites (
+     id           SERIAL PRIMARY KEY,
+     profile_type VARCHAR(20) NOT NULL CHECK (profile_type IN ('athlete','coach','referee')),
+     profile_id   INTEGER NOT NULL,
+     email        VARCHAR(200) NOT NULL,
+     club_id      INTEGER REFERENCES nk_clubs(id) ON DELETE SET NULL,
+     token        VARCHAR(64) NOT NULL,
+     expires_at   TIMESTAMPTZ NOT NULL,
+     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE nk_profile_invites DROP CONSTRAINT IF EXISTS nk_profile_invites_token_unique`,
+  `ALTER TABLE nk_profile_invites ADD CONSTRAINT nk_profile_invites_token_unique UNIQUE (token)`,
+  `ALTER TABLE nk_profile_invites DROP CONSTRAINT IF EXISTS nk_profile_invites_profile_unique`,
+  `ALTER TABLE nk_profile_invites ADD CONSTRAINT nk_profile_invites_profile_unique UNIQUE (profile_type, profile_id)`,
 ];
 
 async function migrate() {

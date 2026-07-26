@@ -10,6 +10,7 @@ import {
   MediaField,
   Toast,
 } from "../../components/ui";
+import { ProfileInviteLink } from "../../components/ProfileInviteLink";
 
 interface Athlete {
   id: number;
@@ -372,6 +373,10 @@ export default function Coaches() {
               options={styles}
               onAdd={(id) => addStyle(editing.id, id)}
               onRemove={(id) => removeStyle(editing.id, id)}
+            />
+            <ProfileInviteLink
+              endpoint={`/admin/coaches/${editing.id}/invite-link`}
+              showClubPicker
             />
             <label className="flex items-center gap-2 text-sm text-stone-600">
               <input

@@ -9,12 +9,27 @@ interface Club {
   name: string;
 }
 
+interface ProfileInvite {
+  profile_type: "athlete" | "coach" | "referee";
+  first_name: string;
+  last_name: string;
+  email: string;
+  club_name: string | null;
+}
+
+const PROFILE_TYPE_LABEL: Record<ProfileInvite["profile_type"], string> = {
+  athlete: "an athlete",
+  coach: "a coach",
+  referee: "a referee",
+};
+
 export default function Register() {
   const { register } = useAuth();
   const api = useApi();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const joinToken = searchParams.get("join");
+  const inviteToken = searchParams.get("invite");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [wantsAthlete, setWantsAthlete] = useState(false);
@@ -24,6 +39,9 @@ export default function Register() {
   const [clubs, setClubs] = useState<Club[]>([]);
   const [joinClub, setJoinClub] = useState<Club | null | undefined>(
     joinToken ? undefined : null
+  );
+  const [invite, setInvite] = useState<ProfileInvite | null | undefined>(
+    inviteToken ? undefined : null
   );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -49,23 +67,65 @@ export default function Register() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [joinToken]);
 
+  useEffect(() => {
+    if (!inviteToken) return;
+    api
+      .get<{ invite: ProfileInvite }>(`/public/invites/${inviteToken}`)
+      .then((res) => {
+        setInvite(res.invite);
+        setEmail(res.invite.email);
+      })
+      .catch(() => setInvite(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inviteToken]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      await register(email, password, {
-        wants_athlete: joinClub ? true : wantsAthlete,
-        wants_coach: joinClub ? false : wantsCoach,
-        wants_referee: joinClub ? false : wantsReferee,
-        requested_club_id: joinClub ? joinClub.id : clubId,
-      });
+      if (invite) {
+        await register(email, password, { invite_token: inviteToken! });
+      } else {
+        await register(email, password, {
+          wants_athlete: joinClub ? true : wantsAthlete,
+          wants_coach: joinClub ? false : wantsCoach,
+          wants_referee: joinClub ? false : wantsReferee,
+          requested_club_id: joinClub ? joinClub.id : clubId,
+        });
+      }
       navigate("/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (inviteToken && invite === undefined) {
+    return (
+      <div className="flex min-h-full flex-col justify-center gap-6 p-6">
+        <h1 className="text-2xl font-bold tracking-tight">Create account</h1>
+        <p className="text-sm text-stone-500">Loading invite link...</p>
+      </div>
+    );
+  }
+
+  if (inviteToken && invite === null) {
+    return (
+      <div className="flex min-h-full flex-col justify-center gap-6 p-6">
+        <h1 className="text-2xl font-bold tracking-tight">Create account</h1>
+        <p className="text-sm text-red-700">
+          This invite link is invalid or has expired. Ask whoever sent it to
+          generate a new one.
+        </p>
+        <p className="text-sm text-stone-600">
+          <Link to="/login" className="font-medium text-red-700">
+            Log in
+          </Link>
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -76,9 +136,12 @@ export default function Register() {
           <input
             type="email"
             required
+            readOnly={!!invite}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            className={`min-h-[44px] rounded-xl border border-stone-300 px-3 ${
+              invite ? "bg-stone-100 text-stone-500" : ""
+            }`}
           />
         </Field>
         <Field label="Password">
@@ -101,7 +164,22 @@ export default function Register() {
             below.
           </p>
         )}
-        {joinClub ? (
+        {invite ? (
+          <p className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-800">
+            You're creating an account for{" "}
+            <strong>
+              {invite.first_name} {invite.last_name}
+            </strong>{" "}
+            as {PROFILE_TYPE_LABEL[invite.profile_type]}
+            {invite.club_name && (
+              <>
+                {" "}
+                at <strong>{invite.club_name}</strong>
+              </>
+            )}
+            . You'll be approved automatically.
+          </p>
+        ) : joinClub ? (
           <p className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-800">
             You're joining <strong>{joinClub.name}</strong> as an athlete.
           </p>

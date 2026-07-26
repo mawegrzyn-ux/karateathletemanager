@@ -14,6 +14,7 @@ import {
 } from "../components/ui";
 import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
 import { CompetitionResultsSection } from "../components/CompetitionResults";
+import { ProfileInviteLink } from "../components/ProfileInviteLink";
 
 interface Athlete {
   id: number;
@@ -485,6 +486,10 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
             >
               View social profile →
             </Link>
+            <ProfileInviteLink
+              endpoint={`/athletes/${editing.id}/invite-link`}
+              showClubPicker
+            />
             <label className="flex items-center gap-2 text-sm text-stone-600">
               <input
                 type="checkbox"

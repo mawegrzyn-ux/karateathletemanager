@@ -2,8 +2,16 @@ const { Router } = require("express");
 const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
 const asyncHandler = require("../utils/asyncHandler");
+const { canManageProfileInvite } = require("../utils/permissions");
+const {
+  getInvite,
+  createInvite,
+  deleteInvite,
+} = require("../utils/profileInvites");
 
 const router = Router();
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const FIELDS = `id, first_name, last_name, date_of_birth, email, phone,
                 emergency_name, emergency_phone, grade_id, join_date, photo_url,
@@ -242,6 +250,81 @@ router.post(
       pin: rows[0].link_pin,
       expires_at: rows[0].link_pin_expires_at,
     });
+  })
+);
+
+// Invite link: lets an admin/club-admin generate a shareable registration
+// link for this specific athlete record, so whoever it belongs to can
+// create their own login pre-linked to it (and, optionally, pre-joined to
+// a club) - see POST /auth/register's invite_token handling for how the
+// link is consumed. Unlike generate-pin (parent linking, self-serve), this
+// is admin/club-admin only - there's no "isSelf" bypass.
+router.get(
+  "/:id/invite-link",
+  asyncHandler(async (req, res) => {
+    const athleteId = Number(req.params.id);
+    if (!(await canManageProfileInvite(req.user, "athlete", athleteId, null))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+    const invite = await getInvite("athlete", athleteId);
+    res.json({ invite });
+  })
+);
+
+router.post(
+  "/:id/invite-link",
+  asyncHandler(async (req, res) => {
+    const athleteId = Number(req.params.id);
+    const { email, club_id } = req.body ?? {};
+    if (typeof email !== "string" || !EMAIL_RE.test(email)) {
+      return res.status(400).json({ error: { message: "Invalid email" } });
+    }
+    if (
+      !(await canManageProfileInvite(
+        req.user,
+        "athlete",
+        athleteId,
+        club_id ?? null
+      ))
+    ) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rows } = await pool.query(`SELECT id FROM nk_athletes WHERE id = $1`, [
+      athleteId,
+    ]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: { message: "Athlete not found" } });
+    }
+
+    try {
+      const invite = await createInvite(
+        "athlete",
+        athleteId,
+        email.toLowerCase(),
+        club_id ?? null
+      );
+      res.json({ invite });
+    } catch (err) {
+      if (err.code === "23503") {
+        return res
+          .status(400)
+          .json({ error: { message: "Selected club does not exist" } });
+      }
+      throw err;
+    }
+  })
+);
+
+router.delete(
+  "/:id/invite-link",
+  asyncHandler(async (req, res) => {
+    const athleteId = Number(req.params.id);
+    if (!(await canManageProfileInvite(req.user, "athlete", athleteId, null))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+    await deleteInvite("athlete", athleteId);
+    res.status(204).end();
   })
 );
 

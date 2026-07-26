@@ -5,6 +5,10 @@ const { signSession, SESSION_MAX_AGE_MS } = require("../utils/jwt");
 const asyncHandler = require("../utils/asyncHandler");
 const pinRateLimit = require("../utils/pinRateLimit");
 const { USER_SELECT_FIELDS } = require("../utils/userFields");
+const {
+  findInviteByToken,
+  consumeInviteToken,
+} = require("../utils/profileInvites");
 
 const router = Router();
 
@@ -19,9 +23,85 @@ function setSessionCookie(res, userId) {
   });
 }
 
+// Registering via a profile-invite link skips the normal self-registration
+// path entirely: rather than flagging intent (wants_athlete etc.) for an
+// admin to later approve and turn into a brand-new profile (activateUser's
+// job), it links the new account directly to the EXISTING profile the
+// invite names, sets status to 'active' immediately (no approval step),
+// and optionally joins the club the invite carries - all in one
+// transaction, then consumes (deletes) the invite so it can't be reused.
+async function registerViaInvite(req, res, token) {
+  const { password } = req.body ?? {};
+  if (typeof password !== "string" || password.length < 8) {
+    return res.status(400).json({
+      error: { message: "Password must be at least 8 characters" },
+    });
+  }
+
+  const invite = await findInviteByToken(token);
+  if (!invite) {
+    return res
+      .status(400)
+      .json({ error: { message: "Invalid or expired invite link" } });
+  }
+
+  const idColumn = `${invite.profile_type}_id`;
+  const joinTable = `nk_user_${invite.profile_type}s`;
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `INSERT INTO nk_users (email, password_hash, status, is_admin, role, ${idColumn})
+       VALUES ($1, $2, 'active', FALSE, $3, $4)
+       RETURNING ${USER_SELECT_FIELDS}`,
+      [invite.email, passwordHash, invite.profile_type, invite.profile_id]
+    );
+    const user = rows[0];
+
+    await client.query(
+      `INSERT INTO ${joinTable} (user_id, ${idColumn}) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [user.id, invite.profile_id]
+    );
+
+    if (invite.club_id && invite.profile_type !== "referee") {
+      const clubTable =
+        invite.profile_type === "athlete" ? "nk_athlete_clubs" : "nk_coach_clubs";
+      await client.query(
+        `INSERT INTO ${clubTable} (${idColumn}, club_id) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING`,
+        [invite.profile_id, invite.club_id]
+      );
+    }
+
+    await consumeInviteToken(client, token);
+    await client.query("COMMIT");
+
+    setSessionCookie(res, user.id);
+    res.status(201).json({ user });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.code === "23505") {
+      return res.status(409).json({
+        error: { message: "An account with that email already exists" },
+      });
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 router.post(
   "/register",
   asyncHandler(async (req, res) => {
+    const { invite_token } = req.body ?? {};
+    if (typeof invite_token === "string" && invite_token) {
+      return registerViaInvite(req, res, invite_token);
+    }
+
     const {
       email,
       password,
