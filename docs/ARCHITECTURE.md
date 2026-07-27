@@ -2091,6 +2091,25 @@ unchanged.
   it reads as a seamless continuation of the tab strip rather than a
   subtly different shade of grey next to it.
 
+- **Fixed: on iPhone, the Schedule list view's floating "+" and "jump to
+  today" buttons (and the athlete social profile's floating "+ new post"
+  button) overlapped the bottom tab nav and the last bit of scrollable
+  content instead of floating cleanly above the nav.** Each of those,
+  plus `<main>`'s own bottom padding in `App.tsx` (reserving room for the
+  fixed nav so a page's last item can scroll fully into view), used a
+  flat `bottom-24`/`pb-24` (96px) with no allowance for the iPhone home
+  indicator - but the nav itself already reserves `env(safe-area-inset-
+  bottom)` on top of its own height (each tab's own `pb-[env(safe-area-
+  inset-bottom)]`), so on a device with a non-zero inset the nav renders
+  taller than that flat 96px assumes, and everything sized against the
+  old flat value ends up too low, colliding with the now-taller nav.
+  Every one of those four spots now uses `bottom-[calc(6rem+env(safe-
+  area-inset-bottom))]`/`pb-[calc(6rem+env(safe-area-inset-bottom))]`
+  instead (6rem = the original 96px) - unchanged on devices with no
+  inset (Android, desktop - `env()` there is just `0`), correctly taller
+  on an iPhone. Any *future* fixed/absolute element meant to "float
+  above the bottom nav" needs the same treatment, not a bare `bottom-24`.
+
 ### Osu — admin chatbot & MCP server
 
 "Osu" is a Claude-powered chat assistant for admins, plus a standalone MCP
