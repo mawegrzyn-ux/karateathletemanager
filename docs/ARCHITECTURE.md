@@ -2091,6 +2091,21 @@ unchanged.
   it reads as a seamless continuation of the tab strip rather than a
   subtly different shade of grey next to it.
 
+- **Fixed: an account with `is_admin` as its only capacity - no linked
+  athlete/coach/referee profile at all - showed as "Athlete" on the
+  bottom nav's Profile tab and tried to navigate to `/profile`.** The
+  tile's label/photo (`profileLabel`/`activeProfileName`/
+  `activeProfilePhoto` in `Shell`) keyed purely on `user.role`, not on
+  whether the matching `*_id` actually existed - so a dangling state
+  (`role` left over as `'athlete'` with `athlete_id` null, reachable via
+  `admin/Users.tsx` setting role and profile-linkage independently) read
+  as a real athlete profile even though there wasn't one, and tapping it
+  led to a page with nothing meaningful to show. `Shell` now computes
+  `hasProfile = !!(athlete_id || coach_id || referee_id)` first; with no
+  profile at all it renders a plain static `<div>` reading "Admin" in
+  the tile's place - same size/position, but not a `NavLink`, since
+  there's no `/profile` content worth linking to (every role/id-gated
+  section on `Profile.tsx` would stay hidden for it anyway).
 - **Fixed: on iPhone, the Schedule list view's floating "+" and "jump to
   today" buttons (and the athlete social profile's floating "+ new post"
   button) overlapped the bottom tab nav and the last bit of scrollable
