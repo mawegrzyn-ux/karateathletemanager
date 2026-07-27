@@ -1059,9 +1059,12 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       {/* Floating "+" replaces the old header-row AddButton now that the
           top bar's right edge is taken by the filter icon - bottom-left
           (opposite the list view's "Jump to today" FAB on the right) so
-          they never overlap, and bottom-24 clears the bottom tab nav the
-          same way that button's offset does. */}
-      <div className="fixed bottom-24 left-4 z-20">
+          they never overlap. The bottom offset adds env(safe-area-inset-
+          bottom) on top of the base 6rem clearance - the bottom nav's own
+          tabs reserve that same inset for the iPhone home indicator, so
+          without matching it here the FAB would sit too low and collide
+          with the (taller, on iPhone) nav. */}
+      <div className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] left-4 z-20">
         <AddButton onClick={openCreate} />
       </div>
 
@@ -1386,7 +1389,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             scrollToToday("smooth");
           }}
           aria-label="Jump to today"
-          className="fixed bottom-24 right-4 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-red-600 text-lg text-white shadow-lg"
+          className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-red-600 text-lg text-white shadow-lg"
         >
           ↑
         </button>

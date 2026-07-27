@@ -541,7 +541,7 @@ function PostsFeed({
             type="button"
             onClick={() => setComposerOpen(true)}
             aria-label="New post"
-            className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-3xl leading-none text-white shadow-lg"
+            className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-3xl leading-none text-white shadow-lg"
           >
             +
           </button>
