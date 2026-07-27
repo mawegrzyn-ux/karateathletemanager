@@ -44,6 +44,7 @@ const PROFILE_LABELS: Record<string, string> = {
 
 function Shell() {
   const { user } = useAuth();
+  const hasProfile = !!(user?.athlete_id || user?.coach_id || user?.referee_id);
   const tabs = resolveNavTabs(
     { role: user?.role ?? null, is_admin: !!user?.is_admin },
     user?.club_forced_nav_tabs ?? user?.nav_tabs ?? null
@@ -79,6 +80,24 @@ function Shell() {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 flex shadow-[0_-1px_2px_rgba(28,25,23,0.04),0_-8px_20px_-6px_rgba(28,25,23,0.10)]">
+        {!hasProfile ? (
+          // An account with is_admin as its only capacity (no linked
+          // athlete/coach/referee record at all) has no "/profile" worth
+          // navigating to - Profile.tsx's role/id-gated sections all stay
+          // hidden for it anyway, so the tile is just a static label
+          // rather than a tappable link that goes nowhere useful.
+          <div
+            className="relative flex min-h-[44px] w-24 shrink-0 flex-col items-center justify-center gap-0.5 pb-[env(safe-area-inset-bottom)] pl-2 pr-5 text-xs font-medium text-stone-700"
+          >
+            <span className="absolute inset-y-0 left-0 right-0 -z-20 bg-white/95 backdrop-blur" />
+            <span
+              className="absolute inset-y-0 left-0 right-0 -z-10 bg-red-200 bg-cover bg-center"
+              style={{ clipPath: "polygon(0 0, 100% 0, 70% 100%, 0 100%)" }}
+            />
+            <Avatar name={profileName} size={22} />
+            <span className="font-display uppercase tracking-wide">Admin</span>
+          </div>
+        ) : (
         <NavLink
           to="/profile"
           className={({ isActive }) =>
@@ -138,6 +157,7 @@ function Shell() {
             </>
           )}
         </NavLink>
+        )}
         <div className="flex flex-1 gap-1 overflow-x-auto bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur">
           {tabs.map((tab) => (
             <NavLink
