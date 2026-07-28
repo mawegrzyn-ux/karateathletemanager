@@ -1393,21 +1393,30 @@ coach-run attendance) — this is personal athlete itinerary planning.
   the done state" rather than "crossed off."
 - **Combined date+time picker**: `DateTimeField` (`components/ui.tsx`)
   replaces the old side-by-side date-`<input>` + time-`<input>` pair
-  everywhere both are edited together (event create/edit, itinerary item
-  create/edit) with one
+  everywhere a single date+time is edited together (itinerary item
+  create/edit, the Training tab's quick-add composer) with one
   tappable field showing both values together ("Sat, Jul 25, 2026 ·
   14:30"), opening a `Modal` with both the Date input and the Time input
   (each with its own native picker — a calendar for date, a clock for
   time) stacked and visible at once, so the user can set either or both
-  without switching between separate screens. It
-  intentionally does *not* wrap itself in `Field` (which renders a
-  `<label>`): nesting the Modal's own buttons inside the same `<label>`
-  as the trigger button caused the browser's implicit label-click-
-  forwarding to *also* re-fire the trigger's click on every tap inside
-  the modal (reopening it immediately after "Done"), so `DateTimeField`
-  renders its own label `<span>` instead. Where a field only has a time
-  (no separate date, e.g. an itinerary item's "End time") it stays a
+  without switching between separate screens. Where a field only has a
+  time (no separate date, e.g. an itinerary item's "End time") it stays a
   plain time `<input>`.
+- **Combined start/end date+time picker**: `DateTimeRangeField`
+  (`components/ui.tsx`) is the paired-range sibling of `DateTimeField`,
+  used everywhere an event's start *and* end (each its own date+time) are
+  edited together (event create/edit). It renders two trigger fields
+  (Start, End), each still showing its own value at a glance, but both
+  open the *same* `Modal` — Start's Date+Time, then End's Date+Time, then
+  one Done button — so setting the whole range doesn't mean closing one
+  picker and reopening another the way two separate `DateTimeField`s
+  would.
+  Neither component wraps itself in `Field` (which renders a
+  `<label>`): nesting the Modal's own buttons inside the same `<label>`
+  as a trigger button caused the browser's implicit label-click-
+  forwarding to *also* re-fire the trigger's click on every tap inside
+  the modal (reopening it immediately after "Done"), so both render
+  their own label `<span>`s instead.
 - **List view: search, type filter, hide-completed, and multi-day events
   on every spanned day**: the header's search icon opens a slide-down
   search row (see above) driving `query`, and the filter icon opens a
