@@ -1396,9 +1396,10 @@ coach-run attendance) — this is personal athlete itinerary planning.
   everywhere both are edited together (event create/edit, itinerary item
   create/edit) with one
   tappable field showing both values together ("Sat, Jul 25, 2026 ·
-  14:30"), opening a `Modal` with a Date/Time pill toggle so the user can
-  flip between adjusting either value without closing and reopening
-  separate inputs — picking a date auto-advances to the Time tab. It
+  14:30"), opening a `Modal` with both the Date input and the Time input
+  (each with its own native picker — a calendar for date, a clock for
+  time) stacked and visible at once, so the user can set either or both
+  without switching between separate screens. It
   intentionally does *not* wrap itself in `Field` (which renders a
   `<label>`): nesting the Modal's own buttons inside the same `<label>`
   as the trigger button caused the browser's implicit label-click-
