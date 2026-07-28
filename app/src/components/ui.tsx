@@ -494,7 +494,6 @@ export function DateTimeField({
   required?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"date" | "time">("date");
 
   const display = date && time
     ? `${dateLabel(date)} · ${time}`
@@ -510,10 +509,7 @@ export function DateTimeField({
       <span className="text-sm font-medium text-stone-700">{label}</span>
       <button
         type="button"
-        onClick={() => {
-          setTab("date");
-          setOpen(true);
-        }}
+        onClick={() => setOpen(true)}
         className="flex min-h-[44px] items-center justify-between rounded-xl border border-stone-300 px-3 text-left"
       >
         <span className={date && time ? "" : "text-stone-400"}>{display}</span>
@@ -522,53 +518,29 @@ export function DateTimeField({
 
       <Modal open={open} onClose={() => setOpen(false)}>
         <div className="flex flex-col gap-4">
-          <div className="flex rounded-full bg-stone-100 p-1">
-            <button
-              type="button"
-              onClick={() => setTab("date")}
-              className={`flex-1 rounded-full py-2 text-sm font-medium transition-colors ${
-                tab === "date" ? "bg-white text-stone-900 shadow-card" : "text-stone-500"
-              }`}
-            >
-              Date
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("time")}
-              className={`flex-1 rounded-full py-2 text-sm font-medium transition-colors ${
-                tab === "time" ? "bg-white text-stone-900 shadow-card" : "text-stone-500"
-              }`}
-            >
-              Time
-            </button>
-          </div>
-
-          {tab === "date" ? (
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-stone-700">Date</span>
             <input
-              key="date"
               type="date"
               autoFocus
               required={required}
               min={min}
               max={max}
               value={date}
-              onChange={(e) => {
-                onDateChange(e.target.value);
-                setTab("time");
-              }}
+              onChange={(e) => onDateChange(e.target.value)}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
             />
-          ) : (
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-stone-700">Time</span>
             <input
-              key="time"
               type="time"
-              autoFocus
               required={required}
               value={time}
               onChange={(e) => onTimeChange(e.target.value)}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
             />
-          )}
+          </div>
 
           <button
             type="button"

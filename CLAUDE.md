@@ -132,13 +132,14 @@ Wherever a record has a paired date and time that get edited together
 quick-add composer), use `DateTimeField` (`app/src/components/ui.tsx`)
 instead of two side-by-side `<input type="date">`/`<input type="time">`
 fields. It renders one tappable field showing both values together
-("Sat, Jul 25, 2026 · 14:30") that opens a `Modal` with a Date/Time pill
-toggle, so the user can flip between adjusting either value without
-closing and reopening separate inputs — picking a date auto-advances to
-the Time tab. Where a field only ever has a time with no paired date
-(e.g. an itinerary item's "End time", which shares the item's own date),
-leave it as a plain time `<input>` — `DateTimeField` is for pairs, not a
-blanket replacement for every date or time input.
+("Sat, Jul 25, 2026 · 14:30") that opens a `Modal` with both the Date
+input and the Time input (each with its own native picker — a calendar
+for date, a clock for time) stacked and visible at once, so the user can
+set either or both without switching between separate screens. Where a
+field only ever has a time with no paired date (e.g. an itinerary item's
+"End time", which shares the item's own date), leave it as a plain time
+`<input>` — `DateTimeField` is for pairs, not a blanket replacement for
+every date or time input.
 
 Don't wrap `DateTimeField` itself in `Field` (or any other `<label>`
 wrapper): a `<label>` containing more than one interactive control has a
