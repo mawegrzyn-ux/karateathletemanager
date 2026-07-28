@@ -20,6 +20,7 @@ import {
   Field,
   Badge,
   DateTimeField,
+  DateTimeRangeField,
   MediaField,
   Toast,
 } from "../components/ui";
@@ -1704,21 +1705,16 @@ function CreateEventWizard({
 
       {stage === "datetime" && (
         <>
-          <DateTimeField
-            label="Start"
+          <DateTimeRangeField
             required
-            date={form.start_date}
-            time={form.start_time}
-            onDateChange={(v) => setForm({ ...form, start_date: v })}
-            onTimeChange={(v) => setForm({ ...form, start_time: v })}
-          />
-          <DateTimeField
-            label="End"
-            required
-            date={form.end_date}
-            time={form.end_time}
-            onDateChange={(v) => setForm({ ...form, end_date: v })}
-            onTimeChange={(v) => setForm({ ...form, end_time: v })}
+            startDate={form.start_date}
+            startTime={form.start_time}
+            endDate={form.end_date}
+            endTime={form.end_time}
+            onStartDateChange={(v) => setForm({ ...form, start_date: v })}
+            onStartTimeChange={(v) => setForm({ ...form, start_time: v })}
+            onEndDateChange={(v) => setForm({ ...form, end_date: v })}
+            onEndTimeChange={(v) => setForm({ ...form, end_time: v })}
           />
           {form.start_date && form.end_date && form.start_date !== form.end_date && (
             <label className="flex min-h-[44px] items-center gap-2 rounded-xl bg-stone-50 px-3 text-sm text-stone-700">
@@ -2168,19 +2164,15 @@ function EventDetail({
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
-          <DateTimeField
-            label="Start"
-            date={toDateInput(event.start_date)}
-            time={toTimeInput(event.start_time)}
-            onDateChange={(v) => updateEvent({ start_date: v })}
-            onTimeChange={(v) => updateEvent({ start_time: v || null })}
-          />
-          <DateTimeField
-            label="End"
-            date={toDateInput(event.end_date)}
-            time={toTimeInput(event.end_time)}
-            onDateChange={(v) => updateEvent({ end_date: v })}
-            onTimeChange={(v) => updateEvent({ end_time: v || null })}
+          <DateTimeRangeField
+            startDate={toDateInput(event.start_date)}
+            startTime={toTimeInput(event.start_time)}
+            endDate={toDateInput(event.end_date)}
+            endTime={toTimeInput(event.end_time)}
+            onStartDateChange={(v) => updateEvent({ start_date: v })}
+            onStartTimeChange={(v) => updateEvent({ start_time: v || null })}
+            onEndDateChange={(v) => updateEvent({ end_date: v })}
+            onEndTimeChange={(v) => updateEvent({ end_time: v || null })}
           />
           {toDateInput(event.start_date) !== toDateInput(event.end_date) && (
             <label className="flex min-h-[44px] items-center gap-2 rounded-xl bg-stone-50 px-3 text-sm text-stone-700">

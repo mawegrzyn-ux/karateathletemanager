@@ -127,28 +127,35 @@ list rather than opening anything else.
 
 ## UI convention: combined date+time picker
 
-Wherever a record has a paired date and time that get edited together
-(an event's start/end, an itinerary item's start, the Training tab's
-quick-add composer), use `DateTimeField` (`app/src/components/ui.tsx`)
-instead of two side-by-side `<input type="date">`/`<input type="time">`
-fields. It renders one tappable field showing both values together
-("Sat, Jul 25, 2026 · 14:30") that opens a `Modal` with both the Date
-input and the Time input (each with its own native picker — a calendar
-for date, a clock for time) stacked and visible at once, so the user can
-set either or both without switching between separate screens. Where a
-field only ever has a time with no paired date (e.g. an itinerary item's
-"End time", which shares the item's own date), leave it as a plain time
-`<input>` — `DateTimeField` is for pairs, not a blanket replacement for
-every date or time input.
+Wherever a record has a single date and time that get edited together
+(an itinerary item's start, the Training tab's quick-add composer), use
+`DateTimeField` (`app/src/components/ui.tsx`) instead of two side-by-side
+`<input type="date">`/`<input type="time">` fields. It renders one
+tappable field showing both values together ("Sat, Jul 25, 2026 ·
+14:30") that opens a `Modal` with both the Date input and the Time input
+(each with its own native picker — a calendar for date, a clock for
+time) stacked and visible at once, so the user can set either or both
+without switching between separate screens. Where a field only ever has
+a time with no paired date (e.g. an itinerary item's "End time", which
+shares the item's own date), leave it as a plain time `<input>` —
+`DateTimeField` is for pairs, not a blanket replacement for every date or
+time input.
 
-Don't wrap `DateTimeField` itself in `Field` (or any other `<label>`
-wrapper): a `<label>` containing more than one interactive control has a
-tendency to re-fire its implicit click-forwarding onto the *first*
-control inside it whenever another control inside the same label is
-clicked (observed here as clicking the modal's "Done" button also
-re-triggering the trigger button's `onClick`, reopening the modal it had
-just closed). `DateTimeField` renders its own label `<span>` instead of
-using `Field` for exactly this reason.
+Where a record has a *start and end* date+time together (an event's
+start/end), use `DateTimeRangeField` instead — same idea, but its two
+trigger fields (Start, End) share one `Modal` showing both pairs stacked
+together (Start's Date+Time, then End's Date+Time, then one Done
+button), so setting the whole range doesn't mean closing one picker and
+reopening another.
+
+Don't wrap `DateTimeField`/`DateTimeRangeField` themselves in `Field` (or
+any other `<label>` wrapper): a `<label>` containing more than one
+interactive control has a tendency to re-fire its implicit
+click-forwarding onto the *first* control inside it whenever another
+control inside the same label is clicked (observed here as clicking the
+modal's "Done" button also re-triggering the trigger button's `onClick`,
+reopening the modal it had just closed). Both components render their
+own label `<span>`s instead of using `Field` for exactly this reason.
 
 ## UI convention: view/edit toggle for a self-service page
 

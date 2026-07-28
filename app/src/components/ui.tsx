@@ -471,9 +471,9 @@ export function Modal({
 
 // Single combined date+time experience: one tappable field shows both
 // values together, and opens a lightweight Modal (not a stacked Drawer -
-// this sits inside forms that are often already inside a Drawer) with a
-// Date/Time pill toggle so the user can flip between adjusting either
-// value without closing and reopening separate inputs.
+// this sits inside forms that are often already inside a Drawer) with
+// both the Date input and the Time input stacked and visible at once, so
+// the user can set either or both without switching between screens.
 export function DateTimeField({
   label,
   date,
@@ -540,6 +540,146 @@ export function DateTimeField({
               onChange={(e) => onTimeChange(e.target.value)}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
             />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
+          >
+            Done
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// Paired start/end date+time: two trigger fields (each still showing its
+// own value at a glance) but sharing one Modal, so setting the full range
+// doesn't mean closing one picker and reopening another - both Start and
+// End (date and time) are visible and editable together in the same
+// screen.
+export function DateTimeRangeField({
+  startLabel = "Start",
+  endLabel = "End",
+  startDate,
+  startTime,
+  endDate,
+  endTime,
+  onStartDateChange,
+  onStartTimeChange,
+  onEndDateChange,
+  onEndTimeChange,
+  min,
+  max,
+  required = false,
+}: {
+  startLabel?: string;
+  endLabel?: string;
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+  onStartDateChange: (value: string) => void;
+  onStartTimeChange: (value: string) => void;
+  onEndDateChange: (value: string) => void;
+  onEndTimeChange: (value: string) => void;
+  min?: string;
+  max?: string;
+  required?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const display = (date: string, time: string) =>
+    date && time
+      ? `${dateLabel(date)} · ${time}`
+      : date
+        ? dateLabel(date)
+        : time || "Set date & time";
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-stone-700">{startLabel}</span>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex min-h-[44px] items-center justify-between rounded-xl border border-stone-300 px-3 text-left"
+        >
+          <span className={startDate && startTime ? "" : "text-stone-400"}>
+            {display(startDate, startTime)}
+          </span>
+          <span aria-hidden>📅</span>
+        </button>
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-stone-700">{endLabel}</span>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex min-h-[44px] items-center justify-between rounded-xl border border-stone-300 px-3 text-left"
+        >
+          <span className={endDate && endTime ? "" : "text-stone-400"}>
+            {display(endDate, endTime)}
+          </span>
+          <span aria-hidden>📅</span>
+        </button>
+      </div>
+
+      <Modal open={open} onClose={() => setOpen(false)}>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-semibold text-stone-900">{startLabel}</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-stone-700">Date</span>
+              <input
+                type="date"
+                autoFocus
+                required={required}
+                min={min}
+                max={max}
+                value={startDate}
+                onChange={(e) => onStartDateChange(e.target.value)}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-stone-700">Time</span>
+              <input
+                type="time"
+                required={required}
+                value={startTime}
+                onChange={(e) => onStartTimeChange(e.target.value)}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-stone-200 pt-4">
+            <span className="text-sm font-semibold text-stone-900">{endLabel}</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-stone-700">Date</span>
+              <input
+                type="date"
+                required={required}
+                min={min}
+                max={max}
+                value={endDate}
+                onChange={(e) => onEndDateChange(e.target.value)}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-stone-700">Time</span>
+              <input
+                type="time"
+                required={required}
+                value={endTime}
+                onChange={(e) => onEndTimeChange(e.target.value)}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
+              />
+            </div>
           </div>
 
           <button
