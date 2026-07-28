@@ -3,9 +3,11 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import { Link } from "react-router-dom";
 import { useApi } from "../hooks/useApi";
@@ -834,8 +836,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     setDrawer("create");
   }
 
-  async function createEvent(e: FormEvent) {
-    e.preventDefault();
+  async function createEvent() {
     if (!form.title.trim() || !form.start_date || !form.end_date) return;
 
     const payload: Record<string, unknown> = {
@@ -1400,15 +1401,189 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
         onClose={() => setDrawer("closed")}
         title="New event"
       >
-        <form onSubmit={createEvent} className="flex flex-col gap-4">
-          <Field label="Title">
-            <input
-              required
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
+        {drawer === "create" && (
+          <CreateEventWizard
+            form={form}
+            setForm={setForm}
+            formAthleteIds={formAthleteIds}
+            setFormAthleteIds={setFormAthleteIds}
+            onSubmit={createEvent}
+            clubs={clubs}
+            eventTypes={eventTypes}
+            modules={modules}
+            katas={katas}
+            venues={venues}
+            squads={squads}
+            groups={groups}
+            athletes={athletes}
+            canPickAthletes={canPickAthletes}
+          />
+        )}
+      </Drawer>
+
+      <Drawer
+        open={editing !== null}
+        onClose={() => setDrawer("closed")}
+        title={editing?.title ?? ""}
+      >
+        {editing && (
+          <EventDetail
+            key={editing.id}
+            eventId={editing.id}
+            canPickAthletes={canPickAthletes}
+            allAthletes={athletes}
+            modules={modules}
+            katas={katas}
+            venues={venues}
+            squads={squads}
+            groups={groups}
+            eventTypes={eventTypes}
+            hasSeries={
+              editing.recurrence_id != null &&
+              events.filter((e) => e.recurrence_id === editing.recurrence_id)
+                .length > 1
+            }
+            onUpdated={updateEventInList}
+            onDeleted={() => deleteEvent(editing.id)}
+            onDeletedSeries={() => deleteEventSeries(editing)}
+            onDuplicate={(event, athleteIds) => duplicateEvent(event, athleteIds)}
+          />
+        )}
+      </Drawer>
+
+      <RecordResultDrawer
+        event={resultDrawerEvent}
+        athleteId={user?.athlete_id ?? null}
+        onClose={() => setResultDrawerEvent(null)}
+        onSaved={(place) => {
+          if (resultDrawerEvent) {
+            const savedId = resultDrawerEvent.id;
+            setEvents((prev) =>
+              prev
+                ? prev.map((e) =>
+                    e.id === savedId ? { ...e, my_result_place: place } : e
+                  )
+                : prev
+            );
+          }
+          setResultDrawerEvent(null);
+        }}
+      />
+
+      <QuickPostDrawer
+        event={quickPost?.event ?? null}
+        typeLabel={quickPost?.typeLabel ?? ""}
+        athleteId={user?.athlete_id ?? null}
+        onClose={() => setQuickPost(null)}
+      />
+    </div>
+  );
+}
+
+type CreateStage =
+  | "type"
+  | "details"
+  | "datetime"
+  | "repeat"
+  | "location"
+  | "athletes";
+
+const CREATE_STAGE_LABELS: Record<CreateStage, string> = {
+  type: "Type",
+  details: "Details",
+  datetime: "Date & time",
+  repeat: "Repeat",
+  location: "Location",
+  athletes: "Athletes",
+};
+
+// canPickAthletes is false for a plain athlete creating their own event -
+// the backend already self-assigns them regardless of what athlete_ids
+// carries (resolveAthleteIds in events.js always resolves an athlete
+// caller to just [user.athlete_id]), so asking them to pick athletes
+// would be pointless; the wizard skips that stage entirely rather than
+// showing a picker whose answer is ignored.
+function createStagesFor(canPickAthletes: boolean): CreateStage[] {
+  const stages: CreateStage[] = ["type", "details", "datetime", "repeat", "location"];
+  if (canPickAthletes) stages.push("athletes");
+  return stages;
+}
+
+// Creating a new event walks through a step-by-step wizard rather than one
+// long scrolling form (editing an existing event stays EventDetail's flat
+// form below, unchanged - a wizard's one-screen-at-a-time flow fits "start
+// from nothing" much better than "look at everything already filled in and
+// tweak one field"). Type comes first as a full-page tile grid (mirrors the
+// header's own type-filter tiles, just single-select and auto-advancing on
+// tap instead of toggling a filter set) since it decides what the rest of
+// the wizard even asks: a training event's Details stage gets a training-
+// module picker, a kata_performance event's gets a kata picker (auto-
+// filling the title), everything else's Details stage is just the title.
+// Both pickers are skippable by design - SingleSelectPicker already allows
+// leaving nothing selected, and Next doesn't require a choice there.
+function CreateEventWizard({
+  form,
+  setForm,
+  formAthleteIds,
+  setFormAthleteIds,
+  onSubmit,
+  clubs,
+  eventTypes,
+  modules,
+  katas,
+  venues,
+  squads,
+  groups,
+  athletes,
+  canPickAthletes,
+}: {
+  form: typeof EMPTY_FORM;
+  setForm: Dispatch<SetStateAction<typeof EMPTY_FORM>>;
+  formAthleteIds: number[];
+  setFormAthleteIds: Dispatch<SetStateAction<number[]>>;
+  onSubmit: () => void;
+  clubs: Club[];
+  eventTypes: EventTypeRow[];
+  modules: TrainingModule[];
+  katas: Kata[];
+  venues: Venue[];
+  squads: AthleteGroup[];
+  groups: AthleteGroup[];
+  athletes: Person[];
+  canPickAthletes: boolean;
+}) {
+  const stages = createStagesFor(canPickAthletes);
+  const [stageIndex, setStageIndex] = useState(0);
+  const stage = stages[stageIndex];
+
+  function goBack() {
+    setStageIndex((s) => Math.max(0, s - 1));
+  }
+  function goNext() {
+    setStageIndex((s) => Math.min(stages.length - 1, s + 1));
+  }
+
+  const canProceed =
+    stage === "details"
+      ? form.title.trim() !== ""
+      : stage === "datetime"
+        ? !!form.start_date && !!form.end_date
+        : stage === "repeat"
+          ? form.repeat_freq === "none" ||
+            form.repeat_end_type !== "until" ||
+            !!form.repeat_until
+          : true;
+
+  const typesForClub = eventTypes.filter((t) => t.club_id === form.club_id);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <span className="text-xs font-medium text-stone-500">
+        {CREATE_STAGE_LABELS[stage]} · {stageIndex + 1} of {stages.length}
+      </span>
+
+      {stage === "type" && (
+        <>
           {clubs.length > 1 && (
             <Field label="Club">
               <select
@@ -1432,20 +1607,59 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               </select>
             </Field>
           )}
-          <Field label="Type">
-            <select
-              value={form.event_type}
-              onChange={(e) => setForm({ ...form, event_type: e.target.value })}
+          <div className="grid grid-cols-3 gap-3">
+            {typesForClub.map((t) => {
+              const selected = form.event_type === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => {
+                    setForm({ ...form, event_type: t.key });
+                    goNext();
+                  }}
+                  className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl p-2 text-center shadow-card ${
+                    selected ? "ring-2 ring-red-600" : ""
+                  }`}
+                  style={{ backgroundColor: t.bg_color }}
+                >
+                  <span
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-lg"
+                    style={{ backgroundColor: "rgba(255,255,255,0.5)" }}
+                  >
+                    {t.icon}
+                  </span>
+                  <span className="text-xs font-medium text-white">{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {typesForClub.length === 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="px-1 py-2 text-sm text-stone-500">
+                No event types to choose from yet.
+              </p>
+              <button
+                type="button"
+                onClick={goNext}
+                className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {stage === "details" && (
+        <>
+          <Field label="Title">
+            <input
+              required
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            >
-              {eventTypes
-                .filter((t) => t.club_id === form.club_id)
-                .map((t) => (
-                  <option key={t.key} value={t.key}>
-                    {t.icon} {t.label}
-                  </option>
-                ))}
-            </select>
+            />
           </Field>
           <Field label="Icon (optional)">
             <input
@@ -1461,6 +1675,35 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
+          {form.event_type === "training" && (
+            <SingleSelectPicker
+              label="Training module"
+              placeholder="Search training modules..."
+              options={modules.map((m) => ({ id: m.id, label: m.title }))}
+              selectedId={form.training_module_id}
+              onSelect={(id) => setForm({ ...form, training_module_id: id })}
+            />
+          )}
+          {form.event_type === "kata_performance" && (
+            <SingleSelectPicker
+              label="Kata"
+              placeholder="Search katas..."
+              options={katas.map((k) => ({ id: k.id, label: kataLabel(k) }))}
+              selectedId={form.kata_id}
+              onSelect={(id) =>
+                setForm({
+                  ...form,
+                  kata_id: id,
+                  title: id ? katas.find((k) => k.id === id)?.name ?? form.title : form.title,
+                })
+              }
+            />
+          )}
+        </>
+      )}
+
+      {stage === "datetime" && (
+        <>
           <DateTimeField
             label="Start"
             required
@@ -1489,53 +1732,11 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               Same start/end time every day (instead of one continuous span)
             </label>
           )}
-          <Field label="Location">
-            <input
-              value={form.location}
-              onChange={(e) => setForm({ ...form, location: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
-          <SingleSelectPicker
-            label="Venue"
-            placeholder="Search venues..."
-            options={venues.map((v) => ({ id: v.id, label: venueLabel(v) }))}
-            selectedId={form.venue_id}
-            onSelect={(id) => setForm({ ...form, venue_id: id })}
-          />
-          <Field label="Notes">
-            <textarea
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              className="rounded-xl border border-stone-300 px-3 py-2"
-            />
-          </Field>
+        </>
+      )}
 
-          {form.event_type === "training" && (
-            <SingleSelectPicker
-              label="Training module"
-              placeholder="Search training modules..."
-              options={modules.map((m) => ({ id: m.id, label: m.title }))}
-              selectedId={form.training_module_id}
-              onSelect={(id) => setForm({ ...form, training_module_id: id })}
-            />
-          )}
-          {form.event_type === "kata_performance" && (
-            <SingleSelectPicker
-              label="Kata"
-              placeholder="Search katas..."
-              options={katas.map((k) => ({ id: k.id, label: kataLabel(k) }))}
-              selectedId={form.kata_id}
-              onSelect={(id) =>
-                setForm({
-                  ...form,
-                  kata_id: id,
-                  title: id ? katas.find((k) => k.id === id)?.name ?? form.title : form.title,
-                })
-              }
-            />
-          )}
-
+      {stage === "repeat" && (
+        <>
           <Field label="Repeats">
             <select
               value={form.repeat_freq}
@@ -1686,94 +1887,88 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
               )}
             </>
           )}
+        </>
+      )}
 
-          {canPickAthletes && (
-            <>
-              <GroupQuickAdd
-                squads={squads}
-                groups={groups}
-                onAddAthletes={(ids) =>
-                  setFormAthleteIds((prev) => [
-                    ...prev,
-                    ...ids.filter((id) => !prev.includes(id)),
-                  ])
-                }
-              />
-              <AthletePicker
-                ids={formAthleteIds}
-                options={athletes}
-                onAdd={(id) => setFormAthleteIds((prev) => [...prev, id])}
-                onRemove={(id) =>
-                  setFormAthleteIds((prev) => prev.filter((i) => i !== id))
-                }
-              />
-            </>
-          )}
+      {stage === "location" && (
+        <>
+          <Field label="Location">
+            <input
+              value={form.location}
+              onChange={(e) => setForm({ ...form, location: e.target.value })}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+          <SingleSelectPicker
+            label="Venue"
+            placeholder="Search venues..."
+            options={venues.map((v) => ({ id: v.id, label: venueLabel(v) }))}
+            selectedId={form.venue_id}
+            onSelect={(id) => setForm({ ...form, venue_id: id })}
+          />
+          <Field label="Notes">
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              className="rounded-xl border border-stone-300 px-3 py-2"
+            />
+          </Field>
+        </>
+      )}
 
-          <button
-            type="submit"
-            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
-          >
-            Create
-          </button>
-        </form>
-      </Drawer>
-
-      <Drawer
-        open={editing !== null}
-        onClose={() => setDrawer("closed")}
-        title={editing?.title ?? ""}
-      >
-        {editing && (
-          <EventDetail
-            key={editing.id}
-            eventId={editing.id}
-            canPickAthletes={canPickAthletes}
-            allAthletes={athletes}
-            modules={modules}
-            katas={katas}
-            venues={venues}
+      {stage === "athletes" && (
+        <>
+          <GroupQuickAdd
             squads={squads}
             groups={groups}
-            eventTypes={eventTypes}
-            hasSeries={
-              editing.recurrence_id != null &&
-              events.filter((e) => e.recurrence_id === editing.recurrence_id)
-                .length > 1
+            onAddAthletes={(ids) =>
+              setFormAthleteIds((prev) => [
+                ...prev,
+                ...ids.filter((id) => !prev.includes(id)),
+              ])
             }
-            onUpdated={updateEventInList}
-            onDeleted={() => deleteEvent(editing.id)}
-            onDeletedSeries={() => deleteEventSeries(editing)}
-            onDuplicate={(event, athleteIds) => duplicateEvent(event, athleteIds)}
           />
-        )}
-      </Drawer>
+          <AthletePicker
+            ids={formAthleteIds}
+            options={athletes}
+            onAdd={(id) => setFormAthleteIds((prev) => [...prev, id])}
+            onRemove={(id) =>
+              setFormAthleteIds((prev) => prev.filter((i) => i !== id))
+            }
+          />
+        </>
+      )}
 
-      <RecordResultDrawer
-        event={resultDrawerEvent}
-        athleteId={user?.athlete_id ?? null}
-        onClose={() => setResultDrawerEvent(null)}
-        onSaved={(place) => {
-          if (resultDrawerEvent) {
-            const savedId = resultDrawerEvent.id;
-            setEvents((prev) =>
-              prev
-                ? prev.map((e) =>
-                    e.id === savedId ? { ...e, my_result_place: place } : e
-                  )
-                : prev
-            );
-          }
-          setResultDrawerEvent(null);
-        }}
-      />
-
-      <QuickPostDrawer
-        event={quickPost?.event ?? null}
-        typeLabel={quickPost?.typeLabel ?? ""}
-        athleteId={user?.athlete_id ?? null}
-        onClose={() => setQuickPost(null)}
-      />
+      {stage !== "type" && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={goBack}
+            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
+          >
+            ← Back
+          </button>
+          {stageIndex < stages.length - 1 ? (
+            <button
+              type="button"
+              onClick={goNext}
+              disabled={!canProceed}
+              className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+            >
+              Next →
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!canProceed}
+              className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+            >
+              Create
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

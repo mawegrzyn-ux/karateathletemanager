@@ -1675,6 +1675,48 @@ coach-run attendance) — this is personal athlete itinerary planning.
   is deliberately left alone - ticking on every scroll pixel would be
   a constant buzz rather than useful feedback; only these discrete,
   boundary-crossing moments get one.
+- **Creating a new event is a step-by-step wizard; editing one stays the
+  existing flat `EventDetail` form, unchanged.** `CreateEventWizard`
+  (`Schedule.tsx`) replaces the old single scrolling "New event" form,
+  walking through `createStagesFor(canPickAthletes)`: Type → Details →
+  Date & time → Repeat → Location → (Athletes, only if `canPickAthletes`).
+  Every stage reuses the exact same fields/components the flat form
+  already had (`DateTimeField`, `SingleSelectPicker`, `AthletePicker`,
+  the weekday-chip repeat UI, etc.) - this is a reorganization into
+  screens, not new field logic.
+  - **Type** is a full-page tile grid (`grid-cols-3`, `aspect-square`,
+    each type's own `bg_color`/`icon` — visually identical to the
+    header's own type-filter tiles, just single-select instead of
+    toggling a filter `Set`) rather than a `<select>`. Tapping a tile
+    both sets `form.event_type` and auto-advances to the next stage in
+    one tap - a full-page picker screen felt wrong to also require a
+    separate "Next" tap once you've already made the one choice it
+    exists for. If the current club has no event types to show (e.g. a
+    plain athlete, whose `openCreate` never gets a real `club_id` since
+    `canPickAthletes` gates the `/admin/clubs` fetch entirely), the tile
+    grid is simply empty - a plain "Next →" button still appears so this
+    never becomes a hard dead-end; the wizard proceeds with whatever
+    `event_type` the form already defaults to ("training").
+  - **Details** is title + optional icon override, plus a stage-specific
+    picker for exactly two types: a training event gets a `training`
+    module `SingleSelectPicker`, a `kata_performance` event gets a kata
+    one (still auto-filling the title from the chosen kata's name, same
+    as the flat form always did). Both pickers are freely skippable -
+    `SingleSelectPicker` already allows leaving nothing selected, and
+    advancing past this stage only requires a non-empty title.
+  - **Athletes** is dropped from the stage list entirely (not just
+    hidden) when `canPickAthletes` is false - a plain athlete creating
+    their own event was never going to have their picks matter anyway:
+    `resolveAthleteIds` in `events.js` always resolves an athlete caller
+    straight to `[user.athlete_id]`, ignoring whatever `athlete_ids` the
+    request carries. Asking would just be a step with no effect.
+  - Per-stage "Next" is disabled until that stage's own minimum is met
+    (a title on Details; both dates on Date & time; either "Does not
+    repeat" or a valid end condition on Repeat) - Location and the final
+    Athletes stage have nothing required, so their "Next"/"Create" is
+    always enabled. `createEvent` itself dropped its `FormEvent`
+    parameter (no more single `<form onSubmit>` spanning every stage) -
+    it's called directly from whichever stage happens to be last.
 
 Self-service email/password registration, gated by admin approval — not
 third-party OAuth.
