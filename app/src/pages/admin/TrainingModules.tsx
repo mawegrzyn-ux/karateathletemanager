@@ -36,6 +36,26 @@ interface TrainingModuleType {
   icon: string | null;
 }
 
+// Matches the funnel icon used for Schedule's own type-filter drawer, so
+// the two look like the same affordance even though each page keeps its
+// own small, single-use icon rather than sharing a component.
+function FilterIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+      aria-hidden
+    >
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    </svg>
+  );
+}
+
 function TypeSelect({
   types,
   value,
@@ -816,6 +836,7 @@ function EditModuleWizard({
   module,
   types,
   onSave,
+  onDelete,
   onGeneralInfo,
   setOnGeneralInfo,
   onError,
@@ -823,6 +844,7 @@ function EditModuleWizard({
   module: TrainingModule;
   types: TrainingModuleType[];
   onSave: (patch: Record<string, unknown>) => void;
+  onDelete: () => void;
   onGeneralInfo: boolean;
   setOnGeneralInfo: (v: boolean) => void;
   onError: (message: string) => void;
@@ -966,6 +988,7 @@ function EditModuleWizard({
               onSelect={selectActivity}
               onRemove={removeActivityAt}
             />
+            <DeleteButton onClick={onDelete} itemLabel={module.title} />
           </>
         ) : (
           currentItem && (
@@ -1014,6 +1037,10 @@ export default function TrainingModules() {
   const [types, setTypes] = useState<TrainingModuleType[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [typeFilters, setTypeFilters] = useState<Set<number>>(new Set());
+  const [showArchived, setShowArchived] = useState(false);
+  const [groupByType, setGroupByType] = useState(false);
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [drawer, setDrawer] = useState<"closed" | "create" | TrainingModule>(
     "closed"
   );
@@ -1092,15 +1119,109 @@ export default function TrainingModules() {
     );
 
   const editing = drawer !== "closed" && drawer !== "create" ? drawer : null;
-  const filtered = modules.filter((m) =>
-    m.title.toLowerCase().includes(query.trim().toLowerCase())
-  );
+  const filtered = modules.filter((m) => {
+    const matchesQuery = m.title
+      .toLowerCase()
+      .includes(query.trim().toLowerCase());
+    const matchesType = typeFilters.size === 0 || (m.type_id != null && typeFilters.has(m.type_id));
+    const matchesArchived = showArchived || !m.archived;
+    return matchesQuery && matchesType && matchesArchived;
+  });
+
+  // "Group by type" is a display option, not a filter, so it's kept out
+  // of activeFilterCount below - it doesn't change which modules show up,
+  // only how they're arranged.
+  const activeFilterCount = typeFilters.size + (showArchived ? 1 : 0);
+
+  function toggleTypeFilter(id: number) {
+    setTypeFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const groupedModules = groupByType
+    ? (() => {
+        const map = new Map<
+          string,
+          { key: string; label: string; icon: string | null; modules: TrainingModule[] }
+        >();
+        for (const m of filtered) {
+          const key = m.type_id != null ? String(m.type_id) : "none";
+          if (!map.has(key)) {
+            map.set(key, {
+              key,
+              label: m.type_name ?? "No type",
+              icon: m.type_icon,
+              modules: [],
+            });
+          }
+          map.get(key)!.modules.push(m);
+        }
+        return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+      })()
+    : null;
+
+  function ModuleRow({ m }: { m: TrainingModule }) {
+    return (
+      <div className="relative flex min-h-[44px] flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 shadow-card">
+        {canEdit && (
+          <div className="absolute right-2 top-2 z-10">
+            <button
+              type="button"
+              onClick={() => updateModule(m.id, { archived: !m.archived })}
+              aria-label={m.archived ? `Unarchive ${m.title}` : `Archive ${m.title}`}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-stone-500"
+            >
+              {m.archived ? "📤" : "🗄"}
+            </button>
+          </div>
+        )}
+        <button
+          onClick={() => {
+            setEditGeneralInfo(true);
+            setDrawer(m);
+          }}
+          aria-label={`Open ${m.title}`}
+          className="absolute inset-0 rounded-2xl text-left"
+        />
+        <span className="flex items-center gap-2 pr-8">
+          {moduleIcon(m) && <span aria-hidden>{moduleIcon(m)}</span>}
+          <span className="font-medium">{m.title}</span>
+          {m.type_name && <Badge>{m.type_name}</Badge>}
+          {m.archived && <Badge>Archived</Badge>}
+        </span>
+        {m.items.length > 0 && (
+          <span className="text-xs text-stone-500">
+            {m.items.map(itemSummary).join(", ")}
+          </span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Training modules</h1>
-        {canEdit && <AddButton onClick={openCreate} />}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFilterDrawerOpen(true)}
+            aria-label="Filter"
+            className="relative flex min-h-[44px] min-w-[44px] items-center justify-center text-stone-600"
+          >
+            <FilterIcon />
+            {activeFilterCount > 0 && (
+              <span className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-semibold text-white">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          {canEdit && <AddButton onClick={openCreate} />}
+        </div>
       </div>
 
       <input
@@ -1110,47 +1231,92 @@ export default function TrainingModules() {
         className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
 
-      <div className="flex flex-col gap-2">
-        {filtered.map((m) => (
-          <div
-            key={m.id}
-            className="relative flex min-h-[44px] flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 shadow-card"
-          >
-            {canEdit && (
-              <div className="absolute right-2 top-2 z-10">
-                <DeleteButton
-                  onClick={() => deleteModule(m.id)}
-                  itemLabel={m.title}
-                  iconOnly
-                />
+      <div className="flex flex-col gap-4">
+        {groupedModules
+          ? groupedModules.map((group) => (
+              <div key={group.key} className="flex flex-col gap-2">
+                <span className="flex items-center gap-1 px-1 text-xs font-medium text-stone-500">
+                  {group.icon && <span aria-hidden>{group.icon}</span>}
+                  {group.label}
+                </span>
+                {group.modules.map((m) => (
+                  <ModuleRow key={m.id} m={m} />
+                ))}
               </div>
-            )}
-            <button
-              onClick={() => {
-                setEditGeneralInfo(true);
-                setDrawer(m);
-              }}
-              aria-label={`Open ${m.title}`}
-              className="absolute inset-0 rounded-2xl text-left"
-            />
-            <span className="flex items-center gap-2 pr-8">
-              {moduleIcon(m) && <span aria-hidden>{moduleIcon(m)}</span>}
-              <span className="font-medium">{m.title}</span>
-              {m.type_name && <Badge>{m.type_name}</Badge>}
-            </span>
-            {m.items.length > 0 && (
-              <span className="text-xs text-stone-500">
-                {m.items.map(itemSummary).join(", ")}
-              </span>
-            )}
-          </div>
-        ))}
+            ))
+          : filtered.map((m) => <ModuleRow key={m.id} m={m} />)}
         {filtered.length === 0 && (
           <p className="px-1 py-2 text-sm text-stone-500">
             No training modules yet.
           </p>
         )}
       </div>
+
+      <Drawer
+        open={filterDrawerOpen}
+        onClose={() => setFilterDrawerOpen(false)}
+        title="Filter training modules"
+      >
+        <div className="flex flex-col gap-4">
+          <label className="flex min-h-[44px] items-center gap-2 rounded-xl bg-stone-50 px-3 text-sm font-medium text-stone-700">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />
+            Show archived
+          </label>
+          <label className="flex min-h-[44px] items-center gap-2 rounded-xl bg-stone-50 px-3 text-sm font-medium text-stone-700">
+            <input
+              type="checkbox"
+              checked={groupByType}
+              onChange={(e) => setGroupByType(e.target.checked)}
+            />
+            Group by type
+          </label>
+          {typeFilters.size > 0 && (
+            <button
+              type="button"
+              onClick={() => setTypeFilters(new Set())}
+              className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700"
+            >
+              Clear type filters
+            </button>
+          )}
+          <div className="grid grid-cols-3 gap-3">
+            {types.map((t) => {
+              const selected = typeFilters.has(t.id);
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => toggleTypeFilter(t.id)}
+                  className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl p-2 text-center shadow-card ${
+                    selected ? "bg-red-600" : "bg-white"
+                  }`}
+                >
+                  <span
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-100 text-lg"
+                    style={selected ? { backgroundColor: "rgba(255,255,255,0.5)" } : undefined}
+                  >
+                    {t.icon ?? "🏷"}
+                  </span>
+                  <span
+                    className={`text-xs font-medium ${
+                      selected ? "text-white" : "text-stone-700"
+                    }`}
+                  >
+                    {t.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {types.length === 0 && (
+            <p className="px-1 py-2 text-sm text-stone-500">No types yet.</p>
+          )}
+        </div>
+      </Drawer>
 
       {canEdit && (
         <Drawer
@@ -1181,6 +1347,7 @@ export default function TrainingModules() {
             module={editing}
             types={types}
             onSave={(patch) => updateModule(editing.id, patch)}
+            onDelete={() => deleteModule(editing.id)}
             onGeneralInfo={editGeneralInfo}
             setOnGeneralInfo={setEditGeneralInfo}
             onError={showToast}
