@@ -30,6 +30,29 @@ const MAX_REPS = 1000;
 const MAX_DURATION_SECONDS = 6 * 60 * 60; // 6 hours
 const MAX_DISTANCE_METERS = 100000; // 100km
 
+// Filter/group choices survive a refresh (unlike the search box, which
+// resets) - a coach filtering down to their own club's types shouldn't
+// have to redo it every time they come back to this page.
+const FILTERS_STORAGE_KEY = "trainingModulesFilters";
+
+function loadStoredFilters(): {
+  typeFilters: number[];
+  showArchived: boolean;
+  groupByType: boolean;
+} {
+  try {
+    const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      typeFilters: Array.isArray(parsed.typeFilters) ? parsed.typeFilters : [],
+      showArchived: !!parsed.showArchived,
+      groupByType: !!parsed.groupByType,
+    };
+  } catch {
+    return { typeFilters: [], showArchived: false, groupByType: false };
+  }
+}
+
 interface TrainingModuleType {
   id: number;
   name: string;
@@ -1037,9 +1060,11 @@ export default function TrainingModules() {
   const [types, setTypes] = useState<TrainingModuleType[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [typeFilters, setTypeFilters] = useState<Set<number>>(new Set());
-  const [showArchived, setShowArchived] = useState(false);
-  const [groupByType, setGroupByType] = useState(false);
+  const [typeFilters, setTypeFilters] = useState<Set<number>>(
+    () => new Set(loadStoredFilters().typeFilters)
+  );
+  const [showArchived, setShowArchived] = useState(() => loadStoredFilters().showArchived);
+  const [groupByType, setGroupByType] = useState(() => loadStoredFilters().groupByType);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [drawer, setDrawer] = useState<"closed" | "create" | TrainingModule>(
     "closed"
@@ -1055,6 +1080,17 @@ export default function TrainingModules() {
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem(
+      FILTERS_STORAGE_KEY,
+      JSON.stringify({
+        typeFilters: [...typeFilters],
+        showArchived,
+        groupByType,
+      })
+    );
+  }, [typeFilters, showArchived, groupByType]);
 
   function showToast(message: string) {
     setToast(message);
@@ -1166,7 +1202,29 @@ export default function TrainingModules() {
 
   function ModuleRow({ m }: { m: TrainingModule }) {
     return (
-      <div className="relative flex min-h-[44px] flex-col items-start gap-1 rounded-2xl bg-white px-4 py-3 shadow-card">
+      <div className="relative flex min-h-[44px] items-start gap-3 rounded-2xl bg-white px-4 py-3 shadow-card">
+        {/* Icon block capping the left end of the row, same idea as the
+            colored icon segment on a Schedule event row - just without
+            the chevron clip/swipe, since module types carry no color and
+            these rows have no swipe actions. */}
+        <span
+          aria-hidden
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-stone-100 text-xl"
+        >
+          {moduleIcon(m) ?? "🏋️"}
+        </span>
+        <div className="flex flex-1 flex-col items-start gap-1 pr-8">
+          <span className="font-medium">{m.title}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {m.type_name && <Badge>{m.type_name}</Badge>}
+            {m.archived && <Badge>Archived</Badge>}
+          </div>
+          {m.items.length > 0 && (
+            <span className="text-xs text-stone-500">
+              {m.items.map(itemSummary).join(", ")}
+            </span>
+          )}
+        </div>
         {canEdit && (
           <div className="absolute right-2 top-2 z-10">
             <button
@@ -1175,7 +1233,7 @@ export default function TrainingModules() {
               aria-label={m.archived ? `Unarchive ${m.title}` : `Archive ${m.title}`}
               className="flex h-8 w-8 items-center justify-center rounded-full text-stone-500"
             >
-              {m.archived ? "📤" : "🗄"}
+              {m.archived ? "📤" : "📦"}
             </button>
           </div>
         )}
@@ -1187,17 +1245,6 @@ export default function TrainingModules() {
           aria-label={`Open ${m.title}`}
           className="absolute inset-0 rounded-2xl text-left"
         />
-        <span className="flex items-center gap-2 pr-8">
-          {moduleIcon(m) && <span aria-hidden>{moduleIcon(m)}</span>}
-          <span className="font-medium">{m.title}</span>
-          {m.type_name && <Badge>{m.type_name}</Badge>}
-          {m.archived && <Badge>Archived</Badge>}
-        </span>
-        {m.items.length > 0 && (
-          <span className="text-xs text-stone-500">
-            {m.items.map(itemSummary).join(", ")}
-          </span>
-        )}
       </div>
     );
   }
@@ -1283,7 +1330,7 @@ export default function TrainingModules() {
               Clear type filters
             </button>
           )}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {types.map((t) => {
               const selected = typeFilters.has(t.id);
               return (
@@ -1291,12 +1338,12 @@ export default function TrainingModules() {
                   key={t.id}
                   type="button"
                   onClick={() => toggleTypeFilter(t.id)}
-                  className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl p-2 text-center shadow-card ${
+                  className={`flex items-center gap-2 rounded-2xl p-3 text-left shadow-card ${
                     selected ? "bg-red-600" : "bg-white"
                   }`}
                 >
                   <span
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-100 text-lg"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-stone-100 text-lg"
                     style={selected ? { backgroundColor: "rgba(255,255,255,0.5)" } : undefined}
                   >
                     {t.icon ?? "🏷"}

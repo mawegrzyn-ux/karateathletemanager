@@ -81,7 +81,7 @@ in `AthleteSocialProfile.tsx`), pass `iconOnly` rather than rolling a
 separate button; the confirm `Modal` behavior is unchanged either way.
 
 For an entity that supports **archiving** (e.g. Training modules), the
-list row's icon-only action is an archive/unarchive toggle (🗄 to
+list row's icon-only action is an archive/unarchive toggle (📦 to
 archive, 📤 to unarchive) instead of an icon-only delete — archiving is
 reversible and non-destructive, so it needs no confirmation, unlike
 `DeleteButton`. Actual deletion moves entirely into the entity's detail
@@ -136,11 +136,14 @@ active-filter count) that opens a `Drawer` ("Filter <list>"):
   a checkbox, `bg-stone-50` background.
 - A "Clear type filters" button, shown only once at least one type is
   selected.
-- A `grid grid-cols-3 gap-3` of icon tiles, one per type (icon + name),
-  tap to toggle — multi-select, not a `<select>` dropdown. The selected
-  tile fills with the type's color (or `bg-red-600` where the type has no
-  color of its own) and its icon circle turns translucent white; an
-  unselected tile stays plain white.
+- A grid of icon tiles, one per type (icon + name), tap to toggle —
+  multi-select, not a `<select>` dropdown. Either layout is fine: a
+  vertical icon-over-label square (`grid-cols-3`, Schedule's own filter)
+  or a horizontal icon-left pill (`grid-cols-2`, Training modules) — pick
+  whichever reads better for the list's type names. Either way, the
+  selected tile fills with the type's color (or `bg-red-600` where the
+  type has no color of its own) and its icon circle turns translucent
+  white; an unselected tile stays plain white.
 - Grouping toggles (e.g. "Group by type") aren't filters themselves —
   they don't count toward the header badge, only view options and type
   selections do — but they belong in the same drawer since they're still
@@ -148,6 +151,11 @@ active-filter count) that opens a `Drawer` ("Filter <list>"):
   list renders as labeled sections (icon + type name header) instead of
   one flat list, keyed by type with an explicit "No type" bucket for
   records that don't have one.
+- Where it's worth surviving a refresh (Training modules does this;
+  Schedule's own filter drawer doesn't yet), the drawer's state (selected
+  types plus every view-option checkbox) persists to `localStorage` and
+  reloads on mount — the plain search box above is deliberately excluded
+  even then, since that's a one-off lookup rather than a saved view.
 
 Reuse this shape rather than inventing a new filter UI per list; each
 page keeps its own small funnel-icon SVG (matching the rest of the app's
