@@ -143,10 +143,10 @@ time input.
 
 Where a record has a *start and end* date+time together (an event's
 start/end), use `DateTimeRangeField` instead — same idea, but its two
-trigger fields (Start, End) share one `Modal` showing both pairs stacked
-together (Start's Date+Time, then End's Date+Time, then one Done
-button), so setting the whole range doesn't mean closing one picker and
-reopening another.
+trigger fields (Start, End) share one `Modal` showing both pairs side by
+side as two columns (Start's Date+Time, then End's Date+Time, separated
+by a vertical divider, then one Done button), so setting the whole range
+doesn't mean closing one picker and reopening another.
 
 Don't wrap `DateTimeField`/`DateTimeRangeField` themselves in `Field` (or
 any other `<label>` wrapper): a `<label>` containing more than one

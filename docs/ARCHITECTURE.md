@@ -1407,10 +1407,11 @@ coach-run attendance) — this is personal athlete itinerary planning.
   used everywhere an event's start *and* end (each its own date+time) are
   edited together (event create/edit). It renders two trigger fields
   (Start, End), each still showing its own value at a glance, but both
-  open the *same* `Modal` — Start's Date+Time, then End's Date+Time, then
-  one Done button — so setting the whole range doesn't mean closing one
-  picker and reopening another the way two separate `DateTimeField`s
-  would.
+  open the *same* `Modal` — a two-column grid with Start's Date+Time on
+  the left and End's Date+Time on the right (a vertical divider between
+  them), then one Done button — so setting the whole range doesn't mean
+  closing one picker and reopening another the way two separate
+  `DateTimeField`s would.
   Neither component wraps itself in `Field` (which renders a
   `<label>`): nesting the Modal's own buttons inside the same `<label>`
   as a trigger button caused the browser's implicit label-click-

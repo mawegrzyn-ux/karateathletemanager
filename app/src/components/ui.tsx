@@ -629,56 +629,58 @@ export function DateTimeRangeField({
 
       <Modal open={open} onClose={() => setOpen(false)}>
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <span className="text-sm font-semibold text-stone-900">{startLabel}</span>
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-stone-700">Date</span>
-              <input
-                type="date"
-                autoFocus
-                required={required}
-                min={min}
-                max={max}
-                value={startDate}
-                onChange={(e) => onStartDateChange(e.target.value)}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
-              />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-semibold text-stone-900">{startLabel}</span>
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-stone-700">Date</span>
+                <input
+                  type="date"
+                  autoFocus
+                  required={required}
+                  min={min}
+                  max={max}
+                  value={startDate}
+                  onChange={(e) => onStartDateChange(e.target.value)}
+                  className="min-h-[44px] w-full rounded-xl border border-stone-300 px-2 text-base"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-stone-700">Time</span>
+                <input
+                  type="time"
+                  required={required}
+                  value={startTime}
+                  onChange={(e) => onStartTimeChange(e.target.value)}
+                  className="min-h-[44px] w-full rounded-xl border border-stone-300 px-2 text-base"
+                />
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-stone-700">Time</span>
-              <input
-                type="time"
-                required={required}
-                value={startTime}
-                onChange={(e) => onStartTimeChange(e.target.value)}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
-              />
-            </div>
-          </div>
 
-          <div className="flex flex-col gap-2 border-t border-stone-200 pt-4">
-            <span className="text-sm font-semibold text-stone-900">{endLabel}</span>
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-stone-700">Date</span>
-              <input
-                type="date"
-                required={required}
-                min={min}
-                max={max}
-                value={endDate}
-                onChange={(e) => onEndDateChange(e.target.value)}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-stone-700">Time</span>
-              <input
-                type="time"
-                required={required}
-                value={endTime}
-                onChange={(e) => onEndTimeChange(e.target.value)}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-lg"
-              />
+            <div className="flex flex-col gap-2 border-l border-stone-200 pl-4">
+              <span className="text-sm font-semibold text-stone-900">{endLabel}</span>
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-stone-700">Date</span>
+                <input
+                  type="date"
+                  required={required}
+                  min={min}
+                  max={max}
+                  value={endDate}
+                  onChange={(e) => onEndDateChange(e.target.value)}
+                  className="min-h-[44px] w-full rounded-xl border border-stone-300 px-2 text-base"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-stone-700">Time</span>
+                <input
+                  type="time"
+                  required={required}
+                  value={endTime}
+                  onChange={(e) => onEndTimeChange(e.target.value)}
+                  className="min-h-[44px] w-full rounded-xl border border-stone-300 px-2 text-base"
+                />
+              </div>
             </div>
           </div>
 
