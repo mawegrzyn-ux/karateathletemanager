@@ -13,7 +13,7 @@ const MAX_DISTANCE_METERS = 100000; // 100km
 
 const MODULE_QUERY = `
   SELECT tm.id, tm.title, tm.explanation, tm.type_id, tmt.name AS type_name,
-    tm.icon, tmt.icon AS type_icon,
+    tm.icon, tmt.icon AS type_icon, tm.archived,
     tm.created_at, tm.updated_at,
     COALESCE(
       json_agg(json_build_object(
@@ -171,7 +171,7 @@ router.patch(
   authorize("coach"),
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
-    const { title, explanation, type_id, icon, items } = body;
+    const { title, explanation, type_id, icon, archived, items } = body;
 
     if ("icon" in body && !validIcon(icon)) {
       return res
@@ -179,7 +179,7 @@ router.patch(
         .json({ error: { message: "icon must be a string of 8 characters or fewer" } });
     }
 
-    const fields = { title, explanation, type_id, icon };
+    const fields = { title, explanation, type_id, icon, archived };
     const setClauses = [];
     const values = [];
     for (const [key, value] of Object.entries(fields)) {

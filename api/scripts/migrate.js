@@ -1093,6 +1093,12 @@ const migrations = [
   `ALTER TABLE nk_profile_invites ADD CONSTRAINT nk_profile_invites_token_unique UNIQUE (token)`,
   `ALTER TABLE nk_profile_invites DROP CONSTRAINT IF EXISTS nk_profile_invites_profile_unique`,
   `ALTER TABLE nk_profile_invites ADD CONSTRAINT nk_profile_invites_profile_unique UNIQUE (profile_type, profile_id)`,
+
+  // Archiving a training module hides it from the default list without
+  // losing it or its history in any event that links to it - actual
+  // deletion stays reachable only from inside the module's own edit
+  // drawer.
+  `ALTER TABLE nk_training_modules ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT false`,
 ];
 
 async function migrate() {

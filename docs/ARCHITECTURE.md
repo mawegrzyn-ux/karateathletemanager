@@ -939,6 +939,28 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `admin/TrainingModules.tsx` and `admin/Katas.tsx` are separate
   list+drawer admin pages (reachable from `More.tsx`, `coach`+admin and
   admin-only respectively) for managing the underlying libraries.
+- **Training modules: archiving instead of list-row deletion, plus a
+  type filter/grouping drawer.** `nk_training_modules.archived`
+  (boolean, default `false`) hides a module from the default list without
+  losing it or breaking any event/item that still links to it. The list
+  row's icon-only action (`admin/TrainingModules.tsx`) is an
+  archive/unarchive toggle (🗄 / 📤, a plain `PATCH { archived }` via the
+  same generic `updateModule`) rather than a delete — archiving is
+  reversible so it needs no confirm step, unlike `DeleteButton`. Actual
+  deletion moved into `EditModuleWizard`'s general-info screen as a full
+  `DeleteButton` (not `iconOnly`), the only place it's reachable from
+  now. A funnel-icon button next to `AddButton` opens a "Filter training
+  modules" `Drawer` — mirrors Schedule's own type-filter drawer: a "Show
+  archived" checkbox (unioned with the archived-hides-by-default
+  behavior above, not just backend-side), a "Group by type" checkbox
+  (view-only, doesn't count toward the header's active-filter badge), a
+  "Clear type filters" button once any are selected, and a `grid-cols-3`
+  of icon tiles built from `admin/TrainingModuleTypes.tsx`'s type list,
+  each tap toggling that type in/out of a multi-select filter set
+  (`bg-red-600` fill when selected, since module types carry no color of
+  their own the way event types do). When grouping is on, `filtered`
+  modules are bucketed by `type_id` (an explicit "No type" bucket for
+  `null`) into labeled sections instead of one flat list.
 - **Squads, groups, and venues**: club-scoped structure, distinct from
   the global-reference-list model used by katas/karate styles/coach
   roles above. `nk_squads`/`nk_groups` (`club_id` FK, `name`) each have a

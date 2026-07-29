@@ -80,6 +80,16 @@ text/border pill — e.g. a social post's top-right corner, see `PostCard`
 in `AthleteSocialProfile.tsx`), pass `iconOnly` rather than rolling a
 separate button; the confirm `Modal` behavior is unchanged either way.
 
+For an entity that supports **archiving** (e.g. Training modules), the
+list row's icon-only action is an archive/unarchive toggle (🗄 to
+archive, 📤 to unarchive) instead of an icon-only delete — archiving is
+reversible and non-destructive, so it needs no confirmation, unlike
+`DeleteButton`. Actual deletion moves entirely into the entity's detail
+`Drawer`, as a full `DeleteButton` (not `iconOnly`) at the bottom, same
+placement as any other detail-drawer delete. This still honors "never
+inline on the list row" for the one truly destructive action; only the
+reversible one gets a row-level shortcut.
+
 ## UI convention: search-based membership pickers
 
 Any many-to-many assignment UI (e.g. the athlete/coach picker on a club's
@@ -113,6 +123,35 @@ it round-trips to the server (`GET /athletes?q=`) instead of filtering
 client-side, since athlete rosters can be large; new list pages should
 default to the simple client-side filter unless there's a similar reason
 not to.
+
+## UI convention: type filter + grouping drawer
+
+Beyond the plain search box above, a list with a natural "type" to slice
+by (Schedule's event types; Training modules' module types) adds a
+funnel-icon button in the header (next to `AddButton`, badge showing the
+active-filter count) that opens a `Drawer` ("Filter <list>"):
+
+- Any view-option checkboxes first (Schedule: "Hide completed"; Training
+  modules: "Show archived", "Group by type") — plain `<label>` rows with
+  a checkbox, `bg-stone-50` background.
+- A "Clear type filters" button, shown only once at least one type is
+  selected.
+- A `grid grid-cols-3 gap-3` of icon tiles, one per type (icon + name),
+  tap to toggle — multi-select, not a `<select>` dropdown. The selected
+  tile fills with the type's color (or `bg-red-600` where the type has no
+  color of its own) and its icon circle turns translucent white; an
+  unselected tile stays plain white.
+- Grouping toggles (e.g. "Group by type") aren't filters themselves —
+  they don't count toward the header badge, only view options and type
+  selections do — but they belong in the same drawer since they're still
+  "how do I want to look at this list" controls. When grouping is on, the
+  list renders as labeled sections (icon + type name header) instead of
+  one flat list, keyed by type with an explicit "No type" bucket for
+  records that don't have one.
+
+Reuse this shape rather than inventing a new filter UI per list; each
+page keeps its own small funnel-icon SVG (matching the rest of the app's
+per-page icon conventions) rather than sharing one component.
 
 ## UI convention: nested line items in a drawer
 
