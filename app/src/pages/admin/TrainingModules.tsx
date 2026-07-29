@@ -1200,21 +1200,22 @@ export default function TrainingModules() {
       })()
     : null;
 
-  function ModuleRow({ m }: { m: TrainingModule }) {
+  // When grouped by type, the section header already carries the type's
+  // icon - repeating it on every row underneath would be redundant, so
+  // the icon segment only shows in the flat (ungrouped) list.
+  function ModuleRow({ m, showIcon }: { m: TrainingModule; showIcon: boolean }) {
     return (
-      <div className="relative flex min-h-[44px] items-start gap-3 rounded-2xl bg-white px-4 py-3 shadow-card">
-        {/* Icon block capping the left end of the row, same idea as the
-            colored icon segment on a Schedule event row - just without
-            the chevron clip/swipe, since module types carry no color and
-            these rows have no swipe actions. */}
-        <span
-          aria-hidden
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-stone-100 text-xl"
-        >
-          {moduleIcon(m) ?? "🏋️"}
-        </span>
-        <div className="flex flex-1 flex-col items-start gap-1 pr-8">
-          <span className="font-medium">{m.title}</span>
+      <div className="relative flex overflow-hidden rounded-2xl shadow-card">
+        {showIcon && (
+          <div
+            aria-hidden
+            className="flex w-12 shrink-0 items-center justify-center bg-stone-200 text-xl"
+          >
+            {moduleIcon(m) ?? "🏋️"}
+          </div>
+        )}
+        <div className="relative flex min-h-[44px] flex-1 flex-col items-start gap-1 bg-white px-4 py-3">
+          <span className="pr-8 font-medium">{m.title}</span>
           <div className="flex flex-wrap items-center gap-2">
             {m.type_name && <Badge>{m.type_name}</Badge>}
             {m.archived && <Badge>Archived</Badge>}
@@ -1224,27 +1225,27 @@ export default function TrainingModules() {
               {m.items.map(itemSummary).join(", ")}
             </span>
           )}
+          {canEdit && (
+            <div className="absolute right-2 top-2 z-10">
+              <button
+                type="button"
+                onClick={() => updateModule(m.id, { archived: !m.archived })}
+                aria-label={m.archived ? `Unarchive ${m.title}` : `Archive ${m.title}`}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-stone-500"
+              >
+                {m.archived ? "📤" : "📦"}
+              </button>
+            </div>
+          )}
+          <button
+            onClick={() => {
+              setEditGeneralInfo(true);
+              setDrawer(m);
+            }}
+            aria-label={`Open ${m.title}`}
+            className="absolute inset-0 text-left"
+          />
         </div>
-        {canEdit && (
-          <div className="absolute right-2 top-2 z-10">
-            <button
-              type="button"
-              onClick={() => updateModule(m.id, { archived: !m.archived })}
-              aria-label={m.archived ? `Unarchive ${m.title}` : `Archive ${m.title}`}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-stone-500"
-            >
-              {m.archived ? "📤" : "📦"}
-            </button>
-          </div>
-        )}
-        <button
-          onClick={() => {
-            setEditGeneralInfo(true);
-            setDrawer(m);
-          }}
-          aria-label={`Open ${m.title}`}
-          className="absolute inset-0 rounded-2xl text-left"
-        />
       </div>
     );
   }
@@ -1282,16 +1283,19 @@ export default function TrainingModules() {
         {groupedModules
           ? groupedModules.map((group) => (
               <div key={group.key} className="flex flex-col gap-2">
-                <span className="flex items-center gap-1 px-1 text-xs font-medium text-stone-500">
+                {/* Same tag + classes as Schedule's own date-group
+                    headers, so the global h2 rule (Oswald, uppercase,
+                    tracked) gives both an identical look. */}
+                <h2 className="flex items-center gap-1 px-1 text-sm font-semibold text-stone-500">
                   {group.icon && <span aria-hidden>{group.icon}</span>}
                   {group.label}
-                </span>
+                </h2>
                 {group.modules.map((m) => (
-                  <ModuleRow key={m.id} m={m} />
+                  <ModuleRow key={m.id} m={m} showIcon={false} />
                 ))}
               </div>
             ))
-          : filtered.map((m) => <ModuleRow key={m.id} m={m} />)}
+          : filtered.map((m) => <ModuleRow key={m.id} m={m} showIcon />)}
         {filtered.length === 0 && (
           <p className="px-1 py-2 text-sm text-stone-500">
             No training modules yet.
