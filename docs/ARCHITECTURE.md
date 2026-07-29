@@ -963,18 +963,25 @@ coach-run attendance) — this is personal athlete itinerary planning.
   selected, since module types carry no color of their own the way event
   types do). When grouping is on, `filtered` modules are bucketed by
   `type_id` (an explicit "No type" bucket for `null`) into labeled
-  sections instead of one flat list. The list row itself also borrows
-  Schedule's visual language: a `moduleIcon(m)` (or a generic 🏋️
-  fallback) sits in its own rounded icon chip capping the left end of the
-  row, with the title and its badges (type, "Archived") stacked to its
-  right — a simplified, non-clipped, non-swipeable cousin of Schedule's
-  colored chevron icon segment, since module types carry no per-type
-  color and these rows have no swipe actions. Finally, the whole filter
-  state (`typeFilters`, `showArchived`, `groupByType` — but not the
-  search box, which is a one-off lookup) round-trips through
-  `localStorage` (`trainingModulesFilters`, read via a lazy `useState`
-  initializer and written back on every change) so it survives a page
-  refresh instead of resetting.
+  sections instead of one flat list, each headed by an `<h2>` using the
+  same classes as Schedule's own date-group headers
+  (`text-sm font-semibold text-stone-500`) so the global `h2` rule
+  (Oswald, uppercase, tracked) gives both an identical look. The list row
+  itself also borrows Schedule's visual language when *not* grouped: a
+  `moduleIcon(m)` (or a generic 🏋️ fallback) sits in a full-height
+  `bg-stone-200` block capping the left end of the row (`ModuleRow`'s
+  `showIcon` prop, `overflow-hidden` on the outer `rounded-2xl` wrapper
+  clips it to match) — a simplified, non-clipped, non-swipeable cousin of
+  Schedule's colored chevron icon segment, since module types carry no
+  per-type color and these rows have no swipe actions. When grouped, each
+  row passes `showIcon={false}` instead, since the section header's own
+  icon already carries that context and repeating it on every row
+  underneath would be redundant. Finally, the whole filter state
+  (`typeFilters`, `showArchived`, `groupByType` — but not the search box,
+  which is a one-off lookup) round-trips through `localStorage`
+  (`trainingModulesFilters`, read via a lazy `useState` initializer and
+  written back on every change) so it survives a page refresh instead of
+  resetting.
 - **Squads, groups, and venues**: club-scoped structure, distinct from
   the global-reference-list model used by katas/karate styles/coach
   roles above. `nk_squads`/`nk_groups` (`club_id` FK, `name`) each have a

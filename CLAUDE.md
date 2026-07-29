@@ -148,9 +148,15 @@ active-filter count) that opens a `Drawer` ("Filter <list>"):
   they don't count toward the header badge, only view options and type
   selections do — but they belong in the same drawer since they're still
   "how do I want to look at this list" controls. When grouping is on, the
-  list renders as labeled sections (icon + type name header) instead of
-  one flat list, keyed by type with an explicit "No type" bucket for
-  records that don't have one.
+  list renders as labeled sections instead of one flat list, keyed by
+  type with an explicit "No type" bucket for records that don't have
+  one. Each section header is an `<h2>` with the same classes as
+  Schedule's own date-group headers (`text-sm font-semibold
+  text-stone-500`) so the global `h2` rule (Oswald, uppercase, tracked)
+  gives both an identical look. If rows elsewhere show a per-row type
+  icon (see Training modules below), hide it while grouped — the section
+  header's own icon already carries that context, so repeating it on
+  every row underneath is redundant.
 - Where it's worth surviving a refresh (Training modules does this;
   Schedule's own filter drawer doesn't yet), the drawer's state (selected
   types plus every view-option checkbox) persists to `localStorage` and
