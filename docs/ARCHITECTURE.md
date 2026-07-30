@@ -2692,6 +2692,17 @@ though note the deploy itself has already happened by that point; there's
 no automatic rollback. A failing Playwright run uploads its report
 (`playwright-report/`) as a workflow artifact for debugging.
 
+**Version footer**: `app/vite.config.ts` runs `git rev-parse --short HEAD`
+at build time (works identically in CI, since `actions/checkout` gives it
+a real `.git`, and locally) and bakes the result into the bundle via
+`define: { __APP_VERSION__, __BUILD_TIME__ }` (declared as ambient
+globals in `vite-env.d.ts`). `More.tsx` renders both as a small muted
+line below "Log out" (`v<sha> · built <date>`) — since the PWA's service
+worker (`registerType: "autoUpdate"`) can leave a device on a stale
+cached build for a while, this is how anyone (including without server
+access) confirms whether what they're looking at actually is the latest
+deploy, by comparing the shown SHA against the tip of `main`.
+
 ### Smoke tests
 
 - `scripts/smoke-test.sh [base-url]` — bash + curl, no dependencies beyond
