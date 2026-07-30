@@ -110,6 +110,14 @@ export default function More() {
       >
         Log out
       </button>
+
+      <p className="text-center text-xs text-stone-400">
+        v{__APP_VERSION__} · built{" "}
+        {new Date(__BUILD_TIME__).toLocaleString(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })}
+      </p>
     </div>
   );
 }
