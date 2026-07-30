@@ -106,7 +106,7 @@ export default function Profile() {
   }
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex min-h-full flex-col pt-[env(safe-area-inset-top)]">
       {user?.role === "athlete" && user.athlete_id && (
         <AthleteSocialProfile
           athleteId={user.athlete_id}

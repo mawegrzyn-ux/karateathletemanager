@@ -75,7 +75,7 @@ function Shell() {
 
   return (
     <div className="flex h-full flex-col bg-stone-100">
-      <main className="flex-1 overflow-y-auto pb-[calc(6rem+env(safe-area-inset-bottom))]">
+      <main className="flex-1 overflow-y-auto pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)]">
         <Outlet />
       </main>
 

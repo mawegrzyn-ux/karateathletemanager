@@ -2234,6 +2234,32 @@ unchanged.
   inset (Android, desktop - `env()` there is just `0`), correctly taller
   on an iPhone. Any *future* fixed/absolute element meant to "float
   above the bottom nav" needs the same treatment, not a bare `bottom-24`.
+- **Fixed: installed as a PWA on iOS (Add to Home Screen), the app
+  rendered under the status bar - fine in a plain Safari tab, broken
+  once launched standalone.** `index.html`'s
+  `apple-mobile-web-app-status-bar-style` is `black-translucent`, which
+  makes the status bar transparent and lets page content draw underneath
+  it - intentional (it's what gives a from-the-very-top hero look), but
+  it means the app itself is responsible for keeping content clear of
+  that area, the same way it's already responsible for clearing the
+  home indicator at the bottom (see above). A normal Safari *tab* never
+  exposes this, since Safari's own chrome occupies that space regardless
+  of what the page does - only `display: standalone` (the PWA's actual
+  install target) removes that chrome and reveals whichever gap the page
+  didn't account for, which is why this only ever showed up once
+  installed, not in the browser. `App.tsx`'s `Shell` component (the
+  `<main>` wrapping every route that has the bottom tab nav) now adds
+  `pt-[env(safe-area-inset-top)]` alongside its existing bottom padding;
+  `Profile.tsx`, `Login.tsx`, and `Register.tsx` (rendered outside
+  `Shell`, so they don't inherit that fix) get the same treatment
+  directly on their own top-level wrapper. Since `Profile.tsx`'s athlete
+  self-view renders `AthleteSocialProfile`'s hero photo (with an edit-
+  toggle button pinned to its own top-right corner) as the very first
+  thing in the tree, that one in particular would otherwise sit partly
+  behind the status bar. Same `env()`-is-`0`-elsewhere safety as the
+  bottom-inset fix: no visible change on Android/desktop/a plain Safari
+  tab, correct clearance only where the inset is actually non-zero (an
+  installed iOS PWA on a notched/Dynamic-Island device).
 
 ### Osu — admin chatbot & MCP server
 
