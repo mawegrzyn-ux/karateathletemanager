@@ -24,6 +24,7 @@ export interface TrainingModule {
   type_name: string | null;
   icon: string | null;
   type_icon: string | null;
+  type_bg_color: string | null;
   archived: boolean;
   items: TrainingModuleItem[];
 }

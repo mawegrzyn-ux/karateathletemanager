@@ -57,6 +57,7 @@ interface TrainingModuleType {
   id: number;
   name: string;
   icon: string | null;
+  bg_color: string;
 }
 
 // Matches the funnel icon used for Schedule's own type-filter drawer, so
@@ -1204,48 +1205,72 @@ export default function TrainingModules() {
   // icon - repeating it on every row underneath would be redundant, so
   // the icon segment only shows in the flat (ungrouped) list.
   function ModuleRow({ m, showIcon }: { m: TrainingModule; showIcon: boolean }) {
-    return (
-      <div className="relative flex overflow-hidden rounded-2xl shadow-card">
-        {showIcon && (
-          <div
-            aria-hidden
-            className="flex w-12 shrink-0 items-center justify-center bg-stone-200 text-xl"
-          >
-            {moduleIcon(m) ?? "🏋️"}
+    // Archived is a status of the tile itself, independent of the type
+    // icon it's showing (or not), so it tints the content area rather
+    // than the icon segment - keeps "this type" and "this status" as two
+    // separate visual signals instead of conflating them into one color.
+    const content = (
+      <div
+        className={`relative flex min-h-[44px] flex-1 flex-col items-start gap-1 py-3 ${
+          m.archived ? "bg-stone-100" : "bg-white"
+        } ${showIcon ? "-ml-3 rounded-sm pl-5 pr-4" : "rounded-2xl px-4"}`}
+      >
+        <span className="pr-8 font-medium">{m.title}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {m.type_name && <Badge>{m.type_name}</Badge>}
+          {m.archived && <Badge>Archived</Badge>}
+        </div>
+        {m.items.length > 0 && (
+          <span className="text-xs text-stone-500">
+            {m.items.map(itemSummary).join(", ")}
+          </span>
+        )}
+        {canEdit && (
+          <div className="absolute right-2 top-2 z-10">
+            <button
+              type="button"
+              onClick={() => updateModule(m.id, { archived: !m.archived })}
+              aria-label={m.archived ? `Unarchive ${m.title}` : `Archive ${m.title}`}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-stone-500"
+            >
+              {m.archived ? "📤" : "📦"}
+            </button>
           </div>
         )}
-        <div className="relative flex min-h-[44px] flex-1 flex-col items-start gap-1 bg-white px-4 py-3">
-          <span className="pr-8 font-medium">{m.title}</span>
-          <div className="flex flex-wrap items-center gap-2">
-            {m.type_name && <Badge>{m.type_name}</Badge>}
-            {m.archived && <Badge>Archived</Badge>}
-          </div>
-          {m.items.length > 0 && (
-            <span className="text-xs text-stone-500">
-              {m.items.map(itemSummary).join(", ")}
-            </span>
-          )}
-          {canEdit && (
-            <div className="absolute right-2 top-2 z-10">
-              <button
-                type="button"
-                onClick={() => updateModule(m.id, { archived: !m.archived })}
-                aria-label={m.archived ? `Unarchive ${m.title}` : `Archive ${m.title}`}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-stone-500"
-              >
-                {m.archived ? "📤" : "📦"}
-              </button>
-            </div>
-          )}
-          <button
-            onClick={() => {
-              setEditGeneralInfo(true);
-              setDrawer(m);
-            }}
-            aria-label={`Open ${m.title}`}
-            className="absolute inset-0 text-left"
-          />
+        <button
+          onClick={() => {
+            setEditGeneralInfo(true);
+            setDrawer(m);
+          }}
+          aria-label={`Open ${m.title}`}
+          className="absolute inset-0 text-left"
+        />
+      </div>
+    );
+
+    if (!showIcon) {
+      return <div className="overflow-hidden rounded-2xl shadow-card">{content}</div>;
+    }
+
+    return (
+      <div className="isolate flex overflow-hidden rounded-2xl shadow-card">
+        {/* Same angled chevron cut as Schedule's own icon-capped rows
+            (clip-path, drop-shadow, tucked under the content via -ml-3
+            above), colored by the module's type - just without the
+            swipe-driven transforms, since these rows have no swipe
+            actions. */}
+        <div
+          aria-hidden
+          className="relative z-10 flex w-12 shrink-0 items-center justify-center text-xl"
+          style={{
+            backgroundColor: m.type_bg_color ?? "#78716c",
+            clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
+            filter: "drop-shadow(0 2px 2px rgba(28,25,23,0.35))",
+          }}
+        >
+          {moduleIcon(m) ?? "🏋️"}
         </div>
+        {content}
       </div>
     );
   }
@@ -1343,8 +1368,9 @@ export default function TrainingModules() {
                   type="button"
                   onClick={() => toggleTypeFilter(t.id)}
                   className={`flex items-center gap-2 rounded-2xl p-3 text-left shadow-card ${
-                    selected ? "bg-red-600" : "bg-white"
+                    selected ? "" : "bg-white"
                   }`}
+                  style={selected ? { backgroundColor: t.bg_color } : undefined}
                 >
                   <span
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-stone-100 text-lg"

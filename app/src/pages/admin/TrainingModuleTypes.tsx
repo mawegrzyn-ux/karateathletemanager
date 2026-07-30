@@ -6,9 +6,10 @@ interface TrainingModuleType {
   id: number;
   name: string;
   icon: string | null;
+  bg_color: string;
 }
 
-const EMPTY_FORM = { name: "", icon: "" };
+const EMPTY_FORM = { name: "", icon: "", bg_color: "#78716c" };
 
 export default function TrainingModuleTypes() {
   const api = useApi();
@@ -98,10 +99,15 @@ export default function TrainingModuleTypes() {
           <button
             key={t.id}
             onClick={() => setDrawer(t)}
-            className="flex min-h-[44px] items-center gap-2 rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
+            className="flex min-h-[44px] items-center gap-3 rounded-2xl bg-white px-4 py-3 text-left shadow-card"
           >
-            {t.icon && <span aria-hidden>{t.icon}</span>}
-            {t.name}
+            <span
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg"
+              style={{ backgroundColor: t.bg_color }}
+            >
+              {t.icon}
+            </span>
+            <span className="font-medium">{t.name}</span>
           </button>
         ))}
         {filtered.length === 0 && (
@@ -123,13 +129,24 @@ export default function TrainingModuleTypes() {
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
-          <Field label="Icon (optional)">
-            <input
-              value={form.icon}
-              onChange={(e) => setForm({ ...form, icon: e.target.value })}
-              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Icon (optional)">
+              <input
+                value={form.icon}
+                onChange={(e) => setForm({ ...form, icon: e.target.value })}
+                maxLength={4}
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-center text-xl"
+              />
+            </Field>
+            <Field label="Color">
+              <input
+                type="color"
+                value={form.bg_color}
+                onChange={(e) => setForm({ ...form, bg_color: e.target.value })}
+                className="h-[44px] w-full rounded-xl border border-stone-300"
+              />
+            </Field>
+          </div>
           <button
             type="submit"
             className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
@@ -157,18 +174,29 @@ export default function TrainingModuleTypes() {
                 className="min-h-[44px] rounded-xl border border-stone-300 px-3"
               />
             </Field>
-            <Field label="Icon (optional)">
-              <input
-                key={editing.icon ?? ""}
-                defaultValue={editing.icon ?? ""}
-                onBlur={(e) => {
-                  if (e.target.value !== (editing.icon ?? "")) {
-                    updateType(editing.id, { icon: e.target.value });
-                  }
-                }}
-                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-              />
-            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Icon (optional)">
+                <input
+                  key={editing.icon ?? ""}
+                  defaultValue={editing.icon ?? ""}
+                  onBlur={(e) => {
+                    if (e.target.value !== (editing.icon ?? "")) {
+                      updateType(editing.id, { icon: e.target.value });
+                    }
+                  }}
+                  maxLength={4}
+                  className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-center text-xl"
+                />
+              </Field>
+              <Field label="Color">
+                <input
+                  type="color"
+                  value={editing.bg_color}
+                  onChange={(e) => updateType(editing.id, { bg_color: e.target.value })}
+                  className="h-[44px] w-full rounded-xl border border-stone-300"
+                />
+              </Field>
+            </div>
             <DeleteButton
               onClick={() => deleteType(editing.id)}
               itemLabel={editing.name}
