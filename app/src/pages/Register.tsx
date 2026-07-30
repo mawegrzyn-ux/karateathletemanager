@@ -104,7 +104,7 @@ export default function Register() {
 
   if (inviteToken && invite === undefined) {
     return (
-      <div className="flex min-h-full flex-col justify-center gap-6 p-6">
+      <div className="flex min-h-full flex-col justify-center gap-6 p-6 pt-[calc(1.5rem+env(safe-area-inset-top))]">
         <h1 className="text-2xl font-bold tracking-tight">Create account</h1>
         <p className="text-sm text-stone-500">Loading invite link...</p>
       </div>
@@ -113,7 +113,7 @@ export default function Register() {
 
   if (inviteToken && invite === null) {
     return (
-      <div className="flex min-h-full flex-col justify-center gap-6 p-6">
+      <div className="flex min-h-full flex-col justify-center gap-6 p-6 pt-[calc(1.5rem+env(safe-area-inset-top))]">
         <h1 className="text-2xl font-bold tracking-tight">Create account</h1>
         <p className="text-sm text-red-700">
           This invite link is invalid or has expired. Ask whoever sent it to
@@ -129,7 +129,7 @@ export default function Register() {
   }
 
   return (
-    <div className="flex min-h-full flex-col justify-center gap-6 p-6">
+    <div className="flex min-h-full flex-col justify-center gap-6 p-6 pt-[calc(1.5rem+env(safe-area-inset-top))]">
       <h1 className="text-2xl font-bold tracking-tight">Create account</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field label="Email">

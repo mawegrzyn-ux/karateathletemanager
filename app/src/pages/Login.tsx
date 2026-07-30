@@ -27,7 +27,7 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-full flex-col justify-center gap-6 p-6">
+    <div className="flex min-h-full flex-col justify-center gap-6 p-6 pt-[calc(1.5rem+env(safe-area-inset-top))]">
       <h1 className="text-2xl font-bold tracking-tight">Log in</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field label="Email">
