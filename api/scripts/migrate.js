@@ -1099,6 +1099,22 @@ const migrations = [
   // deletion stays reachable only from inside the module's own edit
   // drawer.
   `ALTER TABLE nk_training_modules ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT false`,
+
+  // Training module types get the same bg_color treatment as event types,
+  // so a module's list row can show a colored icon segment (matching
+  // Schedule's own icon-capped rows) instead of a flat neutral block.
+  // Best-effort distinct defaults for the standard seeded types, only
+  // backfilled while still at the schema default - fully editable
+  // afterward from admin/TrainingModuleTypes.tsx.
+  `ALTER TABLE nk_training_module_types ADD COLUMN IF NOT EXISTS bg_color VARCHAR(7) NOT NULL DEFAULT '#78716c'`,
+  `UPDATE nk_training_module_types SET bg_color = '#f97316' WHERE name = 'Cardio' AND bg_color = '#78716c'`,
+  `UPDATE nk_training_module_types SET bg_color = '#b45309' WHERE name = 'Strength' AND bg_color = '#78716c'`,
+  `UPDATE nk_training_module_types SET bg_color = '#16a34a' WHERE name = 'Plyometrics' AND bg_color = '#78716c'`,
+  `UPDATE nk_training_module_types SET bg_color = '#eab308' WHERE name = 'Explosive' AND bg_color = '#78716c'`,
+  `UPDATE nk_training_module_types SET bg_color = '#a855f7' WHERE name = 'Flexibility' AND bg_color = '#78716c'`,
+  `UPDATE nk_training_module_types SET bg_color = '#0ea5e9' WHERE name = 'Balance' AND bg_color = '#78716c'`,
+  `UPDATE nk_training_module_types SET bg_color = '#0d9488' WHERE name = 'Technique' AND bg_color = '#78716c'`,
+  `UPDATE nk_training_module_types SET bg_color = '#64748b' WHERE name = 'Endurance' AND bg_color = '#78716c'`,
 ];
 
 async function migrate() {

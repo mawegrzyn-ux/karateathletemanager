@@ -5,7 +5,7 @@ const asyncHandler = require("../utils/asyncHandler");
 
 const router = Router();
 
-const FIELDS = `id, name, icon, created_at`;
+const FIELDS = `id, name, icon, bg_color, created_at`;
 
 function validateIcon(icon) {
   return icon == null || (typeof icon === "string" && icon.length <= 8);
@@ -27,7 +27,7 @@ router.post(
   "/",
   authorize.requireAdmin,
   asyncHandler(async (req, res) => {
-    const { name, icon } = req.body ?? {};
+    const { name, icon, bg_color } = req.body ?? {};
 
     if (typeof name !== "string" || name.trim().length === 0) {
       return res.status(400).json({ error: { message: "Name is required" } });
@@ -40,8 +40,8 @@ router.post(
 
     try {
       const { rows } = await pool.query(
-        `INSERT INTO nk_training_module_types (name, icon) VALUES ($1, $2) RETURNING ${FIELDS}`,
-        [name, icon || null]
+        `INSERT INTO nk_training_module_types (name, icon, bg_color) VALUES ($1, $2, $3) RETURNING ${FIELDS}`,
+        [name, icon || null, bg_color || "#78716c"]
       );
       res.status(201).json({ type: rows[0] });
     } catch (err) {
@@ -60,7 +60,7 @@ router.patch(
   authorize.requireAdmin,
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
-    const { name, icon } = body;
+    const { name, icon, bg_color } = body;
 
     if ("name" in body && (typeof name !== "string" || name.trim().length === 0)) {
       return res.status(400).json({ error: { message: "Name is required" } });
@@ -71,7 +71,7 @@ router.patch(
         .json({ error: { message: "icon must be a string of 8 characters or fewer" } });
     }
 
-    const fields = { name, icon };
+    const fields = { name, icon, bg_color };
     const setClauses = [];
     const values = [];
     for (const [key, value] of Object.entries(fields)) {

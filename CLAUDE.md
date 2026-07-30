@@ -141,9 +141,8 @@ active-filter count) that opens a `Drawer` ("Filter <list>"):
   vertical icon-over-label square (`grid-cols-3`, Schedule's own filter)
   or a horizontal icon-left pill (`grid-cols-2`, Training modules) — pick
   whichever reads better for the list's type names. Either way, the
-  selected tile fills with the type's color (or `bg-red-600` where the
-  type has no color of its own) and its icon circle turns translucent
-  white; an unselected tile stays plain white.
+  selected tile fills with the type's own `bg_color` and its icon circle
+  turns translucent white; an unselected tile stays plain white.
 - Grouping toggles (e.g. "Group by type") aren't filters themselves —
   they don't count toward the header badge, only view options and type
   selections do — but they belong in the same drawer since they're still
@@ -166,6 +165,16 @@ active-filter count) that opens a `Drawer` ("Filter <list>"):
 Reuse this shape rather than inventing a new filter UI per list; each
 page keeps its own small funnel-icon SVG (matching the rest of the app's
 per-page icon conventions) rather than sharing one component.
+
+Every type-with-icon-and-color library (Schedule's `admin/EventTypes.tsx`,
+Training modules' `admin/TrainingModuleTypes.tsx`) manages its own
+`bg_color` the same way: an "Icon" + "Color" field pair side by side
+(`grid-cols-2`) in both the create form and the edit drawer, `<input
+type="color">` for the color, and the list row itself shows the color as
+a filled circle behind the icon so admins can preview their choice
+without leaving the list. This `bg_color` is what feeds both the filter
+tiles above and any per-row icon segment on the entity's own list (e.g.
+Training modules' row icon, below).
 
 ## UI convention: nested line items in a drawer
 

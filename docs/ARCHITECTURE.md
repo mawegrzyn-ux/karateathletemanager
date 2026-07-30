@@ -783,17 +783,17 @@ coach-run attendance) — this is personal athlete itinerary planning.
   General Info instead of closing when an activity is open, only
   actually closing the drawer once General Info itself is showing.
 - **Training module types.** A shared, admin-managed lookup
-  (`nk_training_module_types`: `id`, `name`) — same shape as
-  `nk_karate_styles` — for tagging a module with a category (Cardio,
-  Strength, Plyometrics, Explosive, Flexibility, Balance, Technique,
-  Endurance seeded as a starting list; admin can add more via its own
-  page). `nk_training_modules.type_id` references it
-  (`ON DELETE SET NULL`, so deleting a type in use un-tags rather than
-  blocking or cascading). `api/src/routes/trainingModuleTypes.js` -
+  (`nk_training_module_types`: `id`, `name`, `icon`, `bg_color`) — same
+  shape as `nk_event_types` (icon + color, see below) — for tagging a
+  module with a category (Cardio, Strength, Plyometrics, Explosive,
+  Flexibility, Balance, Technique, Endurance seeded as a starting list;
+  admin can add more via its own page). `nk_training_modules.type_id`
+  references it (`ON DELETE SET NULL`, so deleting a type in use un-tags
+  rather than blocking or cascading). `api/src/routes/trainingModuleTypes.js` -
   `GET` open to any authenticated user, `POST`/`PATCH`/`DELETE` admin-
   only (no natural per-record scoping like clubs have, matching
   `karateStyles.js`/`katas.js`). `admin/TrainingModuleTypes.tsx` is a
-  plain name-only list+drawer (`/admin/training-module-types`,
+  list+drawer (`/admin/training-module-types`,
   admin-only, "Manage training types" tile in `More.tsx`'s Admin
   section alongside Katas/Karate styles). A `TypeSelect` dropdown
   (shared between the wizard's step 0 and the existing module's edit
@@ -939,17 +939,27 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `admin/TrainingModules.tsx` and `admin/Katas.tsx` are separate
   list+drawer admin pages (reachable from `More.tsx`, `coach`+admin and
   admin-only respectively) for managing the underlying libraries.
-- **Training modules: archiving instead of list-row deletion, plus a
-  type filter/grouping drawer.** `nk_training_modules.archived`
-  (boolean, default `false`) hides a module from the default list without
-  losing it or breaking any event/item that still links to it. The list
-  row's icon-only action (`admin/TrainingModules.tsx`) is an
-  archive/unarchive toggle (📦 / 📤, a plain `PATCH { archived }` via the
-  same generic `updateModule`) rather than a delete — archiving is
-  reversible so it needs no confirm step, unlike `DeleteButton`. Actual
-  deletion moved into `EditModuleWizard`'s general-info screen as a full
-  `DeleteButton` (not `iconOnly`), the only place it's reachable from
-  now. A funnel-icon button next to `AddButton` opens a "Filter training
+- **Training modules: archiving instead of list-row deletion, a type
+  filter/grouping drawer, and per-type colors.**
+  `nk_training_modules.archived` (boolean, default `false`) hides a
+  module from the default list without losing it or breaking any
+  event/item that still links to it. The list row's icon-only action
+  (`admin/TrainingModules.tsx`) is an archive/unarchive toggle (📦 / 📤, a
+  plain `PATCH { archived }` via the same generic `updateModule`) rather
+  than a delete — archiving is reversible so it needs no confirm step,
+  unlike `DeleteButton`. Actual deletion moved into `EditModuleWizard`'s
+  general-info screen as a full `DeleteButton` (not `iconOnly`), the only
+  place it's reachable from now. An archived module's row content area
+  also gets a `bg-stone-100` tint (vs. plain white otherwise) so archived
+  status is visible on the tile itself, not just via its "Archived"
+  `Badge`.
+  `nk_training_module_types.bg_color` (`VARCHAR(7)`, default `'#78716c'`,
+  best-effort distinct defaults seeded for the standard types) gives
+  training module types the same color field as `nk_event_types` —
+  `admin/TrainingModuleTypes.tsx` got the identical Icon+Color
+  (`grid-cols-2`, `<input type="color">`) treatment as
+  `admin/EventTypes.tsx`, plus the same colored-circle list row.
+  A funnel-icon button next to `AddButton` opens a "Filter training
   modules" `Drawer` — mirrors Schedule's own type-filter drawer: a "Show
   archived" checkbox (unioned with the archived-hides-by-default
   behavior above, not just backend-side), a "Group by type" checkbox
@@ -959,29 +969,33 @@ coach-run attendance) — this is personal athlete itinerary planning.
   beside it, rather than Schedule's own vertical icon-over-label squares
   — reads better for module type names) built from
   `admin/TrainingModuleTypes.tsx`'s type list, each tap toggling that
-  type in/out of a multi-select filter set (`bg-red-600` fill when
-  selected, since module types carry no color of their own the way event
-  types do). When grouping is on, `filtered` modules are bucketed by
-  `type_id` (an explicit "No type" bucket for `null`) into labeled
-  sections instead of one flat list, each headed by an `<h2>` using the
-  same classes as Schedule's own date-group headers
-  (`text-sm font-semibold text-stone-500`) so the global `h2` rule
-  (Oswald, uppercase, tracked) gives both an identical look. The list row
-  itself also borrows Schedule's visual language when *not* grouped: a
-  `moduleIcon(m)` (or a generic 🏋️ fallback) sits in a full-height
-  `bg-stone-200` block capping the left end of the row (`ModuleRow`'s
-  `showIcon` prop, `overflow-hidden` on the outer `rounded-2xl` wrapper
-  clips it to match) — a simplified, non-clipped, non-swipeable cousin of
-  Schedule's colored chevron icon segment, since module types carry no
-  per-type color and these rows have no swipe actions. When grouped, each
-  row passes `showIcon={false}` instead, since the section header's own
-  icon already carries that context and repeating it on every row
-  underneath would be redundant. Finally, the whole filter state
-  (`typeFilters`, `showArchived`, `groupByType` — but not the search box,
-  which is a one-off lookup) round-trips through `localStorage`
-  (`trainingModulesFilters`, read via a lazy `useState` initializer and
-  written back on every change) so it survives a page refresh instead of
-  resetting.
+  type in/out of a multi-select filter set, filling with the type's own
+  `bg_color` when selected (same as Schedule's tiles, now that module
+  types carry a real color instead of a flat fallback). When grouping is
+  on, `filtered` modules are bucketed by `type_id` (an explicit "No type"
+  bucket for `null`) into labeled sections instead of one flat list, each
+  headed by an `<h2>` using the same classes as Schedule's own date-group
+  headers (`text-sm font-semibold text-stone-500`) so the global `h2`
+  rule (Oswald, uppercase, tracked) gives both an identical look. The
+  list row itself also borrows Schedule's visual language when *not*
+  grouped: `moduleIcon(m)` (or a generic 🏋️ fallback) sits in a segment
+  capping the left end of the row, angle-cut with the same `clipPath:
+  "polygon(0 0, 100% 0, 78% 100%, 0 100%)"` and drop-shadow Schedule uses
+  for its own event rows, colored by `m.type_bg_color` (falling back to
+  `#78716c` for a module with no type) — a non-swipeable cousin of
+  Schedule's chevron icon segment, since these rows have no swipe
+  actions, but with the same angled cut and per-type color Schedule's
+  rows have (`ModuleRow`'s `showIcon` prop gates whether it renders at
+  all; the surrounding content div's `-ml-3 rounded-sm` only applies
+  when it does, so the tucked-under overlap matches Schedule's own
+  layout exactly). When grouped, each row passes `showIcon={false}`
+  instead, since the section header's own icon already carries that
+  context and repeating it on every row underneath would be redundant.
+  Finally, the whole filter state (`typeFilters`, `showArchived`,
+  `groupByType` — but not the search box, which is a one-off lookup)
+  round-trips through `localStorage` (`trainingModulesFilters`, read via
+  a lazy `useState` initializer and written back on every change) so it
+  survives a page refresh instead of resetting.
 - **Squads, groups, and venues**: club-scoped structure, distinct from
   the global-reference-list model used by katas/karate styles/coach
   roles above. `nk_squads`/`nk_groups` (`club_id` FK, `name`) each have a
