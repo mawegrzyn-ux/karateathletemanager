@@ -60,11 +60,19 @@ training-module exercise's `video_url`/`image_url` — see
 button that posts the chosen file to `POST /api/uploads`, and a live
 preview (YouTube links embed a player; other video/image URLs render a
 native `<video>`/`<img>`). Don't build a page-local copy of this — extend
-`MediaField` itself if the pattern needs to change. Anywhere a person's
-photo is displayed instead of edited (list rows, read-only profile
-views), use `Avatar` — it renders the photo if `photo_url` is set,
-otherwise a circle with the name's initials; never leave a person-shaped
-field blank when there's no photo.
+`MediaField` itself if the pattern needs to change. A spot that wants a
+single field covering either media type (e.g. the Schedule swipe-to-post
+composer, see `QuickPostDrawer` in `Schedule.tsx`) passes `kind="image"
+allowVideo` instead of adding a second field — the action sheet gains a
+"🎥 Record video" capture option alongside "Take photo"/"Choose from
+library", and the preview auto-detects video vs. image from the stored
+URL's extension (`isVideoUrl`, also exported from `ui.tsx` — use it
+anywhere else an `image_url`-shaped field might now hold a video, e.g.
+`PostCard`'s feed rendering). Anywhere a person's photo is displayed
+instead of edited (list rows, read-only profile views), use `Avatar` — it
+renders the photo if `photo_url` is set, otherwise a circle with the
+name's initials; never leave a person-shaped field blank when there's no
+photo.
 
 ## UI convention: delete confirmation
 

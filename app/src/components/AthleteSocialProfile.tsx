@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useApi } from "../hooks/useApi";
 import { usePhotoPalette } from "../lib/colorPalette";
 import { renderFormattedText } from "../utils/formatText";
-import { Avatar, BeltSwatch, DeleteButton, Drawer, MediaField, Spinner, Toast } from "./ui";
+import { Avatar, BeltSwatch, DeleteButton, Drawer, MediaField, Spinner, Toast, isVideoUrl } from "./ui";
 
 export interface SocialProfile {
   id: number;
@@ -192,7 +192,12 @@ function PostCard({
         <p className="whitespace-pre-wrap text-sm">{renderFormattedText(post.body)}</p>
       )}
       {post.image_url && (
-        <img src={post.image_url} alt="" className="max-h-80 w-full object-cover" />
+        isVideoUrl(post.image_url) ? (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video src={post.image_url} controls className="max-h-80 w-full object-cover" />
+        ) : (
+          <img src={post.image_url} alt="" className="max-h-80 w-full object-cover" />
+        )
       )}
       <ShareBadge post={post} />
     </div>
