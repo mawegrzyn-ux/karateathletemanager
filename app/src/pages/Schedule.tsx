@@ -1172,28 +1172,36 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                   // of the two end caps, since it's the one carrying the
                   // pass/fail/trophy signal.
                   const resultShadow = "drop-shadow(0 3px 3px rgba(20,20,18,0.45))";
-                  const addPostAction = {
-                    label: "📝 Add post",
+                  const isCompetition = e.event_type === "competition";
+                  const leftOptions = [
+                    {
+                      label: "✓ Completed",
+                      onTrigger: () => {
+                        swipeEventStatus(e, "completed");
+                        // Competitions still need a fast way to capture the
+                        // result - rather than a third cycle option (the
+                        // picker is deliberately just the two outcomes),
+                        // marking one "Completed" opens the result composer
+                        // right away.
+                        if (isCompetition) setResultDrawerEvent(e);
+                      },
+                    },
+                    {
+                      label: "✗ Failed",
+                      onTrigger: () => swipeEventStatus(e, "failed"),
+                    },
+                  ];
+                  const rightAction = {
+                    label: "📸 Add post",
                     onTrigger: () =>
                       setQuickPost({ event: e, typeLabel: info.label }),
                   };
-                  const deepSwipeActions =
-                    e.event_type === "competition"
-                      ? [
-                          {
-                            label: "🏆 Record result",
-                            onTrigger: () => setResultDrawerEvent(e),
-                          },
-                          addPostAction,
-                        ]
-                      : [addPostAction];
                   return (
                     <SwipeableRow
                       key={`${e.id}-${occ.date}`}
                       disabled={e.my_status == null}
-                      onSwipeComplete={() => swipeEventStatus(e, "completed")}
-                      onSwipeFailed={() => swipeEventStatus(e, "failed")}
-                      deepSwipeActions={deepSwipeActions}
+                      leftOptions={leftOptions}
+                      rightAction={rightAction}
                     >
                       {(dragX) => {
                         // The two end caps don't slide as one rigid block
@@ -3055,48 +3063,48 @@ function venueLabel(v: Venue) {
 }
 
 const SWIPE_THRESHOLD = 64;
-const DEEP_SWIPE_THRESHOLD = 96;
-const DEEP_HINT_WIDTH = 140;
+const CYCLE_HINT_WIDTH = 140;
 const DISABLED_SWIPE_MAX = 180;
 const OPTION_CYCLE_DISTANCE = 36;
 
-// Wraps a row with horizontal swipe-to-flag: swipe left calls onSwipeComplete,
-// swipe right calls onSwipeFailed. Pointer events (not HTML5 drag-and-drop)
-// so it works on touch, same approach as the Day view's drag-to-move. When
-// `disabled` (coaches/admins can't swipe someone else's status), dragging
-// still tracks and reveals `disabledMessage` behind the row instead of the
-// ✓/✗ hint, growing with drag distance so the message can be read - but
-// releasing never fires onSwipeComplete/onSwipeFailed.
+// Wraps a row with horizontal swipe-to-flag. Pointer events (not HTML5
+// drag-and-drop) so it works on touch, same approach as the Day view's
+// drag-to-move. When `disabled` (coaches/admins can't swipe someone else's
+// status), dragging still tracks and reveals `disabledMessage` behind the
+// row instead of the option hints, growing with drag distance so the
+// message can be read - but releasing never fires anything.
 //
-// `deepSwipeActions` (see the List view) adds a second, deeper zone on the
-// same left-swipe gesture: past DEEP_SWIPE_THRESHOLD the ✓/complete hint
-// snaps straight to the (first) deep action's own label/color at a fixed,
-// wider width (DEEP_HINT_WIDTH) - a snap rather than a gradual stretch, so
-// the hint reads cleanly at both sizes instead of an in-between smear - and
-// releasing there fires it instead of onSwipeComplete. It's exposed as an
-// extension of the same gesture rather than a separate one, so there's
-// nothing to discover except "keep swiping" - kept close to
-// SWIPE_THRESHOLD so that discovery doesn't require an unusually long drag.
+// Swipe LEFT past SWIPE_THRESHOLD fires the currently-selected entry of
+// `leftOptions` (defaults to a single plain "✓" built from
+// `onSwipeComplete` when omitted - ItemsSection's rows). With more than one
+// option (the List view's ✓ Completed / ✗ Failed picker) the hint snaps
+// straight to a fixed, wider width (CYCLE_HINT_WIDTH) - a snap rather than
+// a gradual stretch, so the hint reads cleanly at both sizes - and holding
+// past SWIPE_THRESHOLD then dragging vertically cycles which option is
+// selected (every OPTION_CYCLE_DISTANCE px of vertical drag moves one
+// step, clamped to the array's ends rather than wrapping) - small ▲/▼
+// indicators either side of the label hint that this is possible, dimmed
+// at whichever end is already selected. Vertical drag only starts counting
+// once the row is past SWIPE_THRESHOLD (tracked from the Y position at
+// that moment, not from the original touch-down) so incidental vertical
+// motion during the initial horizontal swipe never pre-offsets the
+// selection, and touchAction only switches to "none" (blocking the
+// browser's own vertical pan) while cycling, so the row scrolls normally
+// at every other drag stage.
 //
-// With more than one deep action, holding past DEEP_SWIPE_THRESHOLD and
-// then dragging vertically cycles which one is selected (every
-// OPTION_CYCLE_DISTANCE px of vertical drag moves one step, clamped to the
-// array's ends rather than wrapping) - small ▲/▼ indicators either side of
-// the label hint that this is possible, dimmed at whichever end is already
-// selected. Vertical drag only starts counting once the deep zone is
-// entered (tracked from the Y position at that moment, not from the
-// original touch-down) so incidental vertical motion during the initial
-// horizontal swipe never pre-offsets the selection, and touchAction only
-// switches to "none" (blocking the browser's own vertical pan) while in
-// that held state, so the row scrolls normally at every other drag stage.
+// Swipe RIGHT past SWIPE_THRESHOLD fires `rightAction` (defaults to a
+// plain red "✗" built from `onSwipeFailed` when omitted) - always a single
+// action, never cyclable, since the List view uses it for one thing (a
+// blue "📸 Add post" capture prompt).
 function SwipeableRow({
   children,
   onSwipeComplete,
   onSwipeFailed,
+  leftOptions,
+  rightAction,
   disabled,
   disabledMessage = "Only athletes can swipe",
   className,
-  deepSwipeActions,
 }: {
   // A plain ReactNode slides as one rigid block (translateX(dragX)) - the
   // original behavior, still used by ItemsSection's rows. Passing a
@@ -3106,31 +3114,36 @@ function SwipeableRow({
   // segment stays put during a right swipe, rather than the whole tile
   // translating as a unit.
   children: ReactNode | ((dragX: number) => ReactNode);
-  onSwipeComplete: () => void;
-  onSwipeFailed: () => void;
+  onSwipeComplete?: () => void;
+  onSwipeFailed?: () => void;
+  leftOptions?: { label: string; onTrigger: () => void }[];
+  rightAction?: { label: string; onTrigger: () => void };
   disabled?: boolean;
   disabledMessage?: string;
   className?: string;
-  deepSwipeActions?: { label: string; onTrigger: () => void }[];
 }) {
   const [dragX, setDragX] = useState(0);
-  const [deepIndex, setDeepIndex] = useState(0);
+  const [cycleIndex, setCycleIndex] = useState(0);
   const startXRef = useRef<number | null>(null);
-  const deepEntryYRef = useRef<number | null>(null);
+  const cycleEntryYRef = useRef<number | null>(null);
   const draggedRef = useRef(false);
   const pastSwipeRef = useRef(false);
-  const pastDeepRef = useRef(false);
-  const deepIndexRef = useRef(0);
-  const cyclable = !!deepSwipeActions && deepSwipeActions.length > 1;
+  const cycleIndexRef = useRef(0);
+
+  const options =
+    leftOptions ?? (onSwipeComplete ? [{ label: "✓", onTrigger: onSwipeComplete }] : []);
+  const right =
+    rightAction ?? (onSwipeFailed ? { label: "✗", onTrigger: onSwipeFailed } : null);
+  const cyclable = options.length > 1;
+  const customRight = !!rightAction;
 
   function onPointerDown(e: ReactPointerEvent) {
     startXRef.current = e.clientX;
-    deepEntryYRef.current = null;
+    cycleEntryYRef.current = null;
     draggedRef.current = false;
     pastSwipeRef.current = false;
-    pastDeepRef.current = false;
-    deepIndexRef.current = 0;
-    setDeepIndex(0);
+    cycleIndexRef.current = 0;
+    setCycleIndex(0);
     (e.target as Element).setPointerCapture(e.pointerId);
   }
 
@@ -3138,7 +3151,7 @@ function SwipeableRow({
     if (startXRef.current == null) return;
     const delta = e.clientX - startXRef.current;
     if (Math.abs(delta) > 8) draggedRef.current = true;
-    const max = deepSwipeActions ? DEEP_HINT_WIDTH : Infinity;
+    const max = cyclable ? CYCLE_HINT_WIDTH : Infinity;
     const clampedX = disabled
       ? Math.max(-DISABLED_SWIPE_MAX, Math.min(DISABLED_SWIPE_MAX, delta))
       : Math.max(-max, Math.min(max, delta));
@@ -3150,59 +3163,45 @@ function SwipeableRow({
         pastSwipeRef.current = isPastSwipe;
         if (isPastSwipe) feedbackTick(600);
       }
-      const isPastDeep = !!deepSwipeActions && clampedX <= -DEEP_SWIPE_THRESHOLD;
-      if (isPastDeep !== pastDeepRef.current) {
-        pastDeepRef.current = isPastDeep;
-        if (isPastDeep) feedbackTick(350);
-      }
     }
 
-    if (!disabled && cyclable && clampedX <= -DEEP_SWIPE_THRESHOLD) {
-      if (deepEntryYRef.current == null) deepEntryYRef.current = e.clientY;
-      const deltaY = e.clientY - deepEntryYRef.current;
+    if (!disabled && cyclable && clampedX <= -SWIPE_THRESHOLD) {
+      if (cycleEntryYRef.current == null) cycleEntryYRef.current = e.clientY;
+      const deltaY = e.clientY - cycleEntryYRef.current;
       const step = Math.round(-deltaY / OPTION_CYCLE_DISTANCE);
-      const clampedStep = Math.max(0, Math.min(deepSwipeActions!.length - 1, step));
-      if (clampedStep !== deepIndexRef.current) {
-        deepIndexRef.current = clampedStep;
+      const clampedStep = Math.max(0, Math.min(options.length - 1, step));
+      if (clampedStep !== cycleIndexRef.current) {
+        cycleIndexRef.current = clampedStep;
         feedbackTick(700 + clampedStep * 60);
       }
-      setDeepIndex(clampedStep);
+      setCycleIndex(clampedStep);
     } else {
-      deepEntryYRef.current = null;
-      deepIndexRef.current = 0;
-      setDeepIndex(0);
+      cycleEntryYRef.current = null;
+      cycleIndexRef.current = 0;
+      setCycleIndex(0);
     }
   }
 
   function onPointerUp() {
     if (startXRef.current == null) return;
     if (!disabled) {
-      if (deepSwipeActions && dragX <= -DEEP_SWIPE_THRESHOLD) {
-        feedbackConfirm(450);
-        deepSwipeActions[deepIndex]?.onTrigger();
-      } else if (dragX <= -SWIPE_THRESHOLD) {
-        feedbackConfirm(500);
-        onSwipeComplete();
-      } else if (dragX >= SWIPE_THRESHOLD) {
+      if (dragX <= -SWIPE_THRESHOLD && options[cycleIndex]) {
+        feedbackConfirm(cyclable ? 450 : 500);
+        options[cycleIndex].onTrigger();
+      } else if (dragX >= SWIPE_THRESHOLD && right) {
         feedbackConfirm(400);
-        onSwipeFailed();
+        right.onTrigger();
       }
     }
     setDragX(0);
-    setDeepIndex(0);
-    deepEntryYRef.current = null;
+    setCycleIndex(0);
+    cycleEntryYRef.current = null;
     pastSwipeRef.current = false;
-    pastDeepRef.current = false;
-    deepIndexRef.current = 0;
+    cycleIndexRef.current = 0;
     startXRef.current = null;
   }
 
-  const pastDeep = !!deepSwipeActions && dragX <= -DEEP_SWIPE_THRESHOLD;
-  const hintWidth = disabled
-    ? Math.abs(dragX)
-    : pastDeep
-    ? DEEP_HINT_WIDTH
-    : SWIPE_THRESHOLD;
+  const hintWidth = disabled ? Math.abs(dragX) : cyclable ? CYCLE_HINT_WIDTH : SWIPE_THRESHOLD;
   const hintOpacity = disabled
     ? Math.min(1, Math.abs(dragX) / 40)
     : Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD);
@@ -3211,13 +3210,13 @@ function SwipeableRow({
     <div className={`relative overflow-hidden rounded-md ${className ?? ""}`}>
       {/* Positioned on the side the slide actually exposes: dragging left
           (dragX<0) slides content left, uncovering the row's right edge, so
-          the ✓/complete hint - the action that fires for dragX<0 - lives at
-          right-0 (and vice versa for ✗/failed at left-0). */}
+          the left-option hint - which fires for dragX<0 - lives at
+          right-0 (and vice versa for the right action at left-0). */}
       <div
         className={`pointer-events-none absolute inset-y-0 right-0 flex flex-col items-center justify-center overflow-hidden whitespace-nowrap px-2 text-center text-xs font-medium transition-[width] duration-150 ease-out ${
           disabled
             ? "bg-stone-200 text-stone-600"
-            : pastDeep
+            : cyclable
             ? "bg-amber-100 text-amber-800"
             : "bg-green-100 text-green-700"
         }`}
@@ -3225,39 +3224,39 @@ function SwipeableRow({
       >
         {disabled ? (
           disabledMessage
-        ) : pastDeep ? (
-          cyclable ? (
-            <>
-              <span
-                className={`text-[9px] leading-none ${
-                  deepIndex > 0 ? "opacity-80" : "opacity-25"
-                }`}
-              >
-                ▲
-              </span>
-              <span>{deepSwipeActions![deepIndex].label}</span>
-              <span
-                className={`text-[9px] leading-none ${
-                  deepIndex < deepSwipeActions!.length - 1 ? "opacity-80" : "opacity-25"
-                }`}
-              >
-                ▼
-              </span>
-            </>
-          ) : (
-            deepSwipeActions![0].label
-          )
+        ) : cyclable ? (
+          <>
+            <span
+              className={`text-[9px] leading-none ${
+                cycleIndex > 0 ? "opacity-80" : "opacity-25"
+              }`}
+            >
+              ▲
+            </span>
+            <span>{options[cycleIndex]?.label}</span>
+            <span
+              className={`text-[9px] leading-none ${
+                cycleIndex < options.length - 1 ? "opacity-80" : "opacity-25"
+              }`}
+            >
+              ▼
+            </span>
+          </>
         ) : (
-          "✓"
+          options[0]?.label ?? "✓"
         )}
       </div>
       <div
         className={`pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center overflow-hidden px-2 text-center text-xs font-medium ${
-          disabled ? "bg-stone-200 text-stone-600" : "bg-red-100 text-red-700"
+          disabled
+            ? "bg-stone-200 text-stone-600"
+            : customRight
+            ? "bg-blue-100 text-blue-700"
+            : "bg-red-100 text-red-700"
         }`}
         style={{ opacity: dragX > 0 ? hintOpacity : 0, width: hintWidth }}
       >
-        {disabled ? disabledMessage : "✗"}
+        {disabled ? disabledMessage : right?.label ?? "✗"}
       </div>
       <div
         onPointerDown={onPointerDown}
@@ -3273,7 +3272,7 @@ function SwipeableRow({
         }}
         style={{
           transform: typeof children === "function" ? undefined : `translateX(${dragX}px)`,
-          touchAction: cyclable && pastDeep ? "none" : "pan-y",
+          touchAction: cyclable && dragX <= -SWIPE_THRESHOLD ? "none" : "pan-y",
           transition: dragX === 0 ? "transform 150ms ease-out" : "none",
         }}
       >
@@ -3283,9 +3282,10 @@ function SwipeableRow({
   );
 }
 
-// The deep-swipe "Record result" quick composer for a competition-type
-// event, opened from its List view row (see SwipeableRow's deepSwipeAction
-// above). Deliberately minimal - just rounds won and place, not the full
+// The "Record result" quick composer for a competition-type event, opened
+// automatically right after its List view row is swiped left to "✓
+// Completed" (see the List view's leftOptions above). Deliberately
+// minimal - just rounds won and place, not the full
 // EventCompetitionResults form - since this is meant as a fast one-tap
 // capture right after the swipe; a fuller record (location/notes) can
 // still be added from the event's own detail drawer. Posting to the
@@ -3428,10 +3428,10 @@ function RecordResultDrawer({
   );
 }
 
-// The deep-swipe "Add post" quick composer, reachable on every event's
-// row (not just competitions - see the List view's deepSwipeActions).
-// Deliberately just a body + optional photo, prefilled with the calendar
-// entry's type/date/name so posting about "today's session" is a one-tap
+// The "Add post" quick composer, opened by swiping any event's List view
+// row right (see the List view's rightAction above). Deliberately just a
+// body + optional photo/video, prefilled with the calendar entry's
+// type/date/name so posting about "today's session" is a one-tap
 // edit-and-send rather than a blank composer - and shares the event
 // (`share_kind: "event"`) so it also carries the same "🗓️ {title}"
 // ShareBadge a manually-shared event gets from the main post composer.
@@ -3541,8 +3541,9 @@ function QuickPostDrawer({
           />
         </Field>
         <MediaField
-          label="Photo (optional)"
+          label="Photo or video (optional)"
           kind="image"
+          allowVideo
           value={photoUrl}
           onChange={setPhotoUrl}
           onError={showMediaError}
@@ -3553,7 +3554,7 @@ function QuickPostDrawer({
           disabled={submitting || uploadingPhoto}
           className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
         >
-          {uploadingPhoto ? "Uploading photo..." : submitting ? "Posting..." : "Post"}
+          {uploadingPhoto ? "Uploading..." : submitting ? "Posting..." : "Post"}
         </button>
       </form>
       {mediaError && <Toast message={mediaError} />}

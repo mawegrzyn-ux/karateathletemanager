@@ -1845,6 +1845,49 @@ third-party OAuth.
   `RequireAuth adminOnly`.
 - Pending/disabled users can log in but are shown a "waiting for
   approval" screen (`PendingApproval.tsx`) instead of the app.
+- **Swipe redesign: left always cycles Completed/Failed, right always
+  opens the photo/video "Add post" composer.** Replaces the earlier
+  two-tier shallow/deep-swipe-left design described above — there is no
+  longer a separate, deeper threshold to discover; the vertical-cycle
+  mechanic that used to live behind `DEEP_SWIPE_THRESHOLD` is now what a
+  plain left swipe does the moment it clears `SWIPE_THRESHOLD` (64px),
+  and the old `deepSwipeActions` prop was replaced by two more general
+  ones: `leftOptions: { label, onTrigger }[]` (defaults to a single "✓"
+  built from `onSwipeComplete` when omitted — still how `ItemsSection`'s
+  itinerary-item rows behave, completely unaffected by this change) and
+  `rightAction: { label, onTrigger }` (defaults to a single red "✗" built
+  from `onSwipeFailed` when omitted, same as before). The List view now
+  passes `leftOptions={[{label: "✓ Completed", ...}, {label: "✗ Failed",
+  ...}]}` — always two options, always cyclable, snapping straight to the
+  fixed `CYCLE_HINT_WIDTH` (140px, renamed from `DEEP_HINT_WIDTH`) with
+  an amber background and the same ▲/▼ step indicators the old deep zone
+  used — and a custom `rightAction` ("📸 Add post", blue hint instead of
+  red, since it's no longer a "failure" signal) that opens
+  `QuickPostDrawer` directly instead of marking the event failed.
+  Marking a *competition* event "✓ Completed" this way also opens
+  `RecordResultDrawer` right after, since the picker is deliberately
+  fixed at exactly two outcomes rather than growing a third "🏆 Record
+  result" cycle option — the fast-result-capture entry point the old
+  deep-swipe design gave competitions is preserved this way instead.
+  `QuickPostDrawer`'s photo field became `MediaField`'s new `allowVideo`
+  mode (kind="image", allowVideo) so the "take a photo or video, turn it
+  into a post" flow covers both media types through one shared
+  component rather than a page-local second control — see below.
+  `SwipeableRow`'s `onSwipeComplete`/`onSwipeFailed` props are now
+  optional (only used as the fallback single-option built above); a
+  caller passes either the old pair or the new `leftOptions`/
+  `rightAction`, never a mix.
+- **`MediaField` gained an `allowVideo` prop (image-kind only).** The
+  action sheet gains a third "🎥 Record video" option (a hidden
+  `<input type="file" accept="video/*" capture="environment">`) alongside
+  the existing "📷 Take photo"/"🖼 Choose from library", and the preview
+  auto-detects video vs. image from the stored URL's extension
+  (`isVideoUrl`, exported from `ui.tsx`) rather than needing a separate
+  field to track which kind was picked — so the same `value`/`onChange`
+  string can hold either. Anywhere a post's `image_url` is rendered
+  (`PostCard` in `AthleteSocialProfile.tsx`) now checks `isVideoUrl`
+  first and renders a native `<video>` instead of an `<img>` when it
+  matches, since `QuickPostDrawer`'s media field can now produce either.
 
 ### Activation auto-provisions athlete/coach profiles
 

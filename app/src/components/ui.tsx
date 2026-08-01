@@ -65,9 +65,16 @@ export function extractYouTubeId(url: string): string | null {
   return url.match(YOUTUBE_ID_PATTERN)?.[1] ?? null;
 }
 
+const VIDEO_EXT_PATTERN = /\.(mp4|mov|webm|m4v|avi)(\?|#|$)/i;
+
+export function isVideoUrl(url: string): boolean {
+  return VIDEO_EXT_PATTERN.test(url);
+}
+
 export function MediaField({
   label,
   kind,
+  allowVideo,
   value,
   onChange,
   onError,
@@ -75,6 +82,12 @@ export function MediaField({
 }: {
   label: string;
   kind: "video" | "image";
+  // Image-kind only: also offers "Record video" alongside "Take photo" /
+  // "Choose from library", for spots that want a single field covering
+  // either media type (e.g. the Schedule swipe-to-post composer) rather
+  // than a page-local second control - the preview auto-detects video vs.
+  // image from the URL's extension.
+  allowVideo?: boolean;
   value: string;
   onChange: (url: string) => void;
   onError: (message: string) => void;
@@ -84,6 +97,7 @@ export function MediaField({
   const [pickerOpen, setPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const videoCaptureInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -109,16 +123,26 @@ export function MediaField({
   // which is what actually steers a mobile browser to the camera app
   // instead of the photo library.
   if (kind === "image") {
+    const isVideo = !!value && isVideoUrl(value);
     return (
       <div className="flex flex-col gap-1">
         <span className="text-sm font-medium text-stone-700">{label}</span>
         <div className="relative">
           {value ? (
-            <img
-              src={value}
-              alt={`${label} preview`}
-              className="max-h-40 w-full rounded-xl object-cover"
-            />
+            isVideo ? (
+              // eslint-disable-next-line jsx-a11y/media-has-caption
+              <video
+                src={value}
+                controls
+                className="max-h-40 w-full rounded-xl object-cover"
+              />
+            ) : (
+              <img
+                src={value}
+                alt={`${label} preview`}
+                className="max-h-40 w-full rounded-xl object-cover"
+              />
+            )
           ) : (
             <button
               type="button"
@@ -126,7 +150,9 @@ export function MediaField({
               className="flex h-40 w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-stone-300 text-stone-500"
             >
               <span className="text-2xl leading-none">📷</span>
-              <span className="text-sm font-medium">Add photo</span>
+              <span className="text-sm font-medium">
+                {allowVideo ? "Add photo or video" : "Add photo"}
+              </span>
             </button>
           )}
           {value && (
@@ -159,7 +185,7 @@ export function MediaField({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept={allowVideo ? "image/*,video/*" : "image/*"}
           onChange={handleFile}
           className="hidden"
         />
@@ -171,6 +197,16 @@ export function MediaField({
           onChange={handleFile}
           className="hidden"
         />
+        {allowVideo && (
+          <input
+            ref={videoCaptureInputRef}
+            type="file"
+            accept="video/*"
+            capture="environment"
+            onChange={handleFile}
+            className="hidden"
+          />
+        )}
 
         <Modal open={pickerOpen} onClose={() => setPickerOpen(false)}>
           <div className="flex flex-col gap-2 p-2">
@@ -184,6 +220,18 @@ export function MediaField({
             >
               📷 Take photo
             </button>
+            {allowVideo && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPickerOpen(false);
+                  videoCaptureInputRef.current?.click();
+                }}
+                className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700"
+              >
+                🎥 Record video
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
