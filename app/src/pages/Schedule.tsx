@@ -1237,6 +1237,29 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                           dragX === 0 ? "transform 150ms ease-out" : "none";
                         const iconTranslate = Math.max(0, dragX);
                         const resultTranslate = Math.min(0, dragX);
+                        // The ◀/▶ "keep swiping" cue lives on these
+                        // sliding segments (not in SwipeableRow's static
+                        // hint box) specifically so it tracks the live
+                        // drag instead of a fixed snap width: it only
+                        // shows once the shallow swipe threshold is
+                        // cleared and disappears again past the deep
+                        // one (nothing "further" to hint at once
+                        // there), and never at all when this row's
+                        // swipe is disabled (coach/admin viewing
+                        // someone else's row).
+                        const swipeable = e.my_status != null;
+                        const showRightChevron =
+                          swipeable &&
+                          dragX >= SWIPE_THRESHOLD &&
+                          dragX < DEEP_SWIPE_THRESHOLD;
+                        const showLeftChevron =
+                          swipeable &&
+                          dragX <= -SWIPE_THRESHOLD &&
+                          dragX > -DEEP_SWIPE_THRESHOLD;
+                        const hasResultSegment =
+                          showTrophy ||
+                          e.my_status === "completed" ||
+                          e.my_status === "failed";
                         return (
                           <div className="isolate flex overflow-hidden rounded-md shadow-card">
                             {isOverdue(e) ? (
@@ -1251,6 +1274,11 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                 }}
                               >
                                 !
+                                {showRightChevron && (
+                                  <span className="absolute left-1 text-sm leading-none text-white/70">
+                                    ▶
+                                  </span>
+                                )}
                               </div>
                             ) : (
                               <div
@@ -1265,6 +1293,11 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                 }}
                               >
                                 {info.icon}
+                                {showRightChevron && (
+                                  <span className="absolute left-1 text-sm leading-none text-white/70">
+                                    ▶
+                                  </span>
+                                )}
                               </div>
                             )}
                             <button
@@ -1324,10 +1357,16 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                     : ""}
                                 </span>
                               </div>
+                              {showLeftChevron && !hasResultSegment && (
+                                <span
+                                  aria-hidden
+                                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm leading-none text-stone-400"
+                                >
+                                  ◀
+                                </span>
+                              )}
                             </button>
-                            {(showTrophy ||
-                              e.my_status === "completed" ||
-                              e.my_status === "failed") && (
+                            {hasResultSegment && (
                               <div
                                 aria-hidden
                                 className={`relative z-10 -ml-3 flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 text-center ${
@@ -1355,6 +1394,11 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                   <span className="text-3xl leading-none">✓</span>
                                 ) : (
                                   <span className="text-3xl leading-none">✗</span>
+                                )}
+                                {showLeftChevron && (
+                                  <span className="absolute right-1 text-sm leading-none opacity-70">
+                                    ◀
+                                  </span>
                                 )}
                               </div>
                             )}
@@ -3147,27 +3191,35 @@ const OPTION_CYCLE_DISTANCE = 36;
 // cyclable: holding in that zone and dragging vertically cycles which
 // entry is selected (every OPTION_CYCLE_DISTANCE px of vertical drag
 // moves one step, clamped to the array's ends rather than wrapping) -
-// small ▲/▼ indicators either side of the label hint that this is
-// possible, dimmed at whichever end is already selected. Only the left
-// side ever cycles multiple options at a given tier; the right side's
-// shallow/deep actions are always single. Vertical drag only starts
-// counting once a zone is entered (tracked from the Y position at that
-// moment, and reset whenever the active zone changes - shallow<->deep or
-// leaving the swipe range entirely - so incidental vertical motion never
-// pre-offsets a fresh zone's selection), and touchAction only switches to
-// "none" (blocking the browser's own vertical pan) while actively
-// cycling, so the row scrolls normally at every other drag stage.
+// no arrow icons mark this at all, just the label swapping as you cross
+// each step (the List view's own sliding segments carry a ◀/▶
+// directional "keep swiping" cue instead - see below - but nothing
+// marks the vertical cycle; the nicer, bigger label text is meant to
+// carry that on its own). Only the left side ever cycles multiple
+// options at a given tier; the right side's shallow/deep actions are
+// always single. Vertical drag only starts counting
+// once a zone is entered (tracked from the Y position at that moment,
+// and reset whenever the active zone changes - shallow<->deep or
+// leaving the swipe range entirely - so incidental vertical motion
+// never pre-offsets a fresh zone's selection), and touchAction only
+// switches to "none" (blocking the browser's own vertical pan) while
+// actively cycling, so the row scrolls normally at every other drag
+// stage.
 //
-// Each hint's content is packed against the tile's true outer edge
+// The icon+label packs against the tile's true outer edge
 // (`justify-end`/`items-end` on the left hint, mirrored `justify-start`/
-// `items-start` on the right) rather than centered in the box, so it
+// `items-start` on the right) rather than centering in the box, so it
 // reads consistently at the boundary regardless of how wide the box
-// currently is. Whenever a side has a deeper tier to discover
-// (`deepLeftOptions`/`deepRightAction` provided) and the drag hasn't
-// reached it yet, a small ◀/▶ chevron - pointing the same direction as
-// the swipe itself - sits right at that same true edge, disappearing
-// once the deep zone is actually reached (there's nothing "further" to
-// hint at from there).
+// currently is. Deliberately no directional (◀/▶) or cycle (▲/▼) icons
+// live in this static hint box itself - a box that only ever snaps
+// between a couple of fixed widths can't track the live drag position,
+// so anything pinned to it either shows up too early (before the card
+// has actually receded that far) or not at all. The List view instead
+// renders those cues as part of its own sliding card/icon/result
+// segments (see that render function, `Schedule.tsx`), which already
+// translate by the live `dragX` - so a cue placed at one of those
+// segments' own edges genuinely tracks the boundary the card is
+// receding from, rather than a static position guessed at here.
 //
 // Every option label is "EMOJI text" (e.g. "🏆 Record result") - splitLabel
 // pulls the emoji out to render as its own larger "header" icon above the
@@ -3357,8 +3409,6 @@ function SwipeableRow({
     leftActiveOptions[cycleIndex]?.label ?? "✓"
   );
   const { icon: rightIcon, text: rightText } = splitLabel(rightActive?.label ?? "✗");
-  const showLeftDeepHint = hasDeepLeft && !leftInDeep;
-  const showRightDeepHint = hasDeepRight && !rightInDeep;
 
   return (
     <div className={`relative overflow-hidden rounded-md ${className ?? ""}`}>
@@ -3366,12 +3416,17 @@ function SwipeableRow({
           (dragX<0) slides content left, uncovering the row's right edge, so
           the left-option hint - which fires for dragX<0 - lives at
           right-0 (and vice versa for the right action at left-0). Content
-          is packed against that same true edge (`justify-end`/`items-end`
-          here, mirrored to `justify-start`/`items-start` on the other side)
-          rather than centered in the hint box, so it reads consistently
-          right at the tile's boundary regardless of how wide the box is. */}
+          packs against that same true edge (`justify-end`/`items-end` here,
+          mirrored to `justify-start`/`items-start` on the other side)
+          rather than centering in the box, so it reads consistently right
+          at the tile's boundary regardless of how wide the box is. The
+          directional ◀/▶ "keep swiping" cue and the vertical ▲/▼ cycle
+          cue both live on the List view's own sliding card/icon/result
+          segments instead of here - see that render function - since
+          those actually track the live drag position, whereas this box's
+          width only ever snaps between fixed sizes. */}
       <div
-        className={`pointer-events-none absolute inset-y-0 right-0 flex items-center justify-end gap-1.5 overflow-hidden whitespace-nowrap px-2.5 text-right text-xs font-medium transition-[width] duration-150 ease-out ${
+        className={`pointer-events-none absolute inset-y-0 right-0 flex items-center justify-end overflow-hidden whitespace-nowrap px-2.5 text-right text-xs font-medium transition-[width] duration-150 ease-out ${
           disabled
             ? "bg-stone-200 text-stone-600"
             : leftInDeep
@@ -3385,41 +3440,18 @@ function SwipeableRow({
         {disabled ? (
           disabledMessage
         ) : (
-          <>
-            <div className="flex flex-col items-end gap-0.5">
-              {leftCyclableNow && (
-                <span
-                  className={`text-lg leading-none ${
-                    cycleIndex > 0 ? "opacity-80" : "opacity-25"
-                  }`}
-                >
-                  ▲
-                </span>
-              )}
-              <span className="text-2xl leading-none">{leftIcon}</span>
-              {leftText && (
-                <span className="whitespace-nowrap leading-tight">{leftText}</span>
-              )}
-              {leftCyclableNow && (
-                <span
-                  className={`text-lg leading-none ${
-                    cycleIndex < leftActiveOptions.length - 1 ? "opacity-80" : "opacity-25"
-                  }`}
-                >
-                  ▼
-                </span>
-              )}
-            </div>
-            {showLeftDeepHint && (
-              <span aria-hidden className="shrink-0 text-lg leading-none opacity-60">
-                ◀
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="text-2xl leading-none">{leftIcon}</span>
+            {leftText && (
+              <span className="whitespace-nowrap text-sm font-semibold leading-tight">
+                {leftText}
               </span>
             )}
-          </>
+          </div>
         )}
       </div>
       <div
-        className={`pointer-events-none absolute inset-y-0 left-0 flex items-center justify-start gap-1.5 overflow-hidden whitespace-nowrap px-2.5 text-left text-xs font-medium ${
+        className={`pointer-events-none absolute inset-y-0 left-0 flex items-center justify-start overflow-hidden whitespace-nowrap px-2.5 text-left text-xs font-medium ${
           disabled
             ? "bg-stone-200 text-stone-600"
             : rightInDeep
@@ -3433,19 +3465,14 @@ function SwipeableRow({
         {disabled ? (
           disabledMessage
         ) : (
-          <>
-            {showRightDeepHint && (
-              <span aria-hidden className="shrink-0 text-lg leading-none opacity-60">
-                ▶
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="text-2xl leading-none">{rightIcon}</span>
+            {rightText && (
+              <span className="whitespace-nowrap text-sm font-semibold leading-tight">
+                {rightText}
               </span>
             )}
-            <div className="flex flex-col items-start gap-0.5">
-              <span className="text-2xl leading-none">{rightIcon}</span>
-              {rightText && (
-                <span className="whitespace-nowrap leading-tight">{rightText}</span>
-              )}
-            </div>
-          </>
+          </div>
         )}
       </div>
       <div

@@ -1955,6 +1955,34 @@ third-party OAuth.
   "further" to hint at from there). `CYCLE_HINT_WIDTH`/`DEEP_HINT_WIDTH`
   grew slightly (140→150, 190→205) to give the icon+text+chevron
   arrangement breathing room at both tiers.
+- **Swipe hint follow-up: chevron moved onto the sliding tile itself,
+  cycle arrows dropped.** The previous pass's ◀/▶ deep-direction chevron
+  and ▲/▼ cycle indicators both lived inside `SwipeableRow`'s hint
+  `<div>`s - static boxes whose CSS `width` only ever snaps between a
+  couple of fixed values (`SWIPE_THRESHOLD`/`CYCLE_HINT_WIDTH`/
+  `DEEP_HINT_WIDTH`), which doesn't track how far the card has actually
+  been dragged. A chevron pinned there either showed up before the card
+  had really receded that far, or (if placed at the box's far edge)
+  stayed hidden behind the card for most of the shallow-drag range,
+  since only `Math.abs(dragX)` px of the box are ever actually
+  uncovered. Fix: the ◀/▶ "keep swiping" chevron now renders as part of
+  the List view's own sliding icon/card/result segments (`Schedule.tsx`,
+  the row-render function passed as `SwipeableRow`'s `children`), which
+  already `translateX` by the live `dragX` - `showRightChevron`/
+  `showLeftChevron` gate it to the shallow zone only (swipe threshold
+  cleared, deep threshold not yet reached), landing on the icon
+  segment's left edge for a right swipe, and on the result segment's
+  right edge for a left swipe (or the card's own right edge when no
+  result segment renders, e.g. a non-competition event with no status
+  yet). The ▲/▼ vertical-cycle indicators were removed outright rather
+  than relocated - cycling between options (e.g. ✓ Completed / ✗ Failed)
+  still works exactly the same via vertical drag, just without an arrow
+  icon cue; the label text swapping is the only visual feedback now, so
+  it grew from `text-xs font-medium` to `text-sm font-semibold` (the
+  same weight/size as the List view's own date-grouping headings) to
+  carry that on its own. `SwipeableRow`'s hint boxes now render only the
+  icon (unchanged `text-2xl`) and that label, still packed against the
+  tile's true outer edge.
 
 ### Activation auto-provisions athlete/coach profiles
 
