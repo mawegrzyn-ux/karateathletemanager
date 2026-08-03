@@ -1356,6 +1356,81 @@ router.patch(
   })
 );
 
+// The right-swipe "quick capture" gallery: photos/videos an athlete
+// attaches straight to the event, no post/title/body involved - see the
+// List view's shallow-right (capture) and deep-right (view gallery)
+// swipe actions. Visible to anyone who can see the event (isEventEditor,
+// same as the detail drawer); only the assigned athlete can add to or
+// remove from it, mirroring /status above.
+router.get(
+  "/:id/media",
+  asyncHandler(async (req, res) => {
+    if (!(await isEventEditor(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+    const { rows } = await pool.query(
+      `SELECT id, event_id, athlete_id, media_url, kind, created_at
+       FROM nk_event_media WHERE event_id = $1 ORDER BY created_at DESC`,
+      [req.params.id]
+    );
+    res.json({ media: rows });
+  })
+);
+
+router.post(
+  "/:id/media",
+  asyncHandler(async (req, res) => {
+    if (!(await isEventEditor(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+    if (req.user.role !== "athlete" || !req.user.athlete_id) {
+      return res.status(403).json({
+        error: { message: "Only an assigned athlete can add to this event's gallery" },
+      });
+    }
+
+    const { media_url, kind } = req.body ?? {};
+    if (typeof media_url !== "string" || !media_url.trim()) {
+      return res.status(400).json({ error: { message: "media_url is required" } });
+    }
+    if (kind !== "image" && kind !== "video") {
+      return res.status(400).json({ error: { message: "kind must be image or video" } });
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO nk_event_media (event_id, athlete_id, media_url, kind)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, event_id, athlete_id, media_url, kind, created_at`,
+      [req.params.id, req.user.athlete_id, media_url.trim(), kind]
+    );
+    res.status(201).json({ media: rows[0] });
+  })
+);
+
+router.delete(
+  "/:id/media/:mediaId",
+  asyncHandler(async (req, res) => {
+    if (!(await isEventEditor(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+    if (req.user.role !== "athlete" || !req.user.athlete_id) {
+      return res.status(403).json({
+        error: { message: "Only an assigned athlete can remove from this event's gallery" },
+      });
+    }
+
+    const { rowCount } = await pool.query(
+      `DELETE FROM nk_event_media
+       WHERE id = $1 AND event_id = $2 AND athlete_id = $3`,
+      [req.params.mediaId, req.params.id, req.user.athlete_id]
+    );
+    if (rowCount === 0) {
+      return res.status(404).json({ error: { message: "Not found" } });
+    }
+    res.status(204).end();
+  })
+);
+
 // Deletes every item sharing this item's recurrence_id (i.e. the whole
 // series it was generated as part of), not just this one occurrence.
 // Registered ahead of the plain single-item delete below since it's a

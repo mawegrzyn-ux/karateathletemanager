@@ -47,7 +47,7 @@ export function Avatar({
   );
 }
 
-async function uploadFile(file: File): Promise<string> {
+export async function uploadFile(file: File): Promise<string> {
   const formData = new FormData();
   formData.append("file", file);
   const res = await fetch("/api/uploads", { method: "POST", body: formData });

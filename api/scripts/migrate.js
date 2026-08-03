@@ -1115,6 +1115,23 @@ const migrations = [
   `UPDATE nk_training_module_types SET bg_color = '#0ea5e9' WHERE name = 'Balance' AND bg_color = '#78716c'`,
   `UPDATE nk_training_module_types SET bg_color = '#0d9488' WHERE name = 'Technique' AND bg_color = '#78716c'`,
   `UPDATE nk_training_module_types SET bg_color = '#64748b' WHERE name = 'Endurance' AND bg_color = '#78716c'`,
+
+  // Photos/videos an athlete swipe-captures against a schedule event (see
+  // the List view's right-swipe "quick capture" gesture) - a lightweight
+  // gallery attached directly to the event, distinct from a `nk_athlete_posts`
+  // post: capturing here doesn't publish anything to the athlete's profile,
+  // it's just private-to-the-roster documentation of the session. `athlete_id`
+  // records who captured it (nullable so a since-removed athlete doesn't
+  // block viewing the rest of the gallery); `kind` mirrors the same
+  // image/video split `MediaField.allowVideo` already uses client-side.
+  `CREATE TABLE IF NOT EXISTS nk_event_media (
+     id         SERIAL PRIMARY KEY,
+     event_id   INTEGER NOT NULL REFERENCES nk_events(id) ON DELETE CASCADE,
+     athlete_id INTEGER REFERENCES nk_athletes(id) ON DELETE SET NULL,
+     media_url  TEXT NOT NULL,
+     kind       VARCHAR(10) NOT NULL CHECK (kind IN ('image','video')),
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
 ];
 
 async function migrate() {

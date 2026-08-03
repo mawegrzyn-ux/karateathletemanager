@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type Dispatch,
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
@@ -10,7 +11,7 @@ import {
   type SetStateAction,
 } from "react";
 import { Link } from "react-router-dom";
-import { useApi } from "../hooks/useApi";
+import { ApiError, useApi } from "../hooks/useApi";
 import { useAuth } from "../context/AuthContext";
 import {
   Spinner,
@@ -22,7 +23,9 @@ import {
   DateTimeField,
   DateTimeRangeField,
   MediaField,
+  Modal,
   Toast,
+  uploadFile,
 } from "../components/ui";
 import {
   TrainingModuleView,
@@ -571,6 +574,9 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [quickPost, setQuickPost] = useState<
     { event: Event; typeLabel: string } | null
   >(null);
+  const [captureEvent, setCaptureEvent] = useState<Event | null>(null);
+  const [galleryEvent, setGalleryEvent] = useState<Event | null>(null);
+  const [galleryRefreshKey, setGalleryRefreshKey] = useState(0);
   const [form, setForm] = useState(EMPTY_FORM);
   const [formAthleteIds, setFormAthleteIds] = useState<number[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "day" | "week" | "month">(
@@ -1176,32 +1182,43 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                   const leftOptions = [
                     {
                       label: "✓ Completed",
-                      onTrigger: () => {
-                        swipeEventStatus(e, "completed");
-                        // Competitions still need a fast way to capture the
-                        // result - rather than a third cycle option (the
-                        // picker is deliberately just the two outcomes),
-                        // marking one "Completed" opens the result composer
-                        // right away.
-                        if (isCompetition) setResultDrawerEvent(e);
-                      },
+                      onTrigger: () => swipeEventStatus(e, "completed"),
                     },
                     {
                       label: "✗ Failed",
                       onTrigger: () => swipeEventStatus(e, "failed"),
                     },
                   ];
-                  const rightAction = {
-                    label: "📸 Add post",
+                  const addPostAction = {
+                    label: "📝 Add post",
                     onTrigger: () =>
                       setQuickPost({ event: e, typeLabel: info.label }),
+                  };
+                  const deepLeftOptions = isCompetition
+                    ? [
+                        {
+                          label: "🏆 Record result",
+                          onTrigger: () => setResultDrawerEvent(e),
+                        },
+                        addPostAction,
+                      ]
+                    : [addPostAction];
+                  const captureAction = {
+                    label: "📷 Capture",
+                    onTrigger: () => setCaptureEvent(e),
+                  };
+                  const galleryAction = {
+                    label: "🖼 Gallery",
+                    onTrigger: () => setGalleryEvent(e),
                   };
                   return (
                     <SwipeableRow
                       key={`${e.id}-${occ.date}`}
                       disabled={e.my_status == null}
                       leftOptions={leftOptions}
-                      rightAction={rightAction}
+                      deepLeftOptions={deepLeftOptions}
+                      rightAction={captureAction}
+                      deepRightAction={galleryAction}
                     >
                       {(dragX) => {
                         // The two end caps don't slide as one rigid block
@@ -1484,6 +1501,19 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
         typeLabel={quickPost?.typeLabel ?? ""}
         athleteId={user?.athlete_id ?? null}
         onClose={() => setQuickPost(null)}
+      />
+
+      <CaptureSheet
+        event={captureEvent}
+        onClose={() => setCaptureEvent(null)}
+        onCaptured={() => setGalleryRefreshKey((k) => k + 1)}
+      />
+
+      <GalleryDrawer
+        event={galleryEvent}
+        athleteId={user?.athlete_id ?? null}
+        refreshKey={galleryRefreshKey}
+        onClose={() => setGalleryEvent(null)}
       />
     </div>
   );
@@ -3063,8 +3093,10 @@ function venueLabel(v: Venue) {
 }
 
 const SWIPE_THRESHOLD = 64;
+const DEEP_SWIPE_THRESHOLD = 108;
 const CYCLE_HINT_WIDTH = 140;
-const DISABLED_SWIPE_MAX = 180;
+const DEEP_HINT_WIDTH = 190;
+const DISABLED_SWIPE_MAX = 220;
 const OPTION_CYCLE_DISTANCE = 36;
 
 // Wraps a row with horizontal swipe-to-flag. Pointer events (not HTML5
@@ -3074,34 +3106,38 @@ const OPTION_CYCLE_DISTANCE = 36;
 // row instead of the option hints, growing with drag distance so the
 // message can be read - but releasing never fires anything.
 //
-// Swipe LEFT past SWIPE_THRESHOLD fires the currently-selected entry of
-// `leftOptions` (defaults to a single plain "✓" built from
-// `onSwipeComplete` when omitted - ItemsSection's rows). With more than one
-// option (the List view's ✓ Completed / ✗ Failed picker) the hint snaps
-// straight to a fixed, wider width (CYCLE_HINT_WIDTH) - a snap rather than
-// a gradual stretch, so the hint reads cleanly at both sizes - and holding
-// past SWIPE_THRESHOLD then dragging vertically cycles which option is
-// selected (every OPTION_CYCLE_DISTANCE px of vertical drag moves one
-// step, clamped to the array's ends rather than wrapping) - small ▲/▼
-// indicators either side of the label hint that this is possible, dimmed
-// at whichever end is already selected. Vertical drag only starts counting
-// once the row is past SWIPE_THRESHOLD (tracked from the Y position at
-// that moment, not from the original touch-down) so incidental vertical
-// motion during the initial horizontal swipe never pre-offsets the
-// selection, and touchAction only switches to "none" (blocking the
-// browser's own vertical pan) while cycling, so the row scrolls normally
-// at every other drag stage.
-//
-// Swipe RIGHT past SWIPE_THRESHOLD fires `rightAction` (defaults to a
-// plain red "✗" built from `onSwipeFailed` when omitted) - always a single
-// action, never cyclable, since the List view uses it for one thing (a
-// blue "📸 Add post" capture prompt).
+// Each side has an independent shallow/deep pair: swiping past
+// SWIPE_THRESHOLD fires `leftOptions`/`rightAction` (defaulting to a
+// single plain "✓"/"✗" built from `onSwipeComplete`/`onSwipeFailed` when
+// omitted - ItemsSection's rows use only this shallow tier); swiping
+// further past DEEP_SWIPE_THRESHOLD switches to `deepLeftOptions`/
+// `deepRightAction` instead, when the caller provides them (the List
+// view's ✓ Completed / ✗ Failed picker deepens into 🏆 Record result /
+// 📝 Add post on the left, and its 📷 capture action deepens into a 🖼
+// Gallery view on the right) - a snap to a fixed, wider width
+// (DEEP_HINT_WIDTH) rather than a gradual stretch, so the hint reads
+// cleanly at both sizes. Any option array with more than one entry is
+// cyclable: holding in that zone and dragging vertically cycles which
+// entry is selected (every OPTION_CYCLE_DISTANCE px of vertical drag
+// moves one step, clamped to the array's ends rather than wrapping) -
+// small ▲/▼ indicators either side of the label hint that this is
+// possible, dimmed at whichever end is already selected. Only the left
+// side ever cycles multiple options at a given tier; the right side's
+// shallow/deep actions are always single. Vertical drag only starts
+// counting once a zone is entered (tracked from the Y position at that
+// moment, and reset whenever the active zone changes - shallow<->deep or
+// leaving the swipe range entirely - so incidental vertical motion never
+// pre-offsets a fresh zone's selection), and touchAction only switches to
+// "none" (blocking the browser's own vertical pan) while actively
+// cycling, so the row scrolls normally at every other drag stage.
 function SwipeableRow({
   children,
   onSwipeComplete,
   onSwipeFailed,
   leftOptions,
+  deepLeftOptions,
   rightAction,
+  deepRightAction,
   disabled,
   disabledMessage = "Only athletes can swipe",
   className,
@@ -3117,7 +3153,9 @@ function SwipeableRow({
   onSwipeComplete?: () => void;
   onSwipeFailed?: () => void;
   leftOptions?: { label: string; onTrigger: () => void }[];
+  deepLeftOptions?: { label: string; onTrigger: () => void }[];
   rightAction?: { label: string; onTrigger: () => void };
+  deepRightAction?: { label: string; onTrigger: () => void };
   disabled?: boolean;
   disabledMessage?: string;
   className?: string;
@@ -3126,22 +3164,27 @@ function SwipeableRow({
   const [cycleIndex, setCycleIndex] = useState(0);
   const startXRef = useRef<number | null>(null);
   const cycleEntryYRef = useRef<number | null>(null);
+  const leftZoneRef = useRef<"shallow" | "deep" | null>(null);
   const draggedRef = useRef(false);
   const pastSwipeRef = useRef(false);
+  const pastDeepRef = useRef(false);
   const cycleIndexRef = useRef(0);
 
-  const options =
+  const shallowOptions =
     leftOptions ?? (onSwipeComplete ? [{ label: "✓", onTrigger: onSwipeComplete }] : []);
-  const right =
+  const shallowRight =
     rightAction ?? (onSwipeFailed ? { label: "✗", onTrigger: onSwipeFailed } : null);
-  const cyclable = options.length > 1;
+  const hasDeepLeft = !!deepLeftOptions && deepLeftOptions.length > 0;
+  const hasDeepRight = !!deepRightAction;
   const customRight = !!rightAction;
 
   function onPointerDown(e: ReactPointerEvent) {
     startXRef.current = e.clientX;
     cycleEntryYRef.current = null;
+    leftZoneRef.current = null;
     draggedRef.current = false;
     pastSwipeRef.current = false;
+    pastDeepRef.current = false;
     cycleIndexRef.current = 0;
     setCycleIndex(0);
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -3151,10 +3194,19 @@ function SwipeableRow({
     if (startXRef.current == null) return;
     const delta = e.clientX - startXRef.current;
     if (Math.abs(delta) > 8) draggedRef.current = true;
-    const max = cyclable ? CYCLE_HINT_WIDTH : Infinity;
-    const clampedX = disabled
-      ? Math.max(-DISABLED_SWIPE_MAX, Math.min(DISABLED_SWIPE_MAX, delta))
-      : Math.max(-max, Math.min(max, delta));
+    const goingLeft = delta < 0;
+    const max = disabled
+      ? DISABLED_SWIPE_MAX
+      : goingLeft
+      ? hasDeepLeft
+        ? DEEP_HINT_WIDTH
+        : shallowOptions.length > 1
+        ? CYCLE_HINT_WIDTH
+        : Infinity
+      : hasDeepRight
+      ? DEEP_HINT_WIDTH
+      : Infinity;
+    const clampedX = Math.max(-max, Math.min(max, delta));
     setDragX(clampedX);
 
     if (!disabled) {
@@ -3163,45 +3215,83 @@ function SwipeableRow({
         pastSwipeRef.current = isPastSwipe;
         if (isPastSwipe) feedbackTick(600);
       }
+      const isPastDeep =
+        (hasDeepLeft && clampedX <= -DEEP_SWIPE_THRESHOLD) ||
+        (hasDeepRight && clampedX >= DEEP_SWIPE_THRESHOLD);
+      if (isPastDeep !== pastDeepRef.current) {
+        pastDeepRef.current = isPastDeep;
+        if (isPastDeep) feedbackTick(350);
+      }
     }
 
-    if (!disabled && cyclable && clampedX <= -SWIPE_THRESHOLD) {
+    const inDeepLeft = hasDeepLeft && clampedX <= -DEEP_SWIPE_THRESHOLD;
+    const activeLeftOptions = inDeepLeft ? deepLeftOptions! : shallowOptions;
+    const currentZone: "shallow" | "deep" | null =
+      !disabled && clampedX <= -SWIPE_THRESHOLD ? (inDeepLeft ? "deep" : "shallow") : null;
+
+    if (currentZone !== leftZoneRef.current) {
+      leftZoneRef.current = currentZone;
+      cycleEntryYRef.current = null;
+      cycleIndexRef.current = 0;
+      setCycleIndex(0);
+    }
+    if (currentZone && activeLeftOptions.length > 1) {
       if (cycleEntryYRef.current == null) cycleEntryYRef.current = e.clientY;
       const deltaY = e.clientY - cycleEntryYRef.current;
       const step = Math.round(-deltaY / OPTION_CYCLE_DISTANCE);
-      const clampedStep = Math.max(0, Math.min(options.length - 1, step));
+      const clampedStep = Math.max(0, Math.min(activeLeftOptions.length - 1, step));
       if (clampedStep !== cycleIndexRef.current) {
         cycleIndexRef.current = clampedStep;
         feedbackTick(700 + clampedStep * 60);
       }
       setCycleIndex(clampedStep);
-    } else {
-      cycleEntryYRef.current = null;
-      cycleIndexRef.current = 0;
-      setCycleIndex(0);
     }
   }
 
   function onPointerUp() {
     if (startXRef.current == null) return;
     if (!disabled) {
-      if (dragX <= -SWIPE_THRESHOLD && options[cycleIndex]) {
-        feedbackConfirm(cyclable ? 450 : 500);
-        options[cycleIndex].onTrigger();
-      } else if (dragX >= SWIPE_THRESHOLD && right) {
-        feedbackConfirm(400);
-        right.onTrigger();
+      if (dragX <= -SWIPE_THRESHOLD) {
+        const inDeep = hasDeepLeft && dragX <= -DEEP_SWIPE_THRESHOLD;
+        const opts = inDeep ? deepLeftOptions! : shallowOptions;
+        if (opts[cycleIndex]) {
+          feedbackConfirm(opts.length > 1 ? 450 : inDeep ? 450 : 500);
+          opts[cycleIndex].onTrigger();
+        }
+      } else if (dragX >= SWIPE_THRESHOLD) {
+        const inDeep = hasDeepRight && dragX >= DEEP_SWIPE_THRESHOLD;
+        const action = inDeep ? deepRightAction! : shallowRight;
+        if (action) {
+          feedbackConfirm(inDeep ? 450 : 400);
+          action.onTrigger();
+        }
       }
     }
     setDragX(0);
     setCycleIndex(0);
     cycleEntryYRef.current = null;
+    leftZoneRef.current = null;
     pastSwipeRef.current = false;
+    pastDeepRef.current = false;
     cycleIndexRef.current = 0;
     startXRef.current = null;
   }
 
-  const hintWidth = disabled ? Math.abs(dragX) : cyclable ? CYCLE_HINT_WIDTH : SWIPE_THRESHOLD;
+  const leftInDeep = hasDeepLeft && dragX <= -DEEP_SWIPE_THRESHOLD;
+  const leftActiveOptions = leftInDeep ? deepLeftOptions! : shallowOptions;
+  const leftCyclableNow = leftActiveOptions.length > 1;
+  const leftHintWidth = disabled
+    ? Math.abs(dragX)
+    : leftInDeep
+    ? DEEP_HINT_WIDTH
+    : shallowOptions.length > 1
+    ? CYCLE_HINT_WIDTH
+    : SWIPE_THRESHOLD;
+
+  const rightInDeep = hasDeepRight && dragX >= DEEP_SWIPE_THRESHOLD;
+  const rightActive = rightInDeep ? deepRightAction! : shallowRight;
+  const rightHintWidth = disabled ? Math.abs(dragX) : rightInDeep ? DEEP_HINT_WIDTH : SWIPE_THRESHOLD;
+
   const hintOpacity = disabled
     ? Math.min(1, Math.abs(dragX) / 40)
     : Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD);
@@ -3216,15 +3306,17 @@ function SwipeableRow({
         className={`pointer-events-none absolute inset-y-0 right-0 flex flex-col items-center justify-center overflow-hidden whitespace-nowrap px-2 text-center text-xs font-medium transition-[width] duration-150 ease-out ${
           disabled
             ? "bg-stone-200 text-stone-600"
-            : cyclable
+            : leftInDeep
+            ? "bg-orange-100 text-orange-800"
+            : shallowOptions.length > 1
             ? "bg-amber-100 text-amber-800"
             : "bg-green-100 text-green-700"
         }`}
-        style={{ opacity: dragX < 0 ? hintOpacity : 0, width: hintWidth }}
+        style={{ opacity: dragX < 0 ? hintOpacity : 0, width: leftHintWidth }}
       >
         {disabled ? (
           disabledMessage
-        ) : cyclable ? (
+        ) : leftCyclableNow ? (
           <>
             <span
               className={`text-[9px] leading-none ${
@@ -3233,30 +3325,32 @@ function SwipeableRow({
             >
               ▲
             </span>
-            <span>{options[cycleIndex]?.label}</span>
+            <span>{leftActiveOptions[cycleIndex]?.label}</span>
             <span
               className={`text-[9px] leading-none ${
-                cycleIndex < options.length - 1 ? "opacity-80" : "opacity-25"
+                cycleIndex < leftActiveOptions.length - 1 ? "opacity-80" : "opacity-25"
               }`}
             >
               ▼
             </span>
           </>
         ) : (
-          options[0]?.label ?? "✓"
+          leftActiveOptions[0]?.label ?? "✓"
         )}
       </div>
       <div
         className={`pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center overflow-hidden px-2 text-center text-xs font-medium ${
           disabled
             ? "bg-stone-200 text-stone-600"
+            : rightInDeep
+            ? "bg-indigo-100 text-indigo-800"
             : customRight
             ? "bg-blue-100 text-blue-700"
             : "bg-red-100 text-red-700"
         }`}
-        style={{ opacity: dragX > 0 ? hintOpacity : 0, width: hintWidth }}
+        style={{ opacity: dragX > 0 ? hintOpacity : 0, width: rightHintWidth }}
       >
-        {disabled ? disabledMessage : right?.label ?? "✗"}
+        {disabled ? disabledMessage : rightActive?.label ?? "✗"}
       </div>
       <div
         onPointerDown={onPointerDown}
@@ -3272,7 +3366,7 @@ function SwipeableRow({
         }}
         style={{
           transform: typeof children === "function" ? undefined : `translateX(${dragX}px)`,
-          touchAction: cyclable && dragX <= -SWIPE_THRESHOLD ? "none" : "pan-y",
+          touchAction: leftCyclableNow && dragX <= -SWIPE_THRESHOLD ? "none" : "pan-y",
           transition: dragX === 0 ? "transform 150ms ease-out" : "none",
         }}
       >
@@ -3558,6 +3652,207 @@ function QuickPostDrawer({
         </button>
       </form>
       {mediaError && <Toast message={mediaError} />}
+    </Drawer>
+  );
+}
+
+// The shallow-right swipe action: a plain camera/library action sheet
+// (deliberately not a Drawer/form - there's nothing to fill in) that
+// uploads whatever's picked and attaches it straight to the event's
+// gallery (`POST /events/:id/media`), no title/body/post involved. Deep-
+// right instead opens GalleryDrawer to browse what's been captured so
+// far. Doesn't close itself on a picker-button tap - only once the
+// upload+attach actually finishes - since closing would null out
+// `event` in the parent before the (async) file-select/upload completes,
+// stranding the handler with nothing to attach to; the OS camera/picker
+// UI overlays on top of it regardless, so leaving it mounted underneath
+// is invisible to the user until they return to the app.
+function CaptureSheet({
+  event,
+  onClose,
+  onCaptured,
+}: {
+  event: Event | null;
+  onClose: () => void;
+  onCaptured: () => void;
+}) {
+  const api = useApi();
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
+
+  function showError(message: string) {
+    setError(message);
+    setTimeout(() => setError(null), 4000);
+  }
+
+  async function handleFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !event) return;
+    setUploading(true);
+    try {
+      const media_url = await uploadFile(file);
+      const kind = file.type.startsWith("video/") ? "video" : "image";
+      await api.post(`/events/${event.id}/media`, { media_url, kind });
+      onCaptured();
+      onClose();
+    } catch (err) {
+      showError(err instanceof ApiError ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <>
+      <Modal open={event !== null} onClose={onClose}>
+        <div className="flex flex-col gap-2 p-2">
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            disabled={uploading}
+            className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700 disabled:opacity-50"
+          >
+            📷 Take photo
+          </button>
+          <button
+            type="button"
+            onClick={() => videoInputRef.current?.click()}
+            disabled={uploading}
+            className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700 disabled:opacity-50"
+          >
+            🎥 Record video
+          </button>
+          <button
+            type="button"
+            onClick={() => libraryInputRef.current?.click()}
+            disabled={uploading}
+            className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700 disabled:opacity-50"
+          >
+            🖼 Choose from library
+          </button>
+          {uploading && (
+            <p className="py-1 text-center text-sm text-stone-500">Uploading…</p>
+          )}
+        </div>
+      </Modal>
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleFile}
+        className="hidden"
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        capture="environment"
+        onChange={handleFile}
+        className="hidden"
+      />
+      <input
+        ref={libraryInputRef}
+        type="file"
+        accept="image/*,video/*"
+        onChange={handleFile}
+        className="hidden"
+      />
+      {error && <Toast message={error} />}
+    </>
+  );
+}
+
+interface EventMedia {
+  id: number;
+  event_id: number;
+  athlete_id: number | null;
+  media_url: string;
+  kind: "image" | "video";
+  created_at: string;
+}
+
+// The deep-right swipe destination: a grid of everything captured
+// against this event via CaptureSheet above. Read-only for coaches/
+// admins (isEventEditor's broader visibility - same as the event detail
+// drawer itself); only the athlete who captured a given item can remove
+// it (backend-enforced, mirrored here by only showing the delete icon to
+// the signed-in athlete).
+function GalleryDrawer({
+  event,
+  athleteId,
+  refreshKey,
+  onClose,
+}: {
+  event: Event | null;
+  athleteId: number | null;
+  refreshKey: number;
+  onClose: () => void;
+}) {
+  const api = useApi();
+  const [media, setMedia] = useState<EventMedia[] | null>(null);
+
+  useEffect(() => {
+    if (!event) {
+      setMedia(null);
+      return;
+    }
+    setMedia(null);
+    api
+      .get<{ media: EventMedia[] }>(`/events/${event.id}/media`)
+      .then((res) => setMedia(res.media))
+      .catch(() => setMedia([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event?.id, refreshKey]);
+
+  async function deleteMedia(item: EventMedia) {
+    if (!event) return;
+    await api.del(`/events/${event.id}/media/${item.id}`);
+    setMedia((prev) => (prev ? prev.filter((m) => m.id !== item.id) : prev));
+  }
+
+  return (
+    <Drawer open={event !== null} onClose={onClose} title="Gallery">
+      {!media ? (
+        <div className="flex justify-center p-8">
+          <Spinner />
+        </div>
+      ) : media.length === 0 ? (
+        <p className="px-1 py-2 text-sm text-stone-500">
+          Nothing captured for this event yet.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {media.map((item) => (
+            <div key={item.id} className="relative overflow-hidden rounded-xl bg-stone-100">
+              {item.kind === "video" ? (
+                // eslint-disable-next-line jsx-a11y/media-has-caption
+                <video src={item.media_url} controls className="aspect-square w-full object-cover" />
+              ) : (
+                <img
+                  src={item.media_url}
+                  alt=""
+                  className="aspect-square w-full object-cover"
+                />
+              )}
+              {athleteId != null && item.athlete_id === athleteId && (
+                <button
+                  type="button"
+                  onClick={() => deleteMedia(item)}
+                  aria-label="Delete"
+                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-stone-900/60 text-sm text-white"
+                >
+                  🗑
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </Drawer>
   );
 }
