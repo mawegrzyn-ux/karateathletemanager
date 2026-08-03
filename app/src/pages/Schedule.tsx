@@ -1275,7 +1275,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                               >
                                 !
                                 {showRightChevron && (
-                                  <span className="absolute left-1 text-sm leading-none text-white/70">
+                                  <span className="absolute left-0.5 text-2xl font-black leading-none text-white/80">
                                     ▶
                                   </span>
                                 )}
@@ -1294,7 +1294,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                               >
                                 {info.icon}
                                 {showRightChevron && (
-                                  <span className="absolute left-1 text-sm leading-none text-white/70">
+                                  <span className="absolute left-0.5 text-2xl font-black leading-none text-white/80">
                                     ▶
                                   </span>
                                 )}
@@ -1360,7 +1360,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                               {showLeftChevron && !hasResultSegment && (
                                 <span
                                   aria-hidden
-                                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm leading-none text-stone-400"
+                                  className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-2xl font-black leading-none text-stone-400"
                                 >
                                   ◀
                                 </span>
@@ -1396,7 +1396,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                   <span className="text-3xl leading-none">✗</span>
                                 )}
                                 {showLeftChevron && (
-                                  <span className="absolute right-1 text-sm leading-none opacity-70">
+                                  <span className="absolute right-0.5 text-2xl font-black leading-none opacity-80">
                                     ◀
                                   </span>
                                 )}
@@ -3192,10 +3192,10 @@ const OPTION_CYCLE_DISTANCE = 36;
 // entry is selected (every OPTION_CYCLE_DISTANCE px of vertical drag
 // moves one step, clamped to the array's ends rather than wrapping) -
 // no arrow icons mark this at all, just the label swapping as you cross
-// each step (the List view's own sliding segments carry a ◀/▶
+// each step (the List view's own sliding segments carry a chunky ◀/▶
 // directional "keep swiping" cue instead - see below - but nothing
-// marks the vertical cycle; the nicer, bigger label text is meant to
-// carry that on its own). Only the left side ever cycles multiple
+// marks the vertical cycle; the label's own `font-display` styling is
+// meant to carry that on its own). Only the left side ever cycles multiple
 // options at a given tier; the right side's shallow/deep actions are
 // always single. Vertical drag only starts counting
 // once a zone is entered (tracked from the Y position at that moment,
@@ -3206,26 +3206,29 @@ const OPTION_CYCLE_DISTANCE = 36;
 // actively cycling, so the row scrolls normally at every other drag
 // stage.
 //
-// The icon+label packs against the tile's true outer edge
-// (`justify-end`/`items-end` on the left hint, mirrored `justify-start`/
-// `items-start` on the right) rather than centering in the box, so it
-// reads consistently at the boundary regardless of how wide the box
-// currently is. Deliberately no directional (◀/▶) or cycle (▲/▼) icons
-// live in this static hint box itself - a box that only ever snaps
-// between a couple of fixed widths can't track the live drag position,
-// so anything pinned to it either shows up too early (before the card
-// has actually receded that far) or not at all. The List view instead
-// renders those cues as part of its own sliding card/icon/result
+// The label packs against the tile's true outer edge (`justify-end` on
+// the left hint, `justify-start` on the right) rather than centering in
+// the box, so it reads consistently at the boundary regardless of how
+// wide the box currently is. Deliberately no directional (◀/▶) or cycle
+// (▲/▼) icons live in this static hint box itself - a box that only ever
+// snaps between a couple of fixed widths can't track the live drag
+// position, so anything pinned to it either shows up too early (before
+// the card has actually receded that far) or not at all. The List view
+// instead renders those cues as part of its own sliding card/icon/result
 // segments (see that render function, `Schedule.tsx`), which already
 // translate by the live `dragX` - so a cue placed at one of those
 // segments' own edges genuinely tracks the boundary the card is
 // receding from, rather than a static position guessed at here.
 //
-// Every option label is "EMOJI text" (e.g. "🏆 Record result") - splitLabel
-// pulls the emoji out to render as its own larger "header" icon above the
-// text, rather than one inline emoji+text line, so a mid-drag glance reads
-// icon-first. A label with no space (the bare "✓"/"✗" fallbacks) renders
-// as just the icon, no text line.
+// Every option label is "EMOJI text" (e.g. "🏆 Record result") -
+// splitLabel pulls the emoji out; the hint box itself only ever renders
+// the text half, in `font-display` (the same Oswald/uppercase treatment
+// as the List view's date-grouping headings, `Schedule.tsx`) - no icon
+// glyph alongside it, so a mid-drag glance reads as a plain label rather
+// than an icon+text pairing. A label with no space (the bare "✓"/"✗"
+// fallbacks `ItemsSection`'s rows use, with no text half to fall back
+// on) renders the icon instead, since there'd be nothing to show
+// otherwise.
 function splitLabel(label: string): { icon: string; text: string } {
   const spaceIndex = label.indexOf(" ");
   return spaceIndex === -1
@@ -3439,15 +3442,12 @@ function SwipeableRow({
       >
         {disabled ? (
           disabledMessage
+        ) : leftText ? (
+          <span className="whitespace-nowrap font-display text-sm font-semibold uppercase leading-tight tracking-[0.02em]">
+            {leftText}
+          </span>
         ) : (
-          <div className="flex flex-col items-end gap-0.5">
-            <span className="text-2xl leading-none">{leftIcon}</span>
-            {leftText && (
-              <span className="whitespace-nowrap text-sm font-semibold leading-tight">
-                {leftText}
-              </span>
-            )}
-          </div>
+          <span className="text-2xl leading-none">{leftIcon}</span>
         )}
       </div>
       <div
@@ -3464,15 +3464,12 @@ function SwipeableRow({
       >
         {disabled ? (
           disabledMessage
+        ) : rightText ? (
+          <span className="whitespace-nowrap font-display text-sm font-semibold uppercase leading-tight tracking-[0.02em]">
+            {rightText}
+          </span>
         ) : (
-          <div className="flex flex-col items-start gap-0.5">
-            <span className="text-2xl leading-none">{rightIcon}</span>
-            {rightText && (
-              <span className="whitespace-nowrap text-sm font-semibold leading-tight">
-                {rightText}
-              </span>
-            )}
-          </div>
+          <span className="text-2xl leading-none">{rightIcon}</span>
         )}
       </div>
       <div

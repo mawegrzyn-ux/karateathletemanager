@@ -1983,6 +1983,23 @@ third-party OAuth.
   carry that on its own. `SwipeableRow`'s hint boxes now render only the
   icon (unchanged `text-2xl`) and that label, still packed against the
   tile's true outer edge.
+- **Swipe hint follow-up 2: drop the hint-box icon, chunkier chevrons,
+  and the label actually matches the date-heading font.** The previous
+  pass's "nicer font" for the hint label only matched size/weight
+  (`text-sm font-semibold`), not the actual typeface - the List view's
+  date-grouping `<h2>`s pick up `font-family: Oswald`, `uppercase`, and
+  a slight letter-spacing from a global `h1, h2` rule in `index.css`
+  (not a Tailwind utility), which a plain `<span>` never inherits. Fixed
+  by giving the hint label `font-display` (the `Oswald` family Tailwind
+  alias already declared in `tailwind.config.js`) plus `uppercase` and
+  `tracking-[0.02em]` explicitly. At the same time, `SwipeableRow`'s
+  hint boxes dropped `splitLabel`'s icon half entirely when there's a
+  text half to show - the icon only still renders as a fallback for the
+  bare `"✓"`/`"✗"` labels `ItemsSection`'s rows use (no text half to show
+  instead), so a mid-drag glance is just the label, not an icon+text
+  pairing. The List view's ◀/▶ chevrons (on the sliding icon/card/result
+  segments, previous bullet) grew from `text-sm` to `text-2xl
+  font-black` to read as a clearly weightier "keep swiping" cue.
 
 ### Activation auto-provisions athlete/coach profiles
 
