@@ -58,6 +58,7 @@ interface Event {
   athlete_status: AthleteStatus[];
   my_status: CompletionStatus | null;
   my_result_place: string | null;
+  has_media: boolean;
 }
 
 interface AthleteStatus {
@@ -1293,6 +1294,15 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                               </span>
                               <div className="flex items-center gap-2">
                                 <Badge>{info.label}</Badge>
+                                {e.has_media && (
+                                  <span
+                                    aria-label="Has photos or videos"
+                                    title="Has photos or videos"
+                                    className="text-xs"
+                                  >
+                                    📷
+                                  </span>
+                                )}
                                 <span className="text-xs text-stone-500">
                                   {occ.totalDays === 1 || e.daily_times ? (
                                     <>
@@ -1506,7 +1516,17 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       <CaptureSheet
         event={captureEvent}
         onClose={() => setCaptureEvent(null)}
-        onCaptured={() => setGalleryRefreshKey((k) => k + 1)}
+        onCaptured={() => {
+          setGalleryRefreshKey((k) => k + 1);
+          if (captureEvent) {
+            const capturedId = captureEvent.id;
+            setEvents((prev) =>
+              prev
+                ? prev.map((e) => (e.id === capturedId ? { ...e, has_media: true } : e))
+                : prev
+            );
+          }
+        }}
       />
 
       <GalleryDrawer
@@ -1514,6 +1534,13 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
         athleteId={user?.athlete_id ?? null}
         refreshKey={galleryRefreshKey}
         onClose={() => setGalleryEvent(null)}
+        onCountChange={(eventId, count) =>
+          setEvents((prev) =>
+            prev
+              ? prev.map((e) => (e.id === eventId ? { ...e, has_media: count > 0 } : e))
+              : prev
+          )
+        }
       />
     </div>
   );
@@ -3787,11 +3814,13 @@ function GalleryDrawer({
   athleteId,
   refreshKey,
   onClose,
+  onCountChange,
 }: {
   event: Event | null;
   athleteId: number | null;
   refreshKey: number;
   onClose: () => void;
+  onCountChange: (eventId: number, count: number) => void;
 }) {
   const api = useApi();
   const [media, setMedia] = useState<EventMedia[] | null>(null);
@@ -3804,7 +3833,10 @@ function GalleryDrawer({
     setMedia(null);
     api
       .get<{ media: EventMedia[] }>(`/events/${event.id}/media`)
-      .then((res) => setMedia(res.media))
+      .then((res) => {
+        setMedia(res.media);
+        onCountChange(event.id, res.media.length);
+      })
       .catch(() => setMedia([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event?.id, refreshKey]);
@@ -3812,7 +3844,11 @@ function GalleryDrawer({
   async function deleteMedia(item: EventMedia) {
     if (!event) return;
     await api.del(`/events/${event.id}/media/${item.id}`);
-    setMedia((prev) => (prev ? prev.filter((m) => m.id !== item.id) : prev));
+    setMedia((prev) => {
+      const next = prev ? prev.filter((m) => m.id !== item.id) : prev;
+      if (next) onCountChange(event.id, next.length);
+      return next;
+    });
   }
 
   return (

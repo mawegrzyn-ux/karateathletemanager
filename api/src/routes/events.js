@@ -510,7 +510,24 @@ router.get(
 
     const { rows } = await pool.query(query, params);
     const events = await attachMyEventStatus(req.user, rows);
-    res.json({ events });
+
+    // `has_media` powers the 📷 badge on the Schedule List view's row -
+    // a fast way to see which events already have something captured
+    // (see the List view's shallow-right "quick capture" swipe) without
+    // opening the gallery. Visible to every viewer role, not just the
+    // capturing athlete, since coaches/admins can view the gallery too.
+    let mediaEventIds = new Set();
+    if (events.length > 0) {
+      const { rows: mediaRows } = await pool.query(
+        `SELECT DISTINCT event_id FROM nk_event_media WHERE event_id = ANY($1::int[])`,
+        [events.map((e) => e.id)]
+      );
+      mediaEventIds = new Set(mediaRows.map((r) => r.event_id));
+    }
+
+    res.json({
+      events: events.map((e) => ({ ...e, has_media: mediaEventIds.has(e.id) })),
+    });
   })
 );
 
