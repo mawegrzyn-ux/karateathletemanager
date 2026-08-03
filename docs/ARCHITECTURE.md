@@ -1916,6 +1916,20 @@ third-party OAuth.
   rather than on prop identity, since the gallery and capture sheet are
   siblings passed the same `Event | null` and a same-`id` object doesn't
   by itself signal "refetch me" the way a dependency-array change needs.
+- **A 📷 badge on the List view row when the event has any gallery
+  media.** `GET /api/events` now also returns `has_media: boolean` per
+  event - a `SELECT DISTINCT event_id FROM nk_event_media WHERE
+  event_id = ANY(...)` batched against the already-fetched page of
+  events (not folded into `attachMyEventStatus`, since that function
+  early-returns for non-athlete viewers and this badge should be visible
+  to coaches/admins too). Rendered next to the type `Badge` on the row's
+  content segment, `Schedule.tsx`. Kept in sync locally without a re-fetch
+  of the whole list: `CaptureSheet`'s `onCaptured` optimistically flips
+  the just-captured event's `has_media` to `true` in the `events` array,
+  and `GalleryDrawer` reports its actual fetched/post-delete item count
+  back up via an `onCountChange(eventId, count)` callback so deleting the
+  last item in the gallery clears the badge too, instead of it going
+  stale until the next full list load.
 
 ### Activation auto-provisions athlete/coach profiles
 
