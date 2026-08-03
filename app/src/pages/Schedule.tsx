@@ -3121,8 +3121,8 @@ function venueLabel(v: Venue) {
 
 const SWIPE_THRESHOLD = 64;
 const DEEP_SWIPE_THRESHOLD = 108;
-const CYCLE_HINT_WIDTH = 140;
-const DEEP_HINT_WIDTH = 190;
+const CYCLE_HINT_WIDTH = 150;
+const DEEP_HINT_WIDTH = 205;
 const DISABLED_SWIPE_MAX = 220;
 const OPTION_CYCLE_DISTANCE = 36;
 
@@ -3157,6 +3157,30 @@ const OPTION_CYCLE_DISTANCE = 36;
 // pre-offsets a fresh zone's selection), and touchAction only switches to
 // "none" (blocking the browser's own vertical pan) while actively
 // cycling, so the row scrolls normally at every other drag stage.
+//
+// Each hint's content is packed against the tile's true outer edge
+// (`justify-end`/`items-end` on the left hint, mirrored `justify-start`/
+// `items-start` on the right) rather than centered in the box, so it
+// reads consistently at the boundary regardless of how wide the box
+// currently is. Whenever a side has a deeper tier to discover
+// (`deepLeftOptions`/`deepRightAction` provided) and the drag hasn't
+// reached it yet, a small ◀/▶ chevron - pointing the same direction as
+// the swipe itself - sits right at that same true edge, disappearing
+// once the deep zone is actually reached (there's nothing "further" to
+// hint at from there).
+//
+// Every option label is "EMOJI text" (e.g. "🏆 Record result") - splitLabel
+// pulls the emoji out to render as its own larger "header" icon above the
+// text, rather than one inline emoji+text line, so a mid-drag glance reads
+// icon-first. A label with no space (the bare "✓"/"✗" fallbacks) renders
+// as just the icon, no text line.
+function splitLabel(label: string): { icon: string; text: string } {
+  const spaceIndex = label.indexOf(" ");
+  return spaceIndex === -1
+    ? { icon: label, text: "" }
+    : { icon: label.slice(0, spaceIndex), text: label.slice(spaceIndex + 1) };
+}
+
 function SwipeableRow({
   children,
   onSwipeComplete,
@@ -3317,20 +3341,37 @@ function SwipeableRow({
 
   const rightInDeep = hasDeepRight && dragX >= DEEP_SWIPE_THRESHOLD;
   const rightActive = rightInDeep ? deepRightAction! : shallowRight;
-  const rightHintWidth = disabled ? Math.abs(dragX) : rightInDeep ? DEEP_HINT_WIDTH : SWIPE_THRESHOLD;
+  const rightHintWidth = disabled
+    ? Math.abs(dragX)
+    : rightInDeep
+    ? DEEP_HINT_WIDTH
+    : customRight
+    ? CYCLE_HINT_WIDTH
+    : SWIPE_THRESHOLD;
 
   const hintOpacity = disabled
     ? Math.min(1, Math.abs(dragX) / 40)
     : Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD);
+
+  const { icon: leftIcon, text: leftText } = splitLabel(
+    leftActiveOptions[cycleIndex]?.label ?? "✓"
+  );
+  const { icon: rightIcon, text: rightText } = splitLabel(rightActive?.label ?? "✗");
+  const showLeftDeepHint = hasDeepLeft && !leftInDeep;
+  const showRightDeepHint = hasDeepRight && !rightInDeep;
 
   return (
     <div className={`relative overflow-hidden rounded-md ${className ?? ""}`}>
       {/* Positioned on the side the slide actually exposes: dragging left
           (dragX<0) slides content left, uncovering the row's right edge, so
           the left-option hint - which fires for dragX<0 - lives at
-          right-0 (and vice versa for the right action at left-0). */}
+          right-0 (and vice versa for the right action at left-0). Content
+          is packed against that same true edge (`justify-end`/`items-end`
+          here, mirrored to `justify-start`/`items-start` on the other side)
+          rather than centered in the hint box, so it reads consistently
+          right at the tile's boundary regardless of how wide the box is. */}
       <div
-        className={`pointer-events-none absolute inset-y-0 right-0 flex flex-col items-center justify-center overflow-hidden whitespace-nowrap px-2 text-center text-xs font-medium transition-[width] duration-150 ease-out ${
+        className={`pointer-events-none absolute inset-y-0 right-0 flex items-center justify-end gap-1.5 overflow-hidden whitespace-nowrap px-2.5 text-right text-xs font-medium transition-[width] duration-150 ease-out ${
           disabled
             ? "bg-stone-200 text-stone-600"
             : leftInDeep
@@ -3343,30 +3384,42 @@ function SwipeableRow({
       >
         {disabled ? (
           disabledMessage
-        ) : leftCyclableNow ? (
-          <>
-            <span
-              className={`text-[9px] leading-none ${
-                cycleIndex > 0 ? "opacity-80" : "opacity-25"
-              }`}
-            >
-              ▲
-            </span>
-            <span>{leftActiveOptions[cycleIndex]?.label}</span>
-            <span
-              className={`text-[9px] leading-none ${
-                cycleIndex < leftActiveOptions.length - 1 ? "opacity-80" : "opacity-25"
-              }`}
-            >
-              ▼
-            </span>
-          </>
         ) : (
-          leftActiveOptions[0]?.label ?? "✓"
+          <>
+            <div className="flex flex-col items-end gap-0.5">
+              {leftCyclableNow && (
+                <span
+                  className={`text-lg leading-none ${
+                    cycleIndex > 0 ? "opacity-80" : "opacity-25"
+                  }`}
+                >
+                  ▲
+                </span>
+              )}
+              <span className="text-2xl leading-none">{leftIcon}</span>
+              {leftText && (
+                <span className="whitespace-nowrap leading-tight">{leftText}</span>
+              )}
+              {leftCyclableNow && (
+                <span
+                  className={`text-lg leading-none ${
+                    cycleIndex < leftActiveOptions.length - 1 ? "opacity-80" : "opacity-25"
+                  }`}
+                >
+                  ▼
+                </span>
+              )}
+            </div>
+            {showLeftDeepHint && (
+              <span aria-hidden className="shrink-0 text-lg leading-none opacity-60">
+                ◀
+              </span>
+            )}
+          </>
         )}
       </div>
       <div
-        className={`pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center overflow-hidden px-2 text-center text-xs font-medium ${
+        className={`pointer-events-none absolute inset-y-0 left-0 flex items-center justify-start gap-1.5 overflow-hidden whitespace-nowrap px-2.5 text-left text-xs font-medium ${
           disabled
             ? "bg-stone-200 text-stone-600"
             : rightInDeep
@@ -3377,7 +3430,23 @@ function SwipeableRow({
         }`}
         style={{ opacity: dragX > 0 ? hintOpacity : 0, width: rightHintWidth }}
       >
-        {disabled ? disabledMessage : rightActive?.label ?? "✗"}
+        {disabled ? (
+          disabledMessage
+        ) : (
+          <>
+            {showRightDeepHint && (
+              <span aria-hidden className="shrink-0 text-lg leading-none opacity-60">
+                ▶
+              </span>
+            )}
+            <div className="flex flex-col items-start gap-0.5">
+              <span className="text-2xl leading-none">{rightIcon}</span>
+              {rightText && (
+                <span className="whitespace-nowrap leading-tight">{rightText}</span>
+              )}
+            </div>
+          </>
+        )}
       </div>
       <div
         onPointerDown={onPointerDown}

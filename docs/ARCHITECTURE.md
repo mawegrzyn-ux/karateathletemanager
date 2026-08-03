@@ -1930,6 +1930,31 @@ third-party OAuth.
   back up via an `onCountChange(eventId, count)` callback so deleting the
   last item in the gallery clears the badge too, instead of it going
   stale until the next full list load.
+- **Swipe hint visual pass: header icon, bigger cycle arrows, edge
+  alignment, deep-direction chevron.** Every option label is "EMOJI
+  text" (e.g. "🏆 Record result", "📷 Capture") - `splitLabel`
+  (`Schedule.tsx`) pulls the emoji out to render as its own larger
+  `text-2xl` "header" icon above the text line, rather than one inline
+  emoji+text string, so a mid-drag glance reads icon-first; a label with
+  no space (the bare "✓"/"✗" `ItemsSection` fallbacks) renders as just
+  the icon, no text line. The cycle ▲/▼ indicators grew from `text-[9px]`
+  to `text-lg`. Each hint's content packs against the tile's true outer
+  edge (`justify-end`/`items-end` on the left hint, mirrored
+  `justify-start`/`items-start` on the right) instead of centering in
+  the box, so it reads consistently at the boundary at any hint width -
+  this is also why the List view's shallow-right hint (📷 Capture, which
+  now needs room for real text plus a chevron) grew from the bare
+  `SWIPE_THRESHOLD` width to the same `CYCLE_HINT_WIDTH` the left side's
+  cyclable hint uses, while `ItemsSection`'s plain single-icon ✗ (no
+  chevron, no real text) still fits the narrow width fine and is
+  unaffected. Whenever a side has an undiscovered deeper tier
+  (`deepLeftOptions`/`deepRightAction` provided, drag hasn't reached
+  `DEEP_SWIPE_THRESHOLD` yet) a small ◀/▶ chevron - pointing the same
+  direction as the swipe itself - sits right at that same true edge,
+  disappearing once the deep zone is actually reached (nothing
+  "further" to hint at from there). `CYCLE_HINT_WIDTH`/`DEEP_HINT_WIDTH`
+  grew slightly (140→150, 190→205) to give the icon+text+chevron
+  arrangement breathing room at both tiers.
 
 ### Activation auto-provisions athlete/coach profiles
 
