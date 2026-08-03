@@ -1845,38 +1845,38 @@ third-party OAuth.
   `RequireAuth adminOnly`.
 - Pending/disabled users can log in but are shown a "waiting for
   approval" screen (`PendingApproval.tsx`) instead of the app.
-- **Swipe redesign: left always cycles Completed/Failed, right always
-  opens the photo/video "Add post" composer.** Replaces the earlier
-  two-tier shallow/deep-swipe-left design described above — there is no
-  longer a separate, deeper threshold to discover; the vertical-cycle
-  mechanic that used to live behind `DEEP_SWIPE_THRESHOLD` is now what a
-  plain left swipe does the moment it clears `SWIPE_THRESHOLD` (64px),
-  and the old `deepSwipeActions` prop was replaced by two more general
-  ones: `leftOptions: { label, onTrigger }[]` (defaults to a single "✓"
-  built from `onSwipeComplete` when omitted — still how `ItemsSection`'s
-  itinerary-item rows behave, completely unaffected by this change) and
-  `rightAction: { label, onTrigger }` (defaults to a single red "✗" built
-  from `onSwipeFailed` when omitted, same as before). The List view now
-  passes `leftOptions={[{label: "✓ Completed", ...}, {label: "✗ Failed",
-  ...}]}` — always two options, always cyclable, snapping straight to the
-  fixed `CYCLE_HINT_WIDTH` (140px, renamed from `DEEP_HINT_WIDTH`) with
-  an amber background and the same ▲/▼ step indicators the old deep zone
-  used — and a custom `rightAction` ("📸 Add post", blue hint instead of
-  red, since it's no longer a "failure" signal) that opens
-  `QuickPostDrawer` directly instead of marking the event failed.
-  Marking a *competition* event "✓ Completed" this way also opens
-  `RecordResultDrawer` right after, since the picker is deliberately
-  fixed at exactly two outcomes rather than growing a third "🏆 Record
-  result" cycle option — the fast-result-capture entry point the old
-  deep-swipe design gave competitions is preserved this way instead.
-  `QuickPostDrawer`'s photo field became `MediaField`'s new `allowVideo`
-  mode (kind="image", allowVideo) so the "take a photo or video, turn it
-  into a post" flow covers both media types through one shared
-  component rather than a page-local second control — see below.
-  `SwipeableRow`'s `onSwipeComplete`/`onSwipeFailed` props are now
-  optional (only used as the fallback single-option built above); a
-  caller passes either the old pair or the new `leftOptions`/
-  `rightAction`, never a mix.
+- **Swipe redesign, take two: independent shallow/deep tiers on both
+  sides.** A first pass collapsed left-swipe down to a single always-
+  cyclable Completed/Failed tier and repurposed right-swipe entirely for
+  posting - both reverted/refined here. `SwipeableRow` now takes four
+  option props, each optional and each defaulting from the plain
+  `onSwipeComplete`/`onSwipeFailed` pair when omitted (still exactly how
+  `ItemsSection`'s itinerary-item rows behave, untouched by any of this):
+  `leftOptions`/`rightAction` fire past `SWIPE_THRESHOLD` (64px, the
+  original shallow threshold), `deepLeftOptions`/`deepRightAction` take
+  over past a second, further `DEEP_SWIPE_THRESHOLD` (108px) - the
+  active zone snaps to a fixed, wider `DEEP_HINT_WIDTH` (190px, vs.
+  shallow's `CYCLE_HINT_WIDTH`/140px when cyclable or `SWIPE_THRESHOLD`
+  when not) rather than a gradual stretch. Any option array with more
+  than one entry is cyclable via the existing vertical-drag mechanic
+  (`OPTION_CYCLE_DISTANCE`); only the left side ever cycles multiple
+  options at a given tier, the right side's shallow/deep actions are
+  always single. Crossing the deep threshold - or dropping back below
+  the shallow one - resets the vertical-cycle tracking (`leftZoneRef`)
+  so a freshly-entered option set always starts its cycle from index 0
+  instead of inheriting whatever step the previous zone was on.
+  Color-codes each of the four zones distinctly so a mid-drag glance
+  says which one you're in: shallow-left green (single "✓", `ItemsSection`)
+  or amber (cyclable, the List view's two-option picker), deep-left
+  orange, shallow-right red (single "✗", `ItemsSection`) or blue (custom
+  single action), deep-right indigo.
+  The List view wires it back to (left) ✓ Completed / ✗ Failed at the
+  shallow tier and 🏆 Record result (competitions only) / 📝 Add post at
+  the deep tier - restoring the original deep-swipe destination for
+  those two actions rather than the "auto-open after Completed" side
+  effect the first pass used instead - and (right) a shallow 📷 Capture
+  action that opens `CaptureSheet` (see below) with a deep 🖼 Gallery
+  action that opens `GalleryDrawer` instead of a text-post composer.
 - **`MediaField` gained an `allowVideo` prop (image-kind only).** The
   action sheet gains a third "🎥 Record video" option (a hidden
   `<input type="file" accept="video/*" capture="environment">`) alongside
@@ -1888,6 +1888,34 @@ third-party OAuth.
   (`PostCard` in `AthleteSocialProfile.tsx`) now checks `isVideoUrl`
   first and renders a native `<video>` instead of an `<img>` when it
   matches, since `QuickPostDrawer`'s media field can now produce either.
+- **`nk_event_media`: a per-event gallery, separate from posts.**
+  `id, event_id (FK, ON DELETE CASCADE), athlete_id (FK, ON DELETE SET
+  NULL), media_url, kind ('image'|'video'), created_at`. Captured via the
+  List view's shallow-right swipe (`CaptureSheet`, `Schedule.tsx`): a
+  plain `Modal` action sheet (📷 Take photo / 🎥 Record video / 🖼 Choose
+  from library, three hidden file inputs, the same trio `MediaField`'s
+  own picker offers) that uploads straight through the shared
+  `uploadFile` helper (now exported from `ui.tsx` for exactly this reuse)
+  and `POST`s the result to `/api/events/:id/media` - no title/body, no
+  post created, nothing appears on the athlete's profile; it's private
+  session documentation, not a share. Deliberately doesn't close itself
+  on a picker-button tap, only once the upload+attach actually resolves -
+  closing early would null the parent's `captureEvent` state (and so the
+  `event` this component's `handleFile` closure needs) before the async
+  file-select/upload finishes, since the OS camera/library UI overlays
+  on top regardless of whether this component's own Modal stays mounted
+  underneath. `GET/POST /:id/media` are gated by the same `isEventEditor`
+  visibility as the event detail drawer itself (assigned athlete, their
+  coach, or an admin); only the capturing athlete can `DELETE` their own
+  item (`WHERE ... AND athlete_id = req.user.athlete_id`), mirrored
+  client-side by only showing `GalleryDrawer`'s 🗑 overlay icon to that
+  signed-in athlete. `GalleryDrawer` (opened by the List view's deep-
+  right swipe) is a plain `grid-cols-2` of square tiles - `<video
+  controls>` for `kind: 'video'`, `<img>` otherwise - refetching on a
+  `refreshKey` number bumped by `CaptureSheet`'s `onCaptured` callback
+  rather than on prop identity, since the gallery and capture sheet are
+  siblings passed the same `Event | null` and a same-`id` object doesn't
+  by itself signal "refetch me" the way a dependency-array change needs.
 
 ### Activation auto-provisions athlete/coach profiles
 

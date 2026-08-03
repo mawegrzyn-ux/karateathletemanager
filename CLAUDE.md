@@ -74,6 +74,15 @@ renders the photo if `photo_url` is set, otherwise a circle with the
 name's initials; never leave a person-shaped field blank when there's no
 photo.
 
+Not every capture flow is a form field, though — the Schedule List view's
+shallow-right swipe (`CaptureSheet` in `Schedule.tsx`) takes a photo/video
+and attaches it straight to the event (`nk_event_media`, browsable via
+the deep-right swipe's `GalleryDrawer`), with no title/body/post
+involved. For a spot like that, reuse `uploadFile` (also exported from
+`ui.tsx`) directly against your own action sheet rather than wrapping
+`MediaField` around a value that doesn't actually have a form field to
+live in.
+
 ## UI convention: delete confirmation
 
 `DeleteButton` always confirms before deleting — it's self-contained, so
