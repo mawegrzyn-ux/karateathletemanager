@@ -33,6 +33,7 @@ import {
   type TrainingModule,
 } from "../components/TrainingModuleView";
 import { EventCompetitionResults } from "../components/CompetitionResults";
+import type { Post } from "../components/AthleteSocialProfile";
 import { todayStr, addDaysStr, dateLabel, groupByDate } from "../utils/dates";
 import { feedbackTick, feedbackConfirm } from "../utils/feedback";
 
@@ -312,6 +313,23 @@ function toDateInput(value: string) {
 
 function toTimeInput(value: string | null) {
   return value ? value.slice(0, 5) : "";
+}
+
+// The event detail view's own "when" line - "from X to Y" reads more
+// naturally than the compact "date1 – date2 time1–time2" the List view's
+// tile squeezes into a badge row, since this one has a full line to itself
+// and is meant to be the most prominent thing under the title.
+function eventWhenLabel(event: Pick<Event, "start_date" | "end_date" | "start_time" | "end_time">) {
+  const sameDay = event.end_date === event.start_date;
+  const datePart = sameDay
+    ? toDateInput(event.start_date)
+    : `${toDateInput(event.start_date)} – ${toDateInput(event.end_date)}`;
+  const start = event.start_time ? toTimeInput(event.start_time) : null;
+  const end = event.end_time ? toTimeInput(event.end_time) : null;
+  if (start && end) return `${datePart}, from ${start} to ${end}`;
+  if (start) return `${datePart}, from ${start}`;
+  if (end) return `${datePart}, until ${end}`;
+  return datePart;
 }
 
 // Splits a JS Date into the same local date/time string shapes the
@@ -2116,6 +2134,8 @@ function EventDetail({
   const [items, setItems] = useState<EventItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [myPost, setMyPost] = useState<Post | null>(null);
 
   useEffect(() => {
     api
@@ -2130,6 +2150,27 @@ function EventDetail({
       .catch(() => setError("Failed to load event"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
+
+  // Surfaces a link to the athlete's own post about this event, if they
+  // made one (posting is self-only, so this only ever applies when the
+  // signed-in athlete is themselves on the event's roster - a coach/admin
+  // viewing someone else's event has no "my post" to show).
+  useEffect(() => {
+    if (user?.role !== "athlete" || !user.athlete_id || !athleteIds.includes(user.athlete_id)) {
+      setMyPost(null);
+      return;
+    }
+    api
+      .get<{ posts: Post[] }>(`/athletes/${user.athlete_id}/posts`)
+      .then((res) =>
+        setMyPost(
+          res.posts.find((p) => p.share_kind === "event" && p.share_event_id === eventId) ??
+            null
+        )
+      )
+      .catch(() => setMyPost(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, user?.athlete_id, athleteIds.join(",")]);
 
   async function updateEvent(patch: Record<string, unknown>) {
     const { event: updated } = await api.patch<{ event: Event }>(
@@ -2216,15 +2257,21 @@ function EventDetail({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => setIsEditing((v) => !v)}
-          className="min-h-[44px] rounded-full border border-stone-300 px-4 text-sm font-medium text-stone-700"
-        >
-          {isEditing ? "Done" : "✏️ Edit"}
-        </button>
-      </div>
+      {/* Floating rather than a top-of-flow pill so the type/date row below
+          (not this) is the first thing read under the drawer's own title -
+          bottom-left, round and red like the List view's AddButton, with
+          `sm:absolute` so it floats relative to the drawer panel itself
+          (its nearest positioned ancestor) rather than the whole viewport
+          once the drawer becomes a docked side panel instead of a
+          full-screen overlay. */}
+      <button
+        type="button"
+        onClick={() => setIsEditing((v) => !v)}
+        aria-label={isEditing ? "Done editing" : "Edit"}
+        className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-xl text-white shadow-lg sm:absolute"
+      >
+        {isEditing ? "✓" : "✏️"}
+      </button>
 
       {isEditing ? (
         <>
@@ -2393,20 +2440,11 @@ function EventDetail({
         </>
       ) : (
         <>
-          <div className="flex items-center gap-2">
-            <Badge>
-              {eventTypeInfo(eventTypes, event, modules).icon}{" "}
-              {eventTypeInfo(eventTypes, event, modules).label}
-            </Badge>
-            <span className="text-sm text-stone-500">
-              {toDateInput(event.start_date)}
-              {event.end_date !== event.start_date
-                ? ` – ${toDateInput(event.end_date)}`
-                : ""}
-              {event.start_time ? ` ${toTimeInput(event.start_time)}` : ""}
-              {event.end_time ? `–${toTimeInput(event.end_time)}` : ""}
-            </span>
-          </div>
+          <Badge>
+            {eventTypeInfo(eventTypes, event, modules).icon}{" "}
+            {eventTypeInfo(eventTypes, event, modules).label}
+          </Badge>
+          <p className="text-base font-semibold text-stone-800">{eventWhenLabel(event)}</p>
           {event.venue_id != null &&
             (() => {
               const venue = venues.find((v) => v.id === event.venue_id);
@@ -2438,7 +2476,17 @@ function EventDetail({
           )}
           {event.notes && <p className="text-stone-700">{event.notes}</p>}
 
-          {linkedModule && <TrainingModuleView module={linkedModule} />}
+          {/* The module's own items are copied into this event's own
+              Itinerary at creation time (see copyModuleItemsToEventItems,
+              events.js) so they're individually checkable-off - showing
+              this read-only reflection of the module too would just
+              duplicate that list. Still useful as a fallback for an event
+              whose itinerary is otherwise empty (an older event from
+              before this existed, or one whose copied items were since
+              deleted). */}
+          {linkedModule && items.length === 0 && (
+            <TrainingModuleView module={linkedModule} />
+          )}
           {linkedKata && (
             <p className="text-sm text-stone-600">{kataLabel(linkedKata)}</p>
           )}
@@ -2457,6 +2505,24 @@ function EventDetail({
               </div>
             </div>
           )}
+
+          {event.has_media && (
+            <button
+              type="button"
+              onClick={() => setGalleryOpen(true)}
+              className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium text-stone-700"
+            >
+              🖼 View photos &amp; videos
+            </button>
+          )}
+          {myPost && (
+            <Link
+              to={`/athletes/${myPost.athlete_id}/profile`}
+              className="flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium text-red-700"
+            >
+              📝 View your post about this
+            </Link>
+          )}
         </>
       )}
 
@@ -2464,6 +2530,17 @@ function EventDetail({
         statuses={event.athlete_status}
         athletes={athleteNames}
         onUpdate={updateEventAthleteStatus}
+      />
+
+      <GalleryDrawer
+        event={galleryOpen ? event : null}
+        athleteId={user?.athlete_id ?? null}
+        refreshKey={0}
+        onClose={() => setGalleryOpen(false)}
+        onCountChange={(_, count) => {
+          setEvent((prev) => (prev ? { ...prev, has_media: count > 0 } : prev));
+          onUpdated({ ...event, has_media: count > 0 });
+        }}
       />
 
       {event.event_type === "competition" && (

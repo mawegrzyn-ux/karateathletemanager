@@ -25,6 +25,7 @@ export interface Post {
   image_url: string | null;
   share_kind: ShareKind | null;
   created_at: string;
+  share_event_id: number | null;
   share_event_title: string | null;
   share_event_date: string | null;
   share_item_title: string | null;

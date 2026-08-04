@@ -795,7 +795,7 @@ router.patch(
 
 const POST_JOIN_SQL = `
   SELECT p.id, p.athlete_id, p.title, p.body, p.image_url, p.share_kind, p.created_at,
-         e.title AS share_event_title, e.start_date AS share_event_date,
+         p.share_event_id, e.title AS share_event_title, e.start_date AS share_event_date,
          ei.title AS share_item_title, ei.item_date AS share_item_date,
          gl.name AS share_grade_name, gl.belt_color AS share_grade_color,
          g.graded_at AS share_graded_at, g.passed AS share_passed,

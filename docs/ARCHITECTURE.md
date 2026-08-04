@@ -2063,6 +2063,70 @@ third-party OAuth.
   also resets drag state without treating a cancel as a release (unlike
   `onHeaderPointerUp`), since a cancel means the browser interrupted the
   gesture, not that the user deliberately let go.
+- **Event detail view (`EventDetail`, `Schedule.tsx`) redesign.** Several
+  related changes to the view-mode layout and to training modules'
+  relationship with itinerary items:
+  - The "✏️ Edit" toggle moved from a top-of-flow pill (pushing the type
+    badge down a row) to a floating round red button, bottom-left,
+    matching the List view's own `AddButton` styling - `fixed bottom-4
+    left-4 sm:absolute` so it's pinned to the actual viewport on mobile
+    (where the `Drawer` is a full-screen overlay - equivalent to the
+    drawer's own bottom-left) but re-anchors to the drawer's own fixed
+    container (its nearest positioned ancestor once `absolute`, skipping
+    the intervening non-positioned scroll/layout `div`s) once the drawer
+    becomes a docked side panel at the `sm:` breakpoint, rather than
+    floating off at the actual browser window's corner. This also makes
+    the type `Badge` the page's first content row, per the "type is the
+    first row" ask - it was already immediately below the top-of-flow
+    Edit pill, so moving that off to the side was the whole fix.
+  - The date/time line grew from `text-sm text-stone-500` to `text-base
+    font-semibold text-stone-800` and reads "from X to Y" instead of the
+    List view's compact dash-separated range (`eventWhenLabel`,
+    `Schedule.tsx`) - appropriate for a line with a whole row to itself,
+    unlike the List tile's tight badge-row space.
+  - **Training module items now copy into the event's own itinerary at
+    creation time**, one `nk_event_items` row per module item
+    (`copyModuleItemsToEventItems`, `api/src/routes/events.js`, called
+    from `POST /events` whenever `event_type === "training"` and
+    `training_module_id` is set) - `item_type` maps to the itinerary's
+    already-standard `'training'`/`'rest'` keys, `title` mirrors the
+    frontend's `itemSummary` (`TrainingModuleView.tsx`) formatting
+    server-side (`moduleItemTitle`), and `notes` carries the exercise's
+    `explanation`. Item times aren't meant to be realistic per-exercise
+    scheduling - `start_time`/`end_time` are NOT NULL, so each item gets
+    a placeholder, stepping forward one minute per item (or by the
+    exercise's own `duration_seconds` rounded up) from the event's own
+    `start_time` (or 09:00) purely to keep the module's ordering once the
+    itinerary sorts by `item_date`/`start_time`. This turns a
+    previously-read-only "Exercises & rest" reflection of the shared
+    module into independent, already-swipeable/tappable-off itinerary
+    items - `ItemsSection`'s existing per-item completion UI (both the
+    ✓/✗ swipe and the tap-to-cycle checkbox) needed no changes at all to
+    pick this up, since `attachAthleteStatus` already derives each new
+    item's `athlete_status` from the event's roster regardless of how the
+    item was created. The view-mode `TrainingModuleView` (the read-only
+    module preview) now only renders when `items.length === 0`, since
+    showing it alongside a populated Itinerary would just duplicate the
+    same exercise list twice - it's kept purely as a fallback for an
+    older event predating this change, or one whose copied items were
+    since deleted.
+  - **Two new links surface what an athlete has already done with an
+    event**: a "🖼 View photos & videos" row (opens the existing
+    `GalleryDrawer`) whenever `event.has_media`, and a "📝 View your post
+    about this" row linking to `/athletes/:id/profile` whenever the
+    signed-in athlete has a post with `share_kind: "event"` sharing this
+    event. **Fixed along the way: `GET /api/events/:id` (the single-event
+    fetch `EventDetail` itself uses) never actually attached `has_media`**
+    - only the list endpoint's `attachMyEventStatus` computed it - so the
+    photos/videos link could never have shown regardless of whether media
+    existed; the single-event route now runs the same `nk_event_media`
+    existence check inline. The post-link check needed `share_event_id`
+    added to `athletes.js`'s `POST_JOIN_SQL` (`GET /athletes/:id/posts`)
+    - the existing query already joined `nk_events` for display fields
+      like `share_event_title`, but never selected the raw
+      `p.share_event_id` a caller could actually match against, so
+      `Post` (`AthleteSocialProfile.tsx`, now exported with that field)
+      had no way to tell which event a share pointed at.
 
 ### Activation auto-provisions athlete/coach profiles
 

@@ -197,6 +197,72 @@ async function getEventDateRange(eventId) {
   return rows[0] ?? null;
 }
 
+// Wraps within a single day (24h) - fine here since a training session's
+// exercise count is small enough that minute-per-item never realistically
+// crosses midnight.
+function addMinutesToTime(time, minutes) {
+  const [h, m] = String(time).split(":").map(Number);
+  const total = (((h * 60 + m + minutes) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(
+    total % 60
+  ).padStart(2, "0")}`;
+}
+
+// Mirrors the frontend's itemSummary (TrainingModuleView.tsx) so a copied
+// itinerary item's title reads the same as the module's own exercise list.
+function moduleItemTitle(item) {
+  if (item.item_type === "rest") {
+    return item.duration_seconds ? `Rest ${item.duration_seconds}s` : "Rest";
+  }
+  const name = (item.name || "").trim() || "Untitled exercise";
+  if (item.distance_meters != null) return `${name} — ${item.distance_meters}m`;
+  if (item.duration_seconds != null && item.sets == null)
+    return `${name} — ${item.duration_seconds}s`;
+  if (item.sets != null && item.reps != null)
+    return `${name} — ${item.sets} × ${item.reps}`;
+  return name;
+}
+
+// Copies a training module's exercise/rest items into an event's own
+// itinerary (nk_event_items) at creation time, one row per module item, so
+// each becomes an independently checkable-off itinerary entry (same
+// swipe/tap completion as any other item, see ItemsSection in
+// Schedule.tsx) rather than a read-only reflection of the shared module.
+// Each item gets a placeholder start/end time (item times are NOT NULL)
+// stepping forward one minute per item from the event's own start_time (or
+// 09:00) - these aren't meant to be realistic per-exercise clock times,
+// just distinct enough to keep the module's own ordering when the
+// itinerary sorts by item_date/start_time.
+async function copyModuleItemsToEventItems(client, eventId, moduleId, itemDate, eventStartTime) {
+  const { rows: moduleItems } = await client.query(
+    `SELECT item_type, name, explanation, sets, reps, duration_seconds, distance_meters
+     FROM nk_training_module_items WHERE module_id = $1 ORDER BY position`,
+    [moduleId]
+  );
+  let cursor = eventStartTime || "09:00";
+  for (const mi of moduleItems) {
+    const start = cursor;
+    const durationMinutes = mi.duration_seconds
+      ? Math.max(1, Math.ceil(mi.duration_seconds / 60))
+      : 1;
+    const end = addMinutesToTime(start, durationMinutes);
+    await client.query(
+      `INSERT INTO nk_event_items (event_id, item_type, title, item_date, start_time, end_time, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        eventId,
+        mi.item_type === "rest" ? "rest" : "training",
+        moduleItemTitle(mi),
+        itemDate,
+        start,
+        end,
+        mi.explanation,
+      ]
+    );
+    cursor = end;
+  }
+}
+
 // Itinerary items live within their parent event's date span - an item
 // dated outside it would show up detached from the event it belongs to
 // on every calendar view. `dates` is one or more 'YYYY-MM-DD' strings
@@ -643,6 +709,15 @@ router.post(
             [event.id, athleteId]
           );
         }
+        if (event_type === "training" && training_module_id) {
+          await copyModuleItemsToEventItems(
+            client,
+            event.id,
+            training_module_id,
+            occurrenceStart,
+            start_time
+          );
+        }
         events.push(event);
       }
 
@@ -697,7 +772,15 @@ router.get(
       [req.params.id]
     );
     const itemsWithStatus = await attachAthleteStatus(req.user, items, athletes);
-    const event = await attachEventAthleteStatus(req.user, rows[0], athletes);
+    const { rows: mediaRows } = await pool.query(
+      `SELECT 1 FROM nk_event_media WHERE event_id = $1 LIMIT 1`,
+      [req.params.id]
+    );
+    const event = await attachEventAthleteStatus(
+      req.user,
+      { ...rows[0], has_media: mediaRows.length > 0 },
+      athletes
+    );
 
     res.json({ event, athletes, items: itemsWithStatus });
   })
