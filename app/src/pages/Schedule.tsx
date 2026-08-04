@@ -3179,8 +3179,9 @@ const OPTION_CYCLE_DISTANCE = 36;
 //
 // Each side has an independent shallow/deep pair: swiping past
 // SWIPE_THRESHOLD fires `leftOptions`/`rightAction` (defaulting to a
-// single plain "✓"/"✗" built from `onSwipeComplete`/`onSwipeFailed` when
-// omitted - ItemsSection's rows use only this shallow tier); swiping
+// single "✓ Completed"/"✗ Failed" built from `onSwipeComplete`/
+// `onSwipeFailed` when omitted - ItemsSection's rows use only this
+// shallow tier); swiping
 // further past DEEP_SWIPE_THRESHOLD switches to `deepLeftOptions`/
 // `deepRightAction` instead, when the caller provides them (the List
 // view's ✓ Completed / ✗ Failed picker deepens into 🏆 Record result /
@@ -3220,15 +3221,16 @@ const OPTION_CYCLE_DISTANCE = 36;
 // segments' own edges genuinely tracks the boundary the card is
 // receding from, rather than a static position guessed at here.
 //
-// Every option label is "EMOJI text" (e.g. "🏆 Record result") -
-// splitLabel pulls the emoji out; the hint box itself only ever renders
-// the text half, in `font-display` (the same Oswald/uppercase treatment
-// as the List view's date-grouping headings, `Schedule.tsx`) - no icon
-// glyph alongside it, so a mid-drag glance reads as a plain label rather
-// than an icon+text pairing. A label with no space (the bare "✓"/"✗"
-// fallbacks `ItemsSection`'s rows use, with no text half to fall back
-// on) renders the icon instead, since there'd be nothing to show
-// otherwise.
+// Every option label is "EMOJI text" (e.g. "🏆 Record result",
+// "✓ Completed") - splitLabel pulls the emoji out; the hint box itself
+// only ever renders the text half, in `font-display` (the same
+// Oswald/uppercase treatment as the List view's date-grouping headings,
+// `Schedule.tsx`) - no icon glyph alongside it, so a mid-drag glance
+// reads as a plain label rather than an icon+text pairing. Every option
+// used anywhere in the app carries a text half for exactly this reason;
+// a bare, spaceless label would fall back to rendering the (icon-sized)
+// icon glyph instead, since there'd be nothing else to show, but nothing
+// currently exercises that path.
 function splitLabel(label: string): { icon: string; text: string } {
   const spaceIndex = label.indexOf(" ");
   return spaceIndex === -1
@@ -3277,9 +3279,9 @@ function SwipeableRow({
   const cycleIndexRef = useRef(0);
 
   const shallowOptions =
-    leftOptions ?? (onSwipeComplete ? [{ label: "✓", onTrigger: onSwipeComplete }] : []);
+    leftOptions ?? (onSwipeComplete ? [{ label: "✓ Completed", onTrigger: onSwipeComplete }] : []);
   const shallowRight =
-    rightAction ?? (onSwipeFailed ? { label: "✗", onTrigger: onSwipeFailed } : null);
+    rightAction ?? (onSwipeFailed ? { label: "✗ Failed", onTrigger: onSwipeFailed } : null);
   const hasDeepLeft = !!deepLeftOptions && deepLeftOptions.length > 0;
   const hasDeepRight = !!deepRightAction;
   const customRight = !!rightAction;

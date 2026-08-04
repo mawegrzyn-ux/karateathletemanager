@@ -2000,6 +2000,22 @@ third-party OAuth.
   pairing. The List view's ◀/▶ chevrons (on the sliding icon/card/result
   segments, previous bullet) grew from `text-sm` to `text-2xl
   font-black` to read as a clearly weightier "keep swiping" cue.
+- **Swipe hint follow-up 3: `ItemsSection`'s itinerary rows still showed
+  a bare icon.** The previous bullet's "icon only as a fallback for the
+  bare `✓`/`✗` labels" turned out to still be reachable in practice -
+  `ItemsSection`'s rows (the only caller that ever leaves `leftOptions`/
+  `rightAction` unset, relying on `SwipeableRow`'s own
+  `onSwipeComplete`/`onSwipeFailed` default) got a bare, textless "✓"/"✗"
+  label, which `splitLabel` treats as icon-only - so those rows kept
+  showing a plain icon-sized checkmark/cross in the hint instead of a
+  label, unlike every List view hint. Fixed at the source instead of the
+  render: `SwipeableRow`'s defaults changed from `"✓"`/`"✗"` to `"✓
+  Completed"`/`"✗ Failed"` (matching the List view's own wording for the
+  same shallow tier), so they carry a text half and take the same
+  text-only `font-display` path as every other hint - the icon-only
+  fallback in the hint box render is now unreachable from anywhere in
+  the app, kept only as a defensive default for a future caller that
+  might pass a bare label.
 
 ### Activation auto-provisions athlete/coach profiles
 
