@@ -2016,6 +2016,24 @@ third-party OAuth.
   fallback in the hint box render is now unreachable from anywhere in
   the app, kept only as a defensive default for a future caller that
   might pass a bare label.
+- **Swipe hint follow-up 4: bring the ▲/▼ cycle indicators back, chunky
+  this time.** The original vertical-cycle indicators were dropped
+  outright in the "ditch the icons for nav" pass, leaving the label
+  swap as the only feedback that a zone (e.g. the left side's
+  ✓ Completed / ✗ Failed) is cyclable at all - a swipe with no options
+  visible looked identical to one with two. Restored as ▲/▼ flanking the
+  label (`SwipeableRow`'s left hint box, `Schedule.tsx` - only ever the
+  left side, since the right side's shallow/deep actions are always
+  single), gated on `leftCyclableNow`, dimmed (`opacity-25`) at whichever
+  end is already selected. Unlike the earlier `text-lg` pass, these are
+  `text-2xl font-black` - matching the weight of the List view's own
+  ◀/▶ "keep swiping" chevrons rather than a thin outline, per explicit
+  design feedback on how those should read. Unlike the ◀/▶ chevrons
+  (which had to move to the List view's sliding segments because a
+  static hint box can't track live drag distance - see two bullets up),
+  the vertical cycle position isn't tied to drag distance at all, just
+  to `cycleIndex`, so it has no such problem and stays right here in the
+  hint box.
 
 ### Activation auto-provisions athlete/coach profiles
 
