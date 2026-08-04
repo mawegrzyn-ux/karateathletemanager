@@ -2034,6 +2034,35 @@ third-party OAuth.
   the vertical cycle position isn't tied to drag distance at all, just
   to `cycleIndex`, so it has no such problem and stays right here in the
   hint box.
+- **Swipe-to-dismiss on the shared `Drawer`.** Schedule has several
+  drawers in active use at once conceptually (the event add/edit form,
+  `RecordResultDrawer`, `QuickPostDrawer`, `GalleryDrawer`) with only a
+  small ✕ to close any of them. Rather than a Schedule-specific fix,
+  this went into `Drawer` itself (`app/src/components/ui.tsx`) - the
+  same list+drawer primitive every admin page uses - so every drawer in
+  the app picked it up at once. Dragging the header rightward (the
+  direction the panel slides out toward) past `DRAWER_DISMISS_THRESHOLD`
+  (96px) and releasing calls the same `onClose` a ✕ tap would; releasing
+  short of that snaps back open. The drag is scoped to the header only,
+  not the whole panel, so it doesn't fight the body's own scrolling or
+  tappable form fields. Implementation mirrors `Schedule.tsx`'s
+  `SwipeableRow` pattern (pointer capture, an inline `transform:
+  translateX()` with the CSS transition suppressed while `dragX !== 0`
+  so the drag tracks the pointer 1:1 instead of lagging through a
+  300ms ease, `feedbackTick`/`feedbackConfirm` from `utils/feedback.ts`
+  for the same threshold-crossing/release haptics) - reusing the
+  drawer's own existing open/close state machine rather than inventing
+  a parallel dismiss animation: clearing `dragX` on release just lets
+  the panel's regular `visible`-driven slide-out take over.
+  **Fixed: a second drag starting near text the first drag happened to
+  select got hijacked by the browser's native "drag the selected text"
+  gesture** - Chromium fires `pointercancel` after a step or two of
+  `pointermove` once it takes over, so the drawer barely moved before
+  the gesture died. The header needed `select-none` to stop that
+  selection from ever happening in the first place; `onHeaderPointerCancel`
+  also resets drag state without treating a cancel as a release (unlike
+  `onHeaderPointerUp`), since a cancel means the browser interrupted the
+  gesture, not that the user deliberately let go.
 
 ### Activation auto-provisions athlete/coach profiles
 

@@ -44,6 +44,11 @@ Don't invent a new layout per page; extend this one.
   and stays mounted for one extra tick after closing so the close also
   slides out instead of vanishing instantly — don't reintroduce a bare
   `if (!open) return null` early-out, that skips the closing animation.
+  Its header is also swipeable: dragging it rightward (the direction the
+  drawer slides out) past a threshold and releasing dismisses it, the
+  same as tapping ✕ — this lives on the shared component, so every
+  drawer in the app gets it automatically; don't build a page-local
+  swipe-to-close.
 
 Reusable pieces, all in `app/src/components/ui.tsx`: `Drawer`,
 `AddButton`, `DeleteButton`, `Field`, `Badge`, `Spinner`, `Modal`, `Toast`,

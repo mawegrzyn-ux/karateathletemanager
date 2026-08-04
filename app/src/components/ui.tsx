@@ -3,10 +3,12 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type PointerEvent as ReactPointerEvent,
   type PropsWithChildren,
 } from "react";
 import { dateLabel } from "../utils/dates";
 import { useApi } from "../hooks/useApi";
+import { feedbackTick, feedbackConfirm } from "../utils/feedback";
 
 export function Avatar({
   name,
@@ -745,10 +747,26 @@ export function DateTimeRangeField({
   );
 }
 
+// How far a drag on the header has to travel (in the closing direction -
+// right, since the drawer enters from the right) before releasing it
+// dismisses the drawer rather than snapping back open.
+const DRAWER_DISMISS_THRESHOLD = 96;
+
 // Slides in from the right (full-screen push on mobile, a side panel at
 // the sm: breakpoint) rather than just popping in - stays mounted for one
 // extra transition tick after `open` goes false so the closing slide has
-// somewhere to animate to, instead of vanishing instantly.
+// somewhere to animate to, instead of vanishing instantly. Dragging the
+// header rightward (the same direction the drawer slides out) past
+// DRAWER_DISMISS_THRESHOLD and releasing dismisses it early, same as
+// tapping the ✕ - restricted to the header rather than the whole panel so
+// it doesn't fight the body's own scrolling/tappable content. The header
+// needs `select-none`: without it, a second drag starting on/near the
+// title text the first drag happened to leave selected gets hijacked by
+// the browser's own "drag the selected text" gesture instead of reaching
+// our pointer handlers - it fires pointercancel after only a step or two
+// of pointermove, which onHeaderPointerCancel resets without treating as
+// a dismiss (unlike onHeaderPointerUp, since a cancel isn't a deliberate
+// release).
 export function Drawer({
   open,
   onClose,
@@ -757,6 +775,9 @@ export function Drawer({
 }: PropsWithChildren<{ open: boolean; onClose: () => void; title: string }>) {
   const [mounted, setMounted] = useState(open);
   const [visible, setVisible] = useState(false);
+  const [dragX, setDragX] = useState(0);
+  const startXRef = useRef<number | null>(null);
+  const pastThresholdRef = useRef(false);
 
   useEffect(() => {
     if (open) {
@@ -781,14 +802,60 @@ export function Drawer({
     return () => clearTimeout(timeout);
   }, [open]);
 
+  function onHeaderPointerDown(e: ReactPointerEvent) {
+    startXRef.current = e.clientX;
+    pastThresholdRef.current = false;
+    (e.target as Element).setPointerCapture(e.pointerId);
+  }
+
+  function onHeaderPointerMove(e: ReactPointerEvent) {
+    if (startXRef.current == null) return;
+    const delta = Math.max(0, e.clientX - startXRef.current);
+    setDragX(delta);
+    const isPast = delta >= DRAWER_DISMISS_THRESHOLD;
+    if (isPast !== pastThresholdRef.current) {
+      pastThresholdRef.current = isPast;
+      if (isPast) feedbackTick(600);
+    }
+  }
+
+  function onHeaderPointerUp() {
+    if (startXRef.current == null) return;
+    if (dragX >= DRAWER_DISMISS_THRESHOLD) {
+      feedbackConfirm(500);
+      onClose();
+    }
+    setDragX(0);
+    pastThresholdRef.current = false;
+    startXRef.current = null;
+  }
+
+  // A cancel means the browser interrupted the gesture (e.g. it briefly
+  // took over for its own native text-selection drag before `select-none`
+  // below stopped that) rather than the user deliberately releasing - so
+  // just reset, never commit a dismiss here the way onHeaderPointerUp does.
+  function onHeaderPointerCancel() {
+    setDragX(0);
+    pastThresholdRef.current = false;
+    startXRef.current = null;
+  }
+
   if (!mounted) return null;
   return (
     <div
-      className={`fixed inset-0 z-50 flex flex-col bg-white transition-transform duration-300 ease-out sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[420px] sm:border-l sm:border-stone-200 sm:shadow-xl ${
-        visible ? "translate-x-0" : "translate-x-full"
-      }`}
+      className={`fixed inset-0 z-50 flex flex-col bg-white sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[420px] sm:border-l sm:border-stone-200 sm:shadow-xl ${
+        dragX === 0 ? "transition-transform duration-300 ease-out" : ""
+      } ${visible ? "translate-x-0" : "translate-x-full"}`}
+      style={dragX > 0 ? { transform: `translateX(${dragX}px)` } : undefined}
     >
-      <div className="flex items-center justify-between border-b border-stone-200 p-4">
+      <div
+        onPointerDown={onHeaderPointerDown}
+        onPointerMove={onHeaderPointerMove}
+        onPointerUp={onHeaderPointerUp}
+        onPointerCancel={onHeaderPointerCancel}
+        style={{ touchAction: dragX > 0 ? "none" : "pan-y" }}
+        className="flex select-none items-center justify-between border-b border-stone-200 p-4"
+      >
         <h2 className="text-lg font-semibold">{title}</h2>
         <button
           onClick={onClose}
