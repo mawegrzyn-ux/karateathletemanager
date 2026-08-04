@@ -3192,11 +3192,10 @@ const OPTION_CYCLE_DISTANCE = 36;
 // cyclable: holding in that zone and dragging vertically cycles which
 // entry is selected (every OPTION_CYCLE_DISTANCE px of vertical drag
 // moves one step, clamped to the array's ends rather than wrapping) -
-// no arrow icons mark this at all, just the label swapping as you cross
-// each step (the List view's own sliding segments carry a chunky ◀/▶
-// directional "keep swiping" cue instead - see below - but nothing
-// marks the vertical cycle; the label's own `font-display` styling is
-// meant to carry that on its own). Only the left side ever cycles multiple
+// chunky ▲/▼ indicators flank the label (dimmed at whichever end is
+// already selected), matching the weight of the List view's own ◀/▶
+// "keep swiping" chevrons (see below) rather than the small, thin
+// indicators an earlier pass used. Only the left side ever cycles multiple
 // options at a given tier; the right side's shallow/deep actions are
 // always single. Vertical drag only starts counting
 // once a zone is entered (tracked from the Y position at that moment,
@@ -3425,11 +3424,13 @@ function SwipeableRow({
           mirrored to `justify-start`/`items-start` on the other side)
           rather than centering in the box, so it reads consistently right
           at the tile's boundary regardless of how wide the box is. The
-          directional ◀/▶ "keep swiping" cue and the vertical ▲/▼ cycle
-          cue both live on the List view's own sliding card/icon/result
-          segments instead of here - see that render function - since
-          those actually track the live drag position, whereas this box's
-          width only ever snaps between fixed sizes. */}
+          directional ◀/▶ "keep swiping" cue lives on the List view's own
+          sliding card/icon/result segments instead of here - see that
+          render function - since those actually track the live drag
+          position, whereas this box's width only ever snaps between
+          fixed sizes. The vertical ▲/▼ cycle cue has no such problem (it
+          isn't tied to drag distance, just which option is selected), so
+          it renders right here, flanking the label. */}
       <div
         className={`pointer-events-none absolute inset-y-0 right-0 flex items-center justify-end overflow-hidden whitespace-nowrap px-2.5 text-right text-xs font-medium transition-[width] duration-150 ease-out ${
           disabled
@@ -3445,9 +3446,29 @@ function SwipeableRow({
         {disabled ? (
           disabledMessage
         ) : leftText ? (
-          <span className="whitespace-nowrap font-display text-sm font-semibold uppercase leading-tight tracking-[0.02em]">
-            {leftText}
-          </span>
+          <div className="flex flex-col items-end gap-0.5">
+            {leftCyclableNow && (
+              <span
+                className={`text-2xl font-black leading-none ${
+                  cycleIndex > 0 ? "opacity-90" : "opacity-25"
+                }`}
+              >
+                ▲
+              </span>
+            )}
+            <span className="whitespace-nowrap font-display text-sm font-semibold uppercase leading-tight tracking-[0.02em]">
+              {leftText}
+            </span>
+            {leftCyclableNow && (
+              <span
+                className={`text-2xl font-black leading-none ${
+                  cycleIndex < leftActiveOptions.length - 1 ? "opacity-90" : "opacity-25"
+                }`}
+              >
+                ▼
+              </span>
+            )}
+          </div>
         ) : (
           <span className="text-2xl leading-none">{leftIcon}</span>
         )}
