@@ -86,4 +86,41 @@ registerSecretRoutes("/anthropic-key", "anthropic_api_key", "ANTHROPIC_API_KEY")
 // Osu's Brave Search API key, for the web_search tool.
 registerSecretRoutes("/brave-key", "brave_api_key", "BRAVE_API_KEY");
 
+// The app's own Google OAuth client, used for the Google Calendar sync
+// connect flow (api/src/routes/googleCalendar.js) - not a per-user secret.
+registerSecretRoutes("/google-client-id", "google_client_id", "GOOGLE_CLIENT_ID");
+registerSecretRoutes("/google-client-secret", "google_client_secret", "GOOGLE_CLIENT_SECRET");
+
+// Not a secret (the admin needs to see/edit it), so it gets its own
+// GET/PATCH pair modeled on branding-icon above rather than
+// registerSecretRoutes. One global IANA timezone covers every synced
+// event, since the app has no per-club timezone concept anywhere today.
+router.get(
+  "/default-timezone",
+  asyncHandler(async (req, res) => {
+    const { rows } = await pool.query(
+      `SELECT value FROM nk_settings WHERE key = 'default_timezone'`
+    );
+    res.json({ value: rows[0]?.value ?? "UTC" });
+  })
+);
+
+router.patch(
+  "/default-timezone",
+  asyncHandler(async (req, res) => {
+    const { value } = req.body ?? {};
+    if (typeof value !== "string" || !value.trim()) {
+      return res.status(400).json({ error: { message: "value is required" } });
+    }
+
+    await pool.query(
+      `INSERT INTO nk_settings (key, value, updated_at)
+       VALUES ('default_timezone', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+      [value.trim()]
+    );
+    res.json({ value: value.trim() });
+  })
+);
+
 module.exports = router;

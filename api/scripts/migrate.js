@@ -1132,6 +1132,47 @@ const migrations = [
      kind       VARCHAR(10) NOT NULL CHECK (kind IN ('image','video')),
      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+
+  // One Google account connected per app user, for the one-way Schedule ->
+  // Google Calendar sync (see api/src/utils/googleCalendar.js). Tokens are
+  // encrypted at rest (api/src/utils/tokenCrypto.js) - unlike nk_settings'
+  // plaintext app-wide API keys, these are live credentials into an
+  // individual member's own Google account. calendar_id defaults to
+  // 'primary' (syncing onto the user's own primary calendar, not a
+  // dedicated one - see the plan notes on Google's restricted vs sensitive
+  // scope tiers) but stays a real column so a future dedicated-calendar
+  // version needs no migration. needs_reauth/last_error let a broken
+  // connection (revoked token, or an admin rotating the OAuth client
+  // secret, which invalidates every existing refresh token at once)
+  // surface to the user as "reconnect needed" instead of failing silently
+  // forever.
+  `CREATE TABLE IF NOT EXISTS nk_google_calendar_accounts (
+     id                SERIAL PRIMARY KEY,
+     user_id           INTEGER NOT NULL UNIQUE REFERENCES nk_users(id) ON DELETE CASCADE,
+     google_email      VARCHAR(200),
+     access_token      TEXT NOT NULL,
+     refresh_token     TEXT NOT NULL,
+     token_expires_at  TIMESTAMPTZ NOT NULL,
+     calendar_id       VARCHAR(300) NOT NULL DEFAULT 'primary',
+     needs_reauth      BOOLEAN NOT NULL DEFAULT FALSE,
+     last_error        TEXT,
+     created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  // Tracks which Google Calendar event a given (user, nk_events row) was
+  // synced to, so a later update/delete knows which Google event to touch
+  // instead of creating duplicates. One row per user per event they're on -
+  // deleted along with the event (or the user's Google connection) via
+  // cascade.
+  `CREATE TABLE IF NOT EXISTS nk_google_calendar_events (
+     id                 SERIAL PRIMARY KEY,
+     user_id            INTEGER NOT NULL REFERENCES nk_users(id) ON DELETE CASCADE,
+     event_id           INTEGER NOT NULL REFERENCES nk_events(id) ON DELETE CASCADE,
+     google_event_id    VARCHAR(300) NOT NULL,
+     updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     UNIQUE (user_id, event_id)
+  )`,
 ];
 
 async function migrate() {

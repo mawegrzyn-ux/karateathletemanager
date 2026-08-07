@@ -4,6 +4,14 @@ const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
 const asyncHandler = require("../utils/asyncHandler");
 const { isEventEditor } = require("../utils/permissions");
+const googleCalendar = require("../utils/googleCalendar");
+
+// Fires a Google Calendar sync without ever blocking or failing the
+// caller's own response - a Google API hiccup must never break the
+// underlying CRUD operation it's piggybacking on.
+function syncToGoogleCalendar(fn) {
+  fn().catch((err) => console.error("[google-calendar sync]", err));
+}
 
 const router = Router();
 
@@ -722,6 +730,9 @@ router.post(
       }
 
       await client.query("COMMIT");
+      for (const event of events) {
+        syncToGoogleCalendar(() => googleCalendar.syncEventToConnectedUsers(event, athleteIds));
+      }
       if (repeat) {
         res.status(201).json({ events, athleteIds });
       } else {
@@ -905,6 +916,10 @@ router.patch(
        WHERE ea.event_id = $1`,
       [req.params.id]
     );
+    syncToGoogleCalendar(() =>
+      googleCalendar.syncEventToConnectedUsers(rows[0], athletes.map((a) => a.id))
+    );
+
     const event = await attachEventAthleteStatus(req.user, rows[0], athletes);
     res.json({ event });
   })
@@ -935,10 +950,27 @@ router.delete(
         .json({ error: { message: "This event is not part of a recurring series" } });
     }
 
+    // Captured before the delete below - nk_google_calendar_events.event_id
+    // cascades on nk_events' own delete, so this is the only chance to read
+    // which Google event(s) need cleaning up on each connected user's
+    // calendar.
+    const { rows: seriesIds } = await pool.query(
+      `SELECT id FROM nk_events WHERE recurrence_id = $1`,
+      [recurrenceId]
+    );
+    const { rows: links } = await pool.query(
+      `SELECT gca.user_id, gca.calendar_id, gce.google_event_id, gce.event_id
+       FROM nk_google_calendar_events gce
+       JOIN nk_google_calendar_accounts gca ON gca.user_id = gce.user_id
+       WHERE gce.event_id = ANY($1::int[])`,
+      [seriesIds.map((r) => r.id)]
+    );
+
     const { rows: deleted } = await pool.query(
       `DELETE FROM nk_events WHERE recurrence_id = $1 RETURNING id`,
       [recurrenceId]
     );
+    syncToGoogleCalendar(() => googleCalendar.deleteEventFromConnectedUsers(links));
     res.json({ deleted_ids: deleted.map((r) => r.id) });
   })
 );
@@ -950,12 +982,23 @@ router.delete(
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
+    // Same "capture before cascade deletes it" reasoning as the series
+    // delete above.
+    const { rows: links } = await pool.query(
+      `SELECT gca.user_id, gca.calendar_id, gce.google_event_id, gce.event_id
+       FROM nk_google_calendar_events gce
+       JOIN nk_google_calendar_accounts gca ON gca.user_id = gce.user_id
+       WHERE gce.event_id = $1`,
+      [req.params.id]
+    );
+
     const { rowCount } = await pool.query(`DELETE FROM nk_events WHERE id = $1`, [
       req.params.id,
     ]);
     if (rowCount === 0) {
       return res.status(404).json({ error: { message: "Event not found" } });
     }
+    syncToGoogleCalendar(() => googleCalendar.deleteEventFromConnectedUsers(links));
     res.status(204).end();
   })
 );
@@ -977,6 +1020,15 @@ router.put(
       throw err;
     }
 
+    // Snapshotted before the roster is replaced below, so the sync hook
+    // after COMMIT can diff old vs. new to know who to add/remove on
+    // Google's side rather than re-syncing everyone on every edit.
+    const { rows: oldAthleteRows } = await pool.query(
+      `SELECT athlete_id FROM nk_event_athletes WHERE event_id = $1`,
+      [req.params.id]
+    );
+    const oldAthleteIds = oldAthleteRows.map((r) => r.athlete_id);
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -990,6 +1042,42 @@ router.put(
         );
       }
       await client.query("COMMIT");
+      syncToGoogleCalendar(async () => {
+        const added = athleteIds.filter((id) => !oldAthleteIds.includes(id));
+        const removed = oldAthleteIds.filter((id) => !athleteIds.includes(id));
+
+        if (added.length > 0) {
+          const { rows: eventRows } = await pool.query(
+            `SELECT ${EVENT_FIELDS} FROM nk_events WHERE id = $1`,
+            [req.params.id]
+          );
+          if (eventRows.length > 0) {
+            await googleCalendar.syncEventToConnectedUsers(eventRows[0], added);
+          }
+        }
+
+        if (removed.length > 0) {
+          const [removedUserIds, keptUserIds] = await Promise.all([
+            googleCalendar.connectedUserIdsForAthletes(removed),
+            googleCalendar.connectedUserIdsForAthletes(athleteIds),
+          ]);
+          // A removed athlete's user might still see this event through a
+          // different athlete profile they also own and that's still on
+          // the roster - only actually delete for users with no remaining
+          // tie to this event.
+          const usersToRemove = removedUserIds.filter((id) => !keptUserIds.includes(id));
+          if (usersToRemove.length > 0) {
+            const { rows: links } = await pool.query(
+              `SELECT gca.user_id, gca.calendar_id, gce.google_event_id, gce.event_id
+               FROM nk_google_calendar_events gce
+               JOIN nk_google_calendar_accounts gca ON gca.user_id = gce.user_id
+               WHERE gce.event_id = $1 AND gce.user_id = ANY($2::int[])`,
+              [req.params.id, usersToRemove]
+            );
+            await googleCalendar.deleteEventFromConnectedUsers(links);
+          }
+        }
+      });
       res.json({ athleteIds });
     } catch (err) {
       await client.query("ROLLBACK");
