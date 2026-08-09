@@ -2566,10 +2566,27 @@ never drift apart on what a tool does or what it's called:
   simple for a first cut), `web_search` (calls the Brave Search API
   directly with its own `nk_settings`-backed key lookup, since the
   handler runs outside `osu.js`; returns up to 8 `{title, url, snippet}`
-  results). `tools.js` also exports `todayInfo()` directly (the same
-  function `get_current_date`'s handler calls) so `osu.js` can state
-  today's date up front in the system prompt (see below) without
-  spending a tool round-trip on the common case.
+  results), `search_videos` (Brave's *video* search endpoint, same key -
+  results are biased to `site:youtube.com` by default since `MediaField`
+  (`ui.tsx`) only ever renders a real inline embed for a YouTube link;
+  any other video URL just shows as plain text), `list_training_module_types`,
+  and `create_training_module` (builds a module - title/explanation/type +
+  an ordered list of exercise/rest items - in one call, mirroring
+  `trainingModules.js`'s own `insertItems` validation directly since this
+  file talks to the DB rather than through the HTTP routes). The latter
+  three exist so Osu can build a training module end-to-end from a
+  request like "make a warm-up for 8-year-olds": research technique via
+  `web_search`, find a demo clip per exercise via `search_videos` (skipped
+  for an item if nothing suitable turns up - not mandatory), then call
+  `create_training_module` once the shape is concrete. Osu's system
+  prompt (`osu.js`) tells it to ask a clarifying question first (focus
+  area, skill level, roughly how many exercises, sets/reps vs. timed vs.
+  distance) rather than guess when a training-module request is too
+  vague to build from, and never to invent a `video_url` that didn't come
+  from `search_videos` or the admin themselves. `tools.js` also exports
+  `todayInfo()` directly (the same function `get_current_date`'s handler
+  calls) so `osu.js` can state today's date up front in the system prompt
+  (see below) without spending a tool round-trip on the common case.
 - `api/src/mcp/server.js` is a standalone MCP server (stdio transport, the
   low-level `@modelcontextprotocol/sdk` `Server` class — not the
   Zod-based `McpServer` convenience wrapper, precisely so it can reuse the
