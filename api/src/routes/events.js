@@ -3,7 +3,11 @@ const { Router } = require("express");
 const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
 const asyncHandler = require("../utils/asyncHandler");
-const { isEventEditor } = require("../utils/permissions");
+const {
+  isEventEditor,
+  coachSharedAthleteIds,
+  resolveAthleteIds,
+} = require("../utils/permissions");
 const googleCalendar = require("../utils/googleCalendar");
 
 // Fires a Google Calendar sync without ever blocking or failing the
@@ -241,12 +245,28 @@ function moduleItemTitle(item) {
 // 09:00) - these aren't meant to be realistic per-exercise clock times,
 // just distinct enough to keep the module's own ordering when the
 // itinerary sorts by item_date/start_time.
-async function copyModuleItemsToEventItems(client, eventId, moduleId, itemDate, eventStartTime) {
-  const { rows: moduleItems } = await client.query(
-    `SELECT item_type, name, explanation, sets, reps, duration_seconds, distance_meters
-     FROM nk_training_module_items WHERE module_id = $1 ORDER BY position`,
-    [moduleId]
-  );
+// `preloadedItems`, when given, skips the SELECT below - lets a caller
+// that's generating many events from the same handful of modules (e.g.
+// trainingPrograms.js's enroll route, which repeats the same weekday->
+// module mapping every week) fetch each module's items once up front
+// instead of re-querying identically on every occurrence.
+async function copyModuleItemsToEventItems(
+  client,
+  eventId,
+  moduleId,
+  itemDate,
+  eventStartTime,
+  preloadedItems
+) {
+  const moduleItems =
+    preloadedItems ??
+    (
+      await client.query(
+        `SELECT item_type, name, explanation, sets, reps, duration_seconds, distance_meters
+         FROM nk_training_module_items WHERE module_id = $1 ORDER BY position`,
+        [moduleId]
+      )
+    ).rows;
   let cursor = eventStartTime || "09:00";
   for (const mi of moduleItems) {
     const start = cursor;
@@ -277,17 +297,6 @@ async function copyModuleItemsToEventItems(client, eventId, moduleId, itemDate, 
 // (a single item_date, or every generated occurrence of a repeat).
 function datesWithinRange(dates, range) {
   return dates.every((d) => d >= range.start_date && d <= range.end_date);
-}
-
-async function coachSharedAthleteIds(coachId, athleteIds) {
-  const { rows } = await pool.query(
-    `SELECT DISTINCT ac.athlete_id
-     FROM nk_athlete_clubs ac
-     JOIN nk_coach_clubs cc ON cc.club_id = ac.club_id
-     WHERE cc.coach_id = $1 AND ac.athlete_id = ANY($2::int[])`,
-    [coachId, athleteIds]
-  );
-  return new Set(rows.map((r) => r.athlete_id));
 }
 
 // Splits `eventAthletes` into what `user` may see and may edit: admins and
@@ -449,38 +458,6 @@ async function attachMyEventStatus(user, events) {
       my_result_place: placeByEvent.get(e.id) ?? null,
     };
   });
-}
-
-// Resolves which athlete_ids the caller is allowed to attach, or throws a
-// {status, message} shaped error if the request is invalid/forbidden.
-async function resolveAthleteIds(user, requested) {
-  if (user.is_admin) {
-    if (!Array.isArray(requested) || requested.length === 0) {
-      throw { status: 400, message: "athlete_ids is required" };
-    }
-    return requested;
-  }
-
-  if (user.role === "athlete") {
-    return [user.athlete_id];
-  }
-
-  if (user.role === "coach") {
-    if (!Array.isArray(requested) || requested.length === 0) {
-      throw { status: 400, message: "athlete_ids is required" };
-    }
-    const shared = await coachSharedAthleteIds(user.coach_id, requested);
-    const notShared = requested.filter((id) => !shared.has(id));
-    if (notShared.length > 0) {
-      throw {
-        status: 403,
-        message: "You don't share a club with one or more of those athletes",
-      };
-    }
-    return requested;
-  }
-
-  throw { status: 403, message: "Forbidden" };
 }
 
 // Resolves which club an event belongs to, for the purpose of picking
@@ -897,6 +874,19 @@ router.patch(
       return res.status(400).json({ error: { message: "No fields to update" } });
     }
 
+    // Captured before the update below - if start_date is changing, this
+    // event's itinerary items (nk_event_items.item_date, e.g. copied in
+    // from a training module) need to shift by the same delta afterward,
+    // or they detach from the event's new date entirely.
+    let previousStartDate = null;
+    if ("start_date" in body) {
+      const { rows: currentRows } = await pool.query(
+        `SELECT start_date FROM nk_events WHERE id = $1`,
+        [req.params.id]
+      );
+      previousStartDate = currentRows[0]?.start_date ?? null;
+    }
+
     values.push(req.params.id);
     const { rows } = await pool.query(
       `UPDATE nk_events SET ${setClauses.join(", ")}, updated_at = NOW()
@@ -907,6 +897,15 @@ router.patch(
 
     if (rows.length === 0) {
       return res.status(404).json({ error: { message: "Event not found" } });
+    }
+
+    if (previousStartDate && previousStartDate !== rows[0].start_date) {
+      await pool.query(
+        `UPDATE nk_event_items
+         SET item_date = item_date + ($2::date - $3::date)
+         WHERE event_id = $1`,
+        [req.params.id, rows[0].start_date, previousStartDate]
+      );
     }
 
     const { rows: athletes } = await pool.query(
@@ -1669,5 +1668,11 @@ router.delete(
     res.status(204).end();
   })
 );
+
+// Reused by trainingPrograms.js's enroll route, which generates events the
+// same way this file's own POST / repeat-handling does.
+router.copyModuleItemsToEventItems = copyModuleItemsToEventItems;
+router.syncToGoogleCalendar = syncToGoogleCalendar;
+router.EVENT_FIELDS = EVENT_FIELDS;
 
 module.exports = router;

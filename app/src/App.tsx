@@ -209,6 +209,10 @@ export default function App() {
         <Route path="/menu-settings" element={<MenuSettings />} />
         <Route path="/google-calendar" element={<GoogleCalendarConnect />} />
         <Route
+          path="/training-programs"
+          element={<AdminTrainingModules defaultTab="programmes" />}
+        />
+        <Route
           path="/admin/users"
           element={
             <RequireAuth adminOnly>
