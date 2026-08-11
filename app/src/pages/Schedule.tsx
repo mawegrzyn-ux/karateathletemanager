@@ -587,6 +587,8 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [typeFilterDrawerOpen, setTypeFilterDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [drawer, setDrawer] = useState<"closed" | "create" | Event>("closed");
+  const [addChoiceOpen, setAddChoiceOpen] = useState(false);
+  const [programEnrollOpen, setProgramEnrollOpen] = useState(false);
   const [resultDrawerEvent, setResultDrawerEvent] = useState<Event | null>(
     null
   );
@@ -1092,8 +1094,45 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           without matching it here the FAB would sit too low and collide
           with the (taller, on iPhone) nav. */}
       <div className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] left-4 z-20">
-        <AddButton onClick={openCreate} />
+        <AddButton onClick={() => setAddChoiceOpen(true)} />
       </div>
+
+      {/* A single event, or enrolling in a whole training programme's
+          weekly pattern at once, are different enough operations (one
+          event vs. bulk-generating many) that they don't share a wizard -
+          this is just a quick fork so both are reachable from the same
+          "+" without needing two separate floating buttons. */}
+      <Modal open={addChoiceOpen} onClose={() => setAddChoiceOpen(false)}>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setAddChoiceOpen(false);
+              openCreate();
+            }}
+            className="flex min-h-[44px] items-center gap-3 rounded-xl border border-stone-200 px-4 text-left font-medium"
+          >
+            📅 New event
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAddChoiceOpen(false);
+              setProgramEnrollOpen(true);
+            }}
+            className="flex min-h-[44px] items-center gap-3 rounded-xl border border-stone-200 px-4 text-left font-medium"
+          >
+            📋 Training programme
+          </button>
+        </div>
+      </Modal>
+
+      <EnrollInProgramDrawer
+        open={programEnrollOpen}
+        onClose={() => setProgramEnrollOpen(false)}
+        canPickAthletes={canPickAthletes}
+        athletes={athletes}
+      />
 
       <Drawer
         open={typeFilterDrawerOpen}
@@ -1805,8 +1844,8 @@ function CreateEventWizard({
           </Field>
           {form.event_type === "training" && (
             <SingleSelectPicker
-              label="Training module"
-              placeholder="Search training modules..."
+              label="Training session"
+              placeholder="Search training sessions..."
               options={modules.map((m) => ({ id: m.id, label: m.title }))}
               selectedId={form.training_module_id}
               onSelect={(id) => setForm({ ...form, training_module_id: id })}
@@ -2372,8 +2411,8 @@ function EventDetail({
 
           {event.event_type === "training" && (
             <SingleSelectPicker
-              label="Training module"
-              placeholder="Search training modules..."
+              label="Training session"
+              placeholder="Search training sessions..."
               options={modules.map((m) => ({ id: m.id, label: m.title }))}
               selectedId={event.training_module_id}
               onSelect={(id) => updateEvent({ training_module_id: id })}
@@ -3742,6 +3781,202 @@ function RecordResultDrawer({
   );
 }
 
+interface ProgramSummary {
+  id: number;
+  title: string;
+  icon: string | null;
+  duration_weeks: number;
+}
+
+// Browse existing training programmes and enroll straight from Schedule's
+// own "+" (see the addChoiceOpen fork above), instead of needing to go to
+// the separate Training page first. Deliberately just the enroll step
+// (browse -> pick a start date -> optionally pick athletes) - creating or
+// editing a programme's own weekly pattern still only happens on the
+// Training page's Programmes tab (admin/TrainingProgrammes.tsx), which
+// this reuses the same /training-programs endpoints against.
+function EnrollInProgramDrawer({
+  open,
+  onClose,
+  canPickAthletes,
+  athletes,
+}: {
+  open: boolean;
+  onClose: () => void;
+  canPickAthletes: boolean;
+  athletes: Person[];
+}) {
+  const api = useApi();
+  const [programs, setPrograms] = useState<ProgramSummary[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<ProgramSummary | null>(null);
+  const [startDate, setStartDate] = useState("");
+  const [athleteQuery, setAthleteQuery] = useState("");
+  const [selectedAthleteIds, setSelectedAthleteIds] = useState<number[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelected(null);
+    setStartDate("");
+    setSelectedAthleteIds([]);
+    setError(null);
+    api
+      .get<{ programs: ProgramSummary[] }>("/training-programs")
+      .then((res) => setPrograms(res.programs))
+      .catch(() => setPrograms([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  async function enroll() {
+    if (!selected || !startDate) {
+      setError("Pick a start date");
+      return;
+    }
+    if (canPickAthletes && selectedAthleteIds.length === 0) {
+      setError("Pick at least one athlete");
+      return;
+    }
+    setError(null);
+    setSubmitting(true);
+    try {
+      await api.post(`/training-programs/${selected.id}/enroll`, {
+        start_date: startDate,
+        ...(canPickAthletes ? { athlete_ids: selectedAthleteIds } : {}),
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const q = query.trim().toLowerCase();
+  const filteredPrograms = (programs ?? []).filter((p) =>
+    p.title.toLowerCase().includes(q)
+  );
+
+  const aq = athleteQuery.trim().toLowerCase();
+  const filteredAthletes = athletes.filter((a) =>
+    `${a.first_name} ${a.last_name}`.toLowerCase().includes(aq)
+  );
+
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title={selected ? selected.title : "Enroll in a programme"}
+    >
+      {!selected ? (
+        <div className="flex flex-col gap-3">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search training programmes..."
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+          />
+          <div className="flex flex-col gap-2">
+            {programs === null ? (
+              <Spinner />
+            ) : (
+              filteredPrograms.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelected(p)}
+                  className="flex min-h-[44px] items-center justify-between rounded-2xl bg-white p-4 text-left shadow-card"
+                >
+                  <span className="font-medium">
+                    {p.icon ? `${p.icon} ` : ""}
+                    {p.title}
+                  </span>
+                  <Badge>{p.duration_weeks} weeks</Badge>
+                </button>
+              ))
+            )}
+            {programs !== null && filteredPrograms.length === 0 && (
+              <p className="px-1 py-2 text-sm text-stone-500">
+                No training programmes yet.
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <button
+            type="button"
+            onClick={() => setSelected(null)}
+            className="self-start text-sm text-stone-500"
+          >
+            ← Back to programmes
+          </button>
+
+          {canPickAthletes && (
+            <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-3">
+              <span className="text-xs font-medium text-stone-600">
+                Athletes ({selectedAthleteIds.length})
+              </span>
+              <input
+                value={athleteQuery}
+                onChange={(e) => setAthleteQuery(e.target.value)}
+                placeholder="Search athletes..."
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+              />
+              <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+                {filteredAthletes.map((a) => {
+                  const added = selectedAthleteIds.includes(a.id);
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedAthleteIds((prev) =>
+                          added ? prev.filter((id) => id !== a.id) : [...prev, a.id]
+                        )
+                      }
+                      className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
+                        added
+                          ? "border-green-200 bg-green-50 text-green-800"
+                          : "border-stone-200 bg-white"
+                      }`}
+                    >
+                      <span>
+                        {a.first_name} {a.last_name}
+                      </span>
+                      <span className="text-sm">{added ? "✓ Added" : "+ Add"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <Field label="Start date">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+            />
+          </Field>
+
+          <button
+            type="button"
+            onClick={enroll}
+            disabled={submitting}
+            className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+          >
+            {submitting ? "Adding..." : "Add to schedule"}
+          </button>
+          {error && <p className="text-sm text-red-700">{error}</p>}
+        </div>
+      )}
+    </Drawer>
+  );
+}
+
 // The "Add post" quick composer, opened by swiping any event's List view
 // row right (see the List view's rightAction above). Deliberately just a
 // body + optional photo/video, prefilled with the calendar entry's
@@ -4551,8 +4786,8 @@ function ItemsSection({
                   </Field>
                   {item.item_type === "training" && (
                     <SingleSelectPicker
-                      label="Training module"
-                      placeholder="Search training modules..."
+                      label="Training session"
+                      placeholder="Search training sessions..."
                       options={modules.map((m) => ({ id: m.id, label: m.title }))}
                       selectedId={item.training_module_id}
                       onSelect={(id) =>
@@ -4700,8 +4935,8 @@ function ItemsSection({
 
           {addForm.item_type === "training" && (
             <SingleSelectPicker
-              label="Training module"
-              placeholder="Search training modules..."
+              label="Training session"
+              placeholder="Search training sessions..."
               options={modules.map((m) => ({ id: m.id, label: m.title }))}
               selectedId={addForm.training_module_id}
               onSelect={(id) =>

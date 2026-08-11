@@ -60,36 +60,53 @@ async function coachSharedAthleteIds(coachId, athleteIds) {
 }
 
 // Resolves which athlete_ids `user` is allowed to act on, or throws a
-// {status, message} shaped error if the request is invalid/forbidden. An
-// athlete caller is always forced onto just themselves regardless of what
-// they passed - shared by events.js's create/roster routes and
-// trainingPrograms.js's enroll route, so a coach bulk-enrolling a squad
-// and an athlete self-enrolling go through the exact same branching.
+// {status, message} shaped error if the request is invalid/forbidden.
+// Shared by events.js's create/roster routes and trainingPrograms.js's
+// enroll route, so a coach/admin bulk-assigning a squad and an athlete
+// self-enrolling go through the exact same branching.
+//
+// An explicit `requested` list, when given, always wins (subject to the
+// caller's own permission check below) - this is what lets an admin or
+// coach pick OTHER athletes, e.g. to bulk-enroll a squad into a training
+// programme. With no explicit list, this falls back to "myself," but
+// only when the caller currently has an athlete identity to fall back to
+// (their active role is 'athlete') - this covers both a plain athlete
+// AND an admin/coach who's presently acting as their own athlete profile
+// (e.g. self-enrolling), without changing behavior for an admin/coach
+// with no active athlete identity, who still must specify who they mean.
 async function resolveAthleteIds(user, requested) {
-  if (user.is_admin) {
-    if (!Array.isArray(requested) || requested.length === 0) {
-      throw { status: 400, message: "athlete_ids is required" };
+  const hasRequested = Array.isArray(requested) && requested.length > 0;
+
+  if (hasRequested) {
+    if (user.is_admin) return requested;
+
+    if (user.role === "coach" && user.coach_id) {
+      const shared = await coachSharedAthleteIds(user.coach_id, requested);
+      const notShared = requested.filter((id) => !shared.has(id));
+      if (notShared.length > 0) {
+        throw {
+          status: 403,
+          message: "You don't share a club with one or more of those athletes",
+        };
+      }
+      return requested;
     }
-    return requested;
+
+    // A plain athlete caller can't act on anyone but themselves, no
+    // matter what was requested - matches the previous behavior of
+    // ignoring `requested` entirely for this role.
+    if (user.role === "athlete") {
+      return [user.athlete_id];
+    }
+
+    throw { status: 403, message: "Forbidden" };
   }
 
-  if (user.role === "athlete") {
+  if (user.role === "athlete" && user.athlete_id) {
     return [user.athlete_id];
   }
-
-  if (user.role === "coach") {
-    if (!Array.isArray(requested) || requested.length === 0) {
-      throw { status: 400, message: "athlete_ids is required" };
-    }
-    const shared = await coachSharedAthleteIds(user.coach_id, requested);
-    const notShared = requested.filter((id) => !shared.has(id));
-    if (notShared.length > 0) {
-      throw {
-        status: 403,
-        message: "You don't share a club with one or more of those athletes",
-      };
-    }
-    return requested;
+  if (user.is_admin || (user.role === "coach" && user.coach_id)) {
+    throw { status: 400, message: "athlete_ids is required" };
   }
 
   throw { status: 403, message: "Forbidden" };

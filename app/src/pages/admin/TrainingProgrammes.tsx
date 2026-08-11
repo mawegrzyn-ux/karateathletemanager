@@ -284,28 +284,56 @@ function ProgramForm({
   );
 }
 
+interface AthleteOption {
+  id: number;
+  first_name: string;
+  last_name: string;
+}
+
+// `athleteOptions` present (even as an empty array while still loading)
+// means the viewer can enroll OTHER athletes (coach/admin) - a search
+// picker (the standard MemberEditor shape) replaces the plain self-only
+// button. Undefined means "self only" (a plain athlete adding it to
+// their own calendar), matching the resolveAthleteIds branching the
+// backend itself uses: an explicit athlete_ids list is honored for a
+// coach/admin, but a plain athlete is always forced onto themselves
+// regardless of what's sent.
 function EnrollAction({
   programId,
   onEnrolled,
+  athleteOptions,
 }: {
   programId: number;
   onEnrolled: () => void;
+  athleteOptions?: AthleteOption[];
 }) {
   const api = useApi();
   const [startDate, setStartDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+  const forOthers = athleteOptions !== undefined;
 
   async function enroll() {
     if (!startDate) {
       setError("Pick a start date");
       return;
     }
+    if (forOthers && selectedIds.length === 0) {
+      setError("Pick at least one athlete");
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
-      await api.post(`/training-programs/${programId}/enroll`, { start_date: startDate });
+      await api.post(`/training-programs/${programId}/enroll`, {
+        start_date: startDate,
+        ...(forOthers ? { athlete_ids: selectedIds } : {}),
+      });
       onEnrolled();
+      setSelectedIds([]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");
     } finally {
@@ -313,9 +341,57 @@ function EnrollAction({
     }
   }
 
+  const q = query.trim().toLowerCase();
+  const results = (athleteOptions ?? []).filter((a) =>
+    `${a.first_name} ${a.last_name}`.toLowerCase().includes(q)
+  );
+
   return (
     <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-3">
-      <span className="text-sm font-medium text-stone-700">Add to my calendar</span>
+      <span className="text-sm font-medium text-stone-700">
+        {forOthers ? "Enroll athletes" : "Add to my calendar"}
+      </span>
+
+      {forOthers && (
+        <>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search athletes..."
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+          />
+          <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+            {results.map((a) => {
+              const added = selectedIds.includes(a.id);
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() =>
+                    setSelectedIds((prev) =>
+                      added ? prev.filter((id) => id !== a.id) : [...prev, a.id]
+                    )
+                  }
+                  className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
+                    added
+                      ? "border-green-200 bg-green-50 text-green-800"
+                      : "border-stone-200 bg-white"
+                  }`}
+                >
+                  <span>
+                    {a.first_name} {a.last_name}
+                  </span>
+                  <span className="text-sm">{added ? "✓ Added" : "+ Add"}</span>
+                </button>
+              );
+            })}
+            {results.length === 0 && (
+              <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
+            )}
+          </div>
+        </>
+      )}
+
       <input
         type="date"
         value={startDate}
@@ -328,7 +404,13 @@ function EnrollAction({
         disabled={submitting}
         className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
       >
-        {submitting ? "Adding..." : "Add to my calendar"}
+        {submitting
+          ? "Adding..."
+          : !forOthers
+            ? "Add to my calendar"
+            : selectedIds.length === 0
+              ? "Enroll athletes"
+              : `Enroll ${selectedIds.length} athlete${selectedIds.length === 1 ? "" : "s"}`}
       </button>
       {error && <p className="text-sm text-red-700">{error}</p>}
     </div>
@@ -447,6 +529,7 @@ export default function TrainingProgrammesTab() {
   const [programs, setPrograms] = useState<TrainingProgram[] | null>(null);
   const [types, setTypes] = useState<TrainingModuleType[]>([]);
   const [moduleOptions, setModuleOptions] = useState<TrainingModuleOption[]>([]);
+  const [athletes, setAthletes] = useState<AthleteOption[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [query, setQuery] = useState("");
   const [drawer, setDrawer] = useState<"closed" | "create" | TrainingProgram>("closed");
@@ -486,6 +569,15 @@ export default function TrainingProgrammesTab() {
       .get<{ modules: TrainingModuleOption[] }>("/training-modules")
       .then((res) => setModuleOptions(res.modules))
       .catch(() => {});
+    // Only coach/admin can enroll OTHER athletes (GET /athletes itself is
+    // gated the same way server-side) - a plain athlete only ever needs
+    // themselves, resolved automatically server-side with no picker.
+    if (user?.is_admin || user?.role === "coach") {
+      api
+        .get<{ athletes: AthleteOption[] }>("/athletes")
+        .then((res) => setAthletes(res.athletes))
+        .catch(() => {});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.athlete_id]);
 
@@ -718,16 +810,14 @@ export default function TrainingProgrammesTab() {
             >
               Save changes
             </button>
-            {canEnroll && (
-              <EnrollAction
-                programId={editing.id}
-                onEnrolled={() => {
-                  showToast("Added to your calendar");
-                  loadEnrollments();
-                  setDrawer("closed");
-                }}
-              />
-            )}
+            <EnrollAction
+              programId={editing.id}
+              athleteOptions={athletes}
+              onEnrolled={() => {
+                showToast("Enrolled");
+                loadEnrollments();
+              }}
+            />
             <DeleteButton onClick={() => deleteProgram(editing.id)} itemLabel={editing.title} />
           </div>
         )}
