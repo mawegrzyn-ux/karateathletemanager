@@ -375,7 +375,7 @@ const tools = [
   {
     name: "create_training_module",
     description:
-      "Creates a training module: a title/explanation plus an ordered list of exercise/rest items, each optionally carrying a demonstration video_url (see search_videos), sets/reps or duration_seconds or distance_meters, and its own explanation. Only build this once the plan is concrete - if the user's request is vague about focus area, skill level, exercise count, or format (sets/reps vs. timed vs. distance), ask a clarifying question first rather than guessing.",
+      "Creates a training module (shown to users as a 'training session'): a title/explanation plus an ordered list of exercise/rest items, each optionally carrying a demonstration video_url (see search_videos), sets/reps or duration_seconds or distance_meters, and its own explanation. Do NOT call this speculatively - only once the focus/goal, an appropriate skill or age level, roughly how many exercises, and each exercise's measurement format (sets/reps vs. timed vs. distance) are all actually known from the conversation. If any of those is still vague or unstated, ask about it and wait for the reply first; do not fill it with a plausible-sounding guess just to avoid asking.",
     input_schema: {
       type: "object",
       properties: {
@@ -410,6 +410,34 @@ const tools = [
       },
       required: ["title", "items"],
     },
+    // A sibling of input_schema (per the Claude API's tool definition
+    // shape), not nested inside it - kept next to the schema here purely
+    // for readability, split back apart before either the Osu route or
+    // the MCP server (server.js) sends the tool definition onward.
+    input_examples: [
+      {
+        title: "Beginner Kicking Drill",
+        explanation: "Basic roundhouse and front kick practice for new students.",
+        type_name: "Technique",
+        items: [
+          {
+            item_type: "exercise",
+            name: "Front kicks",
+            explanation: "Chamber the knee before extending.",
+            sets: 3,
+            reps: 10,
+          },
+          { item_type: "rest", duration_seconds: 30 },
+          {
+            item_type: "exercise",
+            name: "Roundhouse kicks",
+            video_url: "https://www.youtube.com/watch?v=<id from search_videos>",
+            sets: 3,
+            reps: 10,
+          },
+        ],
+      },
+    ],
     async handler({ title, explanation, type_name, icon, items }) {
       if (!title || !title.trim()) throw new Error("title is required");
       if (!Array.isArray(items) || items.length === 0) {
@@ -524,7 +552,7 @@ const tools = [
   {
     name: "create_training_program",
     description:
-      "Creates a training programme: a weekly pattern (which existing training session happens on which weekday) that repeats for duration_weeks. Every session referenced must already exist - use list_training_modules to find its id, or create_training_module first if none fits. This only defines the pattern; it doesn't assign it to anyone - athletes enroll into it themselves from the app by picking a start date. Only build this once the plan is concrete - if the request is vague about which sessions, which weekdays, or how many weeks, ask a clarifying question first rather than guessing.",
+      "Creates a training programme: a weekly pattern (which existing training session happens on which weekday) that repeats for duration_weeks. Every session referenced must already exist - use list_training_modules to find its id, or create_training_module first if none fits; never invent a training_module_id. This only defines the pattern - it does NOT assign it to anyone or touch any athlete's calendar, since athletes enroll into it themselves from the app by picking a start date. Do NOT call this speculatively - a programme request bundles several choices (which weekdays get a session, which existing session for each, how many weeks) that are each easy to leave vague, so confirm all of them are actually known from the conversation first; if any is still unclear, ask rather than guess a shape the admin didn't ask for.",
     input_schema: {
       type: "object",
       properties: {
@@ -558,6 +586,23 @@ const tools = [
       },
       required: ["title", "duration_weeks", "sessions"],
     },
+    // A sibling of input_schema, same reasoning as create_training_module's
+    // own input_examples above.
+    input_examples: [
+      {
+        title: "Pre-season Conditioning",
+        explanation: "8-week base fitness block before competition season.",
+        duration_weeks: 8,
+        // Illustrative ids only - a real call must use ids returned by
+        // list_training_modules (or create_training_module), never a
+        // literal id copied from this example.
+        sessions: [
+          { weekday: 1, training_module_id: 101 },
+          { weekday: 3, training_module_id: 102 },
+          { weekday: 5, training_module_id: 101 },
+        ],
+      },
+    ],
     async handler({ title, explanation, type_name, icon, duration_weeks, sessions }) {
       if (!title || !title.trim()) throw new Error("title is required");
       if (icon != null && (typeof icon !== "string" || icon.length > 8)) {
