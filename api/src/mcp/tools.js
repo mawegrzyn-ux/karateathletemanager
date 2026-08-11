@@ -375,7 +375,7 @@ const tools = [
   {
     name: "create_training_module",
     description:
-      "Creates a training module: a title/explanation plus an ordered list of exercise/rest items, each optionally carrying a demonstration video_url (see search_videos), sets/reps or duration_seconds or distance_meters, and its own explanation. Only build this once the plan is concrete - if the user's request is vague about focus area, skill level, exercise count, or format (sets/reps vs. timed vs. distance), ask a clarifying question first rather than guessing.",
+      "Creates a training module (shown to users as a 'training session'): a title/explanation plus an ordered list of exercise/rest items, each optionally carrying a demonstration video_url (see search_videos), sets/reps or duration_seconds or distance_meters, and its own explanation. Do NOT call this speculatively - only once the focus/goal, an appropriate skill or age level, roughly how many exercises, and each exercise's measurement format (sets/reps vs. timed vs. distance) are all actually known from the conversation. If any of those is still vague or unstated, ask about it and wait for the reply first; do not fill it with a plausible-sounding guess just to avoid asking.",
     input_schema: {
       type: "object",
       properties: {
@@ -410,6 +410,34 @@ const tools = [
       },
       required: ["title", "items"],
     },
+    // A sibling of input_schema (per the Claude API's tool definition
+    // shape), not nested inside it - kept next to the schema here purely
+    // for readability, split back apart before either the Osu route or
+    // the MCP server (server.js) sends the tool definition onward.
+    input_examples: [
+      {
+        title: "Beginner Kicking Drill",
+        explanation: "Basic roundhouse and front kick practice for new students.",
+        type_name: "Technique",
+        items: [
+          {
+            item_type: "exercise",
+            name: "Front kicks",
+            explanation: "Chamber the knee before extending.",
+            sets: 3,
+            reps: 10,
+          },
+          { item_type: "rest", duration_seconds: 30 },
+          {
+            item_type: "exercise",
+            name: "Roundhouse kicks",
+            video_url: "https://www.youtube.com/watch?v=<id from search_videos>",
+            sets: 3,
+            reps: 10,
+          },
+        ],
+      },
+    ],
     async handler({ title, explanation, type_name, icon, items }) {
       if (!title || !title.trim()) throw new Error("title is required");
       if (!Array.isArray(items) || items.length === 0) {
@@ -492,6 +520,161 @@ const tools = [
 
         await client.query("COMMIT");
         return { module_id: moduleId, item_count: items.length };
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+    },
+  },
+  {
+    name: "list_training_modules",
+    description:
+      "Search training sessions (id + title + icon) by title, substring case-insensitive. Omit query to list all. Use this to find the id of an existing session to reference in create_training_program's weekly pattern, or to check whether a suitable one already exists before creating a new one with create_training_module.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Optional title filter" },
+      },
+    },
+    async handler({ query }) {
+      const { rows } = await pool.query(
+        `SELECT id, title, icon FROM nk_training_modules
+         WHERE $1::text IS NULL OR title ILIKE '%' || $1 || '%'
+         ORDER BY title
+         LIMIT 50`,
+        [query ?? null]
+      );
+      return { modules: rows };
+    },
+  },
+  {
+    name: "create_training_program",
+    description:
+      "Creates a training programme: a weekly pattern (which existing training session happens on which weekday) that repeats for duration_weeks. Every session referenced must already exist - use list_training_modules to find its id, or create_training_module first if none fits; never invent a training_module_id. This only defines the pattern - it does NOT assign it to anyone or touch any athlete's calendar, since athletes enroll into it themselves from the app by picking a start date. Do NOT call this speculatively - a programme request bundles several choices (which weekdays get a session, which existing session for each, how many weeks) that are each easy to leave vague, so confirm all of them are actually known from the conversation first; if any is still unclear, ask rather than guess a shape the admin didn't ask for.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        explanation: { type: "string", description: "Overview shown at the top of the programme." },
+        type_name: {
+          type: "string",
+          description:
+            "Matched case-insensitively against an existing training module type name (see list_training_module_types). Omit if none fits.",
+        },
+        icon: { type: "string", description: "A single emoji, optional." },
+        duration_weeks: {
+          type: "integer",
+          description: "How many weeks the weekly pattern repeats, between 1 and 52.",
+        },
+        sessions: {
+          type: "array",
+          description: "The weekly pattern - one entry per session slot.",
+          items: {
+            type: "object",
+            properties: {
+              weekday: { type: "integer", description: "0 = Sunday .. 6 = Saturday" },
+              training_module_id: {
+                type: "integer",
+                description: "An existing training session's id (see list_training_modules).",
+              },
+            },
+            required: ["weekday", "training_module_id"],
+          },
+        },
+      },
+      required: ["title", "duration_weeks", "sessions"],
+    },
+    // A sibling of input_schema, same reasoning as create_training_module's
+    // own input_examples above.
+    input_examples: [
+      {
+        title: "Pre-season Conditioning",
+        explanation: "8-week base fitness block before competition season.",
+        duration_weeks: 8,
+        // Illustrative ids only - a real call must use ids returned by
+        // list_training_modules (or create_training_module), never a
+        // literal id copied from this example.
+        sessions: [
+          { weekday: 1, training_module_id: 101 },
+          { weekday: 3, training_module_id: 102 },
+          { weekday: 5, training_module_id: 101 },
+        ],
+      },
+    ],
+    async handler({ title, explanation, type_name, icon, duration_weeks, sessions }) {
+      if (!title || !title.trim()) throw new Error("title is required");
+      if (icon != null && (typeof icon !== "string" || icon.length > 8)) {
+        throw new Error("icon must be a string of 8 characters or fewer");
+      }
+      const weeks = Number(duration_weeks);
+      if (!Number.isInteger(weeks) || weeks < 1 || weeks > 52) {
+        throw new Error("duration_weeks must be a whole number between 1 and 52");
+      }
+      if (!Array.isArray(sessions) || sessions.length === 0) {
+        throw new Error("sessions must be a non-empty array");
+      }
+      for (const s of sessions) {
+        const weekday = Number(s?.weekday);
+        if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+          throw new Error("Each session needs a weekday between 0 (Sunday) and 6 (Saturday)");
+        }
+        if (!s?.training_module_id) {
+          throw new Error("Each session needs a training_module_id");
+        }
+      }
+
+      const moduleIds = [...new Set(sessions.map((s) => s.training_module_id))];
+      const { rows: existingModules } = await pool.query(
+        `SELECT id FROM nk_training_modules WHERE id = ANY($1::int[])`,
+        [moduleIds]
+      );
+      const existingIds = new Set(existingModules.map((m) => m.id));
+      const missing = moduleIds.filter((id) => !existingIds.has(id));
+      if (missing.length > 0) {
+        throw new Error(
+          `No training session found with id(s) ${missing.join(", ")} - check list_training_modules`
+        );
+      }
+
+      let typeId = null;
+      if (type_name) {
+        const { rows } = await pool.query(
+          `SELECT id FROM nk_training_module_types WHERE name ILIKE $1 LIMIT 1`,
+          [type_name]
+        );
+        typeId = rows[0]?.id ?? null;
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const { rows } = await client.query(
+          `INSERT INTO nk_training_programs (title, explanation, type_id, icon, duration_weeks)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id`,
+          [title, explanation ?? null, typeId, icon || null, weeks]
+        );
+        const programId = rows[0].id;
+
+        // position orders same-weekday sessions (e.g. an AM/PM double) by
+        // the order they were given in, mirroring trainingPrograms.js's
+        // own insertSessions.
+        const positionByWeekday = new Map();
+        for (const s of sessions) {
+          const weekday = Number(s.weekday);
+          const position = positionByWeekday.get(weekday) ?? 0;
+          positionByWeekday.set(weekday, position + 1);
+          await client.query(
+            `INSERT INTO nk_training_program_sessions (program_id, weekday, training_module_id, position)
+             VALUES ($1, $2, $3, $4)`,
+            [programId, weekday, s.training_module_id, position]
+          );
+        }
+
+        await client.query("COMMIT");
+        return { program_id: programId, session_count: sessions.length };
       } catch (err) {
         await client.query("ROLLBACK");
         throw err;
