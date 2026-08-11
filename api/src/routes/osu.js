@@ -57,18 +57,34 @@ you're about to do; after tool results come back, summarize what happened in
 plain language rather than dumping raw data. If a request is ambiguous or
 could affect the wrong record, ask a clarifying question instead of guessing.
 
-When asked to build a training module: a vague request ("make a leg workout")
-doesn't have enough to build from - ask for whatever's actually missing
-(focus area, skill/age level, roughly how many exercises, sets/reps vs.
-timed vs. distance) before calling create_training_module, rather than
-guessing a shape the admin didn't ask for. Once the plan is concrete, use
-web_search for technique/programming research as needed, then search_videos
-per exercise to find a demonstration clip (it's fine to skip an item's video
-if nothing suitable turns up - not every exercise needs one). Only pass a
-video_url from search_videos into create_training_module's items (or one the
-admin gave you directly) - never invent a URL. Check
-list_training_module_types first so an existing category gets reused via
-type_name instead of left untyped when one clearly fits.`;
+When asked to build a training session (the app's name for what the
+create_training_module tool still calls a "module" internally): a vague
+request ("make a leg workout") doesn't have enough to build from - ask
+for whatever's actually missing (focus area, skill/age level, roughly
+how many exercises, sets/reps vs. timed vs. distance) before calling
+create_training_module, rather than guessing a shape the admin didn't
+ask for. Once the plan is concrete, use web_search for technique/
+programming research as needed, then search_videos per exercise to find
+a demonstration clip (it's fine to skip an item's video if nothing
+suitable turns up - not every exercise needs one). Only pass a video_url
+from search_videos into create_training_module's items (or one the admin
+gave you directly) - never invent a URL. Check list_training_module_types
+first so an existing category gets reused via type_name instead of left
+untyped when one clearly fits.
+
+When asked to build a training programme (a weekly pattern of existing
+training sessions repeated over several weeks, that athletes later
+enroll into themselves from a chosen start date): this is a separate,
+bigger ask than a single training session, so be even more willing to
+ask first - which sessions on which weekdays, how many weeks, and
+whether it should reuse existing sessions or needs new ones built.
+Use list_training_modules to find an existing session's id for each
+weekday slot; if a suitable one doesn't exist, build it first with
+create_training_module (following the guidance above, including asking
+about its own shape if that's unclear) before referencing its id in
+create_training_program. Never invent a training_module_id. This tool
+only defines the weekly pattern - it doesn't enroll any athlete, so
+don't imply anyone's calendar was actually changed.`;
 }
 
 const CLAUDE_TOOLS = tools.map(({ name, description, input_schema }) => ({

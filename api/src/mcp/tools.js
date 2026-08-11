@@ -500,6 +500,144 @@ const tools = [
       }
     },
   },
+  {
+    name: "list_training_modules",
+    description:
+      "Search training sessions (id + title + icon) by title, substring case-insensitive. Omit query to list all. Use this to find the id of an existing session to reference in create_training_program's weekly pattern, or to check whether a suitable one already exists before creating a new one with create_training_module.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Optional title filter" },
+      },
+    },
+    async handler({ query }) {
+      const { rows } = await pool.query(
+        `SELECT id, title, icon FROM nk_training_modules
+         WHERE $1::text IS NULL OR title ILIKE '%' || $1 || '%'
+         ORDER BY title
+         LIMIT 50`,
+        [query ?? null]
+      );
+      return { modules: rows };
+    },
+  },
+  {
+    name: "create_training_program",
+    description:
+      "Creates a training programme: a weekly pattern (which existing training session happens on which weekday) that repeats for duration_weeks. Every session referenced must already exist - use list_training_modules to find its id, or create_training_module first if none fits. This only defines the pattern; it doesn't assign it to anyone - athletes enroll into it themselves from the app by picking a start date. Only build this once the plan is concrete - if the request is vague about which sessions, which weekdays, or how many weeks, ask a clarifying question first rather than guessing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        explanation: { type: "string", description: "Overview shown at the top of the programme." },
+        type_name: {
+          type: "string",
+          description:
+            "Matched case-insensitively against an existing training module type name (see list_training_module_types). Omit if none fits.",
+        },
+        icon: { type: "string", description: "A single emoji, optional." },
+        duration_weeks: {
+          type: "integer",
+          description: "How many weeks the weekly pattern repeats, between 1 and 52.",
+        },
+        sessions: {
+          type: "array",
+          description: "The weekly pattern - one entry per session slot.",
+          items: {
+            type: "object",
+            properties: {
+              weekday: { type: "integer", description: "0 = Sunday .. 6 = Saturday" },
+              training_module_id: {
+                type: "integer",
+                description: "An existing training session's id (see list_training_modules).",
+              },
+            },
+            required: ["weekday", "training_module_id"],
+          },
+        },
+      },
+      required: ["title", "duration_weeks", "sessions"],
+    },
+    async handler({ title, explanation, type_name, icon, duration_weeks, sessions }) {
+      if (!title || !title.trim()) throw new Error("title is required");
+      if (icon != null && (typeof icon !== "string" || icon.length > 8)) {
+        throw new Error("icon must be a string of 8 characters or fewer");
+      }
+      const weeks = Number(duration_weeks);
+      if (!Number.isInteger(weeks) || weeks < 1 || weeks > 52) {
+        throw new Error("duration_weeks must be a whole number between 1 and 52");
+      }
+      if (!Array.isArray(sessions) || sessions.length === 0) {
+        throw new Error("sessions must be a non-empty array");
+      }
+      for (const s of sessions) {
+        const weekday = Number(s?.weekday);
+        if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+          throw new Error("Each session needs a weekday between 0 (Sunday) and 6 (Saturday)");
+        }
+        if (!s?.training_module_id) {
+          throw new Error("Each session needs a training_module_id");
+        }
+      }
+
+      const moduleIds = [...new Set(sessions.map((s) => s.training_module_id))];
+      const { rows: existingModules } = await pool.query(
+        `SELECT id FROM nk_training_modules WHERE id = ANY($1::int[])`,
+        [moduleIds]
+      );
+      const existingIds = new Set(existingModules.map((m) => m.id));
+      const missing = moduleIds.filter((id) => !existingIds.has(id));
+      if (missing.length > 0) {
+        throw new Error(
+          `No training session found with id(s) ${missing.join(", ")} - check list_training_modules`
+        );
+      }
+
+      let typeId = null;
+      if (type_name) {
+        const { rows } = await pool.query(
+          `SELECT id FROM nk_training_module_types WHERE name ILIKE $1 LIMIT 1`,
+          [type_name]
+        );
+        typeId = rows[0]?.id ?? null;
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const { rows } = await client.query(
+          `INSERT INTO nk_training_programs (title, explanation, type_id, icon, duration_weeks)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id`,
+          [title, explanation ?? null, typeId, icon || null, weeks]
+        );
+        const programId = rows[0].id;
+
+        // position orders same-weekday sessions (e.g. an AM/PM double) by
+        // the order they were given in, mirroring trainingPrograms.js's
+        // own insertSessions.
+        const positionByWeekday = new Map();
+        for (const s of sessions) {
+          const weekday = Number(s.weekday);
+          const position = positionByWeekday.get(weekday) ?? 0;
+          positionByWeekday.set(weekday, position + 1);
+          await client.query(
+            `INSERT INTO nk_training_program_sessions (program_id, weekday, training_module_id, position)
+             VALUES ($1, $2, $3, $4)`,
+            [programId, weekday, s.training_module_id, position]
+          );
+        }
+
+        await client.query("COMMIT");
+        return { program_id: programId, session_count: sessions.length };
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+    },
+  },
 ];
 
 const toolsByName = new Map(tools.map((t) => [t.name, t]));
