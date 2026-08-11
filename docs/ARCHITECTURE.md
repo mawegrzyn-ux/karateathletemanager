@@ -2765,6 +2765,113 @@ not a pull from Google's side.
   optional `.env` fallback, since the in-app admin page above is the
   primary way to configure them.
 
+### Training Programmes
+
+A Training Programme is a weekly pattern of training sessions (which
+weekday, which existing training module — see "Naming" below) repeated
+over `duration_weeks`. An athlete (or their coach, on their behalf)
+"enrolls" from a chosen start date, which bulk-generates the individual
+`nk_events` rows for it; those then behave exactly like any other
+Schedule event (individually editable, Google-Calendar-synced), plus two
+bulk operations scoped to the whole enrollment.
+
+- **Naming**: "Training Module" is renamed to **"Training Session"** in
+  the UI only — `nk_training_modules`, `training_module_id`, and
+  `/training-modules` all keep their existing names internally, since a
+  full rename would touch every FK and call site for zero functional
+  payoff. `admin/TrainingModules.tsx` is now titled "Training" with a
+  two-tab segmented control — "Sessions" (the existing CRUD, relabeled)
+  and "Programmes" (this feature) — reached at two routes:
+  `/admin/training-modules` (coach/admin, unchanged, defaults to
+  Sessions) and a new `/training-programs` (any active user, defaults to
+  Programmes, and is the *only* tab shown at all for a plain athlete —
+  confirmed via research that athletes have no existing route into this
+  page, despite CLAUDE.md previously claiming otherwise; that claim
+  referenced an `App.tsx` `ATHLETE_TABS`/`DEFAULT_TABS` symbol that no
+  longer exists, since superseded by `navTabs.ts`'s `NAV_TAB_REGISTRY`).
+- **Schema** (`api/scripts/migrate.js`): `nk_training_programs` (title,
+  explanation, `type_id` shared with `nk_training_module_types`, icon,
+  `duration_weeks` 1-52); `nk_training_program_sessions` (`program_id`,
+  `weekday` 0-6, `training_module_id`, `position` — multiple sessions per
+  weekday are allowed, e.g. an AM/PM double);
+  `nk_training_program_enrollments` (`training_program_id` nullable so an
+  enrollment survives the programme definition later changing,
+  `athlete_id` — whose calendar, not who acted — `created_by_user_id` as
+  a nullable audit trail, `start_date`). `nk_events` gains
+  `program_enrollment_id` (`ON DELETE CASCADE` from the enrollment — the
+  same "wipe every generated event via one FK" shape `recurrence_id`
+  already gives the `repeat` feature's series-delete, just for a
+  heterogeneous set of events instead of repeats of one) and
+  `sequence_index` (generation order 0..N-1, set once, never recomputed).
+- **Enrolling** (`POST /training-programs/:id/enroll`, in the new
+  `api/src/routes/trainingPrograms.js`) resolves target athletes via
+  `resolveAthleteIds` (moved from `events.js` into
+  `api/src/utils/permissions.js` alongside `coachSharedAthleteIds`, so
+  both files share one source of truth) — an athlete caller is always
+  forced onto just themselves; a coach/admin can pass explicit
+  `athlete_ids` to bulk-enroll a squad, generating one enrollment + one
+  full set of events **per athlete** (never sharing an `nk_events` row
+  across athletes here, even though the schema could - a later
+  shift/delete is scoped per-enrollment). Capped at
+  `MAX_PROGRAM_ENROLLMENT_EVENTS = 40` total generated events (a
+  purpose-built limit, not reused from the unrelated `repeat` feature's
+  `MAX_REPEAT_OCCURRENCES = 60` — each unit here is a heavier multi-item
+  event). Each distinct module's items are pre-fetched once before the
+  generation loop (via `copyModuleItemsToEventItems`'s new
+  `preloadedItems` param) rather than re-querying identically for every
+  occurrence, since the weekly pattern repeats every week. Generated
+  events sync to Google Calendar exactly the way `POST /events`'s own
+  `repeat` handling already does — loop-fire `syncEventToConnectedUsers`
+  per event after commit, zero new sync code needed.
+- **Shifting** (`PATCH /training-programs/enrollments/:id/shift`, body
+  `{from_event_id, new_start_date}`) moves an enrollment's events from a
+  chosen anchor session onward by the delta between that session's
+  *current* date (which may already differ from its originally-generated
+  date, if it was individually dragged) and `new_start_date`. Compared by
+  `sequence_index`, not date — date-based comparison breaks the moment
+  any other event in the same enrollment has been individually
+  rescheduled out of order. Bulk-shifts the affected events'
+  `nk_event_items.item_date` by the same delta too (see the bug fix
+  below).
+- **Bug fix bundled into this feature**: `PATCH /events/:id` (events.js)
+  updated `nk_events.start_date` but never touched
+  `nk_event_items.item_date`, so dragging a multi-item event's date left
+  its itinerary items dated to the old day - a latent, rarely-hit issue
+  the whole app already had, that this feature makes common for the
+  first time (every programme-generated event has copied-in items). Now
+  fixed generally: any `start_date` change bulk-shifts that event's
+  items by the same delta (`item_date = item_date + (new::date -
+  old::date)`, plain date+integer arithmetic — not `* INTERVAL '1 day'`,
+  which returns a `timestamp` rather than a `date`).
+- **Deleting a whole enrollment** (`DELETE /training-programs/enrollments/:id`)
+  captures each generated event's `{user_id, calendar_id, google_event_id}`
+  from `nk_google_calendar_events` *before* deleting the enrollment row —
+  its cascade wipes every event (and, transitively, those link rows) the
+  instant it runs, so the Google Calendar cleanup has to run off a
+  pre-captured snapshot, same reasoning as `DELETE /:id/series`.
+- **Adjusting one session** needs no new route at all — it's the
+  existing `PATCH /events/:id`, now correct once the item-date bug above
+  is fixed. A new `isEnrollmentManager(user, enrollment)`
+  (`permissions.js`) gates shift/delete/enrollment-viewing: the same
+  three-way shape as `isEventEditor` (admin / the athlete themselves / a
+  coach sharing a club with them), just scoped to one enrollment's
+  `athlete_id` instead of an event's roster, since `isEventEditor` itself
+  is single-event-scoped.
+- Frontend: `admin/TrainingProgrammes.tsx` (the Programmes tab's content,
+  imported into `admin/TrainingModules.tsx`) is a plain list+drawer
+  (search box + full-form drawer) rather than a paginated wizard — a
+  programme session is just "pick an existing training session for a
+  weekday," with none of the deep per-item sub-forms
+  `CreateModuleWizard` exists for. Each weekday is its own accordion
+  section (search box + "+ Add"/`🗑`), the same nested-line-item-in-a-
+  drawer and search-based-picker shapes already used elsewhere
+  (`ItemsSection` in `Schedule.tsx`, `MemberEditor` in `admin/Clubs.tsx`)
+  rather than new patterns. A "My programmes" section (visible to anyone
+  with an active athlete profile) lists the viewer's own enrollments,
+  each opening a drawer listing its generated sessions with a
+  tap-to-select "shift from here" anchor and a `DeleteButton` ("Remove
+  from my calendar").
+
 ## Database
 
 - Engine: PostgreSQL 14+

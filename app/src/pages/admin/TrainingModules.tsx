@@ -24,6 +24,7 @@ import {
   type TrainingModuleItem,
   type TrainingModuleItemType as ItemType,
 } from "../../components/TrainingModuleView";
+import TrainingProgrammesTab from "./TrainingProgrammes";
 
 const MAX_SETS = 50;
 const MAX_REPS = 1000;
@@ -1053,10 +1054,23 @@ function EditModuleWizard({
   );
 }
 
-export default function TrainingModules() {
+export default function TrainingModules({
+  defaultTab = "sessions",
+}: {
+  defaultTab?: "sessions" | "programmes";
+}) {
   const api = useApi();
   const { user } = useAuth();
   const canEdit = !!user?.is_admin || user?.role === "coach";
+  // A plain athlete/referee/parent viewer has no edit rights over Training
+  // Sessions at all (see trainingModules.js's authorize("coach") write
+  // routes) - rather than showing them a Sessions tab that's entirely
+  // read-only with nothing they can act on, they land straight on
+  // Programmes (the tab they actually have an action to take in - "add to
+  // my calendar") with no tab switcher to choose from.
+  const [tab, setTab] = useState<"sessions" | "programmes">(
+    canEdit ? defaultTab : "programmes"
+  );
   const [modules, setModules] = useState<TrainingModule[] | null>(null);
   const [types, setTypes] = useState<TrainingModuleType[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -1106,7 +1120,7 @@ export default function TrainingModules() {
     api
       .get<{ modules: TrainingModule[] }>("/training-modules")
       .then((res) => setModules(res.modules))
-      .catch(() => setError("Failed to load training modules"));
+      .catch(() => setError("Failed to load training sessions"));
   }
 
   function openCreate() {
@@ -1147,13 +1161,67 @@ export default function TrainingModules() {
     }
   }
 
-  if (error) return <div className="p-4 text-red-700">{error}</div>;
-  if (!modules)
+  // Shared by every branch below (loading/error/sessions/programmes) so
+  // switching tabs is always available, even while the Sessions list is
+  // still loading or failed to load - a broken Sessions fetch shouldn't
+  // strand someone who only wanted Programmes.
+  const header = (
+    <div className="flex items-center justify-between">
+      <h1 className="text-2xl font-bold tracking-tight">
+        {canEdit ? "Training" : "Training Programmes"}
+      </h1>
+      {canEdit && (
+        <div className="flex rounded-full bg-stone-100 p-1 text-sm font-medium">
+          <button
+            type="button"
+            onClick={() => setTab("sessions")}
+            className={`rounded-full px-3 py-1 ${
+              tab === "sessions" ? "bg-white shadow-card" : "text-stone-500"
+            }`}
+          >
+            Sessions
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("programmes")}
+            className={`rounded-full px-3 py-1 ${
+              tab === "programmes" ? "bg-white shadow-card" : "text-stone-500"
+            }`}
+          >
+            Programmes
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  if (tab === "programmes") {
     return (
-      <div className="flex justify-center p-8">
-        <Spinner />
+      <div className="flex flex-col gap-3 p-4">
+        {header}
+        <TrainingProgrammesTab />
       </div>
     );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-3 p-4">
+        {header}
+        <div className="p-4 text-red-700">{error}</div>
+      </div>
+    );
+  }
+  if (!modules) {
+    return (
+      <div className="flex flex-col gap-3 p-4">
+        {header}
+        <div className="flex justify-center p-8">
+          <Spinner />
+        </div>
+      </div>
+    );
+  }
 
   const editing = drawer !== "closed" && drawer !== "create" ? drawer : null;
   const filtered = modules.filter((m) => {
@@ -1277,8 +1345,8 @@ export default function TrainingModules() {
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Training modules</h1>
+      {header}
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -1300,7 +1368,7 @@ export default function TrainingModules() {
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search training modules..."
+        placeholder="Search training sessions..."
         className="min-h-[44px] rounded-xl border border-stone-300 px-3"
       />
 
@@ -1323,7 +1391,7 @@ export default function TrainingModules() {
           : filtered.map((m) => <ModuleRow key={m.id} m={m} showIcon />)}
         {filtered.length === 0 && (
           <p className="px-1 py-2 text-sm text-stone-500">
-            No training modules yet.
+            No training sessions yet.
           </p>
         )}
       </div>
@@ -1331,7 +1399,7 @@ export default function TrainingModules() {
       <Drawer
         open={filterDrawerOpen}
         onClose={() => setFilterDrawerOpen(false)}
-        title="Filter training modules"
+        title="Filter training sessions"
       >
         <div className="flex flex-col gap-4">
           <label className="flex min-h-[44px] items-center gap-2 rounded-xl bg-stone-50 px-3 text-sm font-medium text-stone-700">
@@ -1399,7 +1467,7 @@ export default function TrainingModules() {
         <Drawer
           open={drawer === "create"}
           onClose={() => setDrawer("closed")}
-          title="New training module"
+          title="New training session"
         >
           {drawer === "create" && (
             <CreateModuleWizard

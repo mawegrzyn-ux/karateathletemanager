@@ -38,6 +38,7 @@ export default function More() {
         <Tile to="/grades" icon="🥋" label="Grades" />
         <Tile to="/menu-settings" icon="🧭" label="Customize menu" />
         <Tile to="/google-calendar" icon="📆" label="Google Calendar" />
+        <Tile to="/training-programs" icon="🗓️" label="Training" />
       </TileGrid>
 
       {user?.is_admin && (
@@ -103,7 +104,7 @@ export default function More() {
             <Tile
               to="/admin/training-modules"
               icon="💪"
-              label="Training modules"
+              label="Manage training"
             />
             <Tile to="/admin/event-types" icon="🏷️" label="Schedule types" />
           </TileGrid>

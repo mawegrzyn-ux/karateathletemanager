@@ -1173,6 +1173,72 @@ const migrations = [
      updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
      UNIQUE (user_id, event_id)
   )`,
+
+  // Training Programmes: a weekly pattern of training sessions (weekday +
+  // which training module) repeated over duration_weeks, that an athlete
+  // "enrolls" into from a chosen start date (see nk_training_program_enrollments
+  // below) to bulk-generate the individual nk_events rows onto their own
+  // schedule. "Training Module" is renamed to "Training Session" in the UI
+  // only - this table intentionally keeps the training_module_id/
+  // nk_training_modules naming to avoid a large, purely-cosmetic rename
+  // across every FK and call site.
+  `CREATE TABLE IF NOT EXISTS nk_training_programs (
+     id             SERIAL PRIMARY KEY,
+     title          VARCHAR(200) NOT NULL,
+     explanation    TEXT,
+     type_id        INTEGER REFERENCES nk_training_module_types(id) ON DELETE SET NULL,
+     icon           VARCHAR(8),
+     duration_weeks INTEGER NOT NULL CHECK (duration_weeks BETWEEN 1 AND 52),
+     archived       BOOLEAN NOT NULL DEFAULT false,
+     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  // The weekly template itself. Multiple rows per weekday are allowed
+  // (an AM/PM double session, or a technique session plus a separate
+  // conditioning session the same day) - position orders same-day rows.
+  // training_module_id is ON DELETE SET NULL, matching how
+  // nk_event_items.training_module_id and nk_events.training_module_id
+  // already behave (not CASCADE) - a deleted module leaves a visibly-
+  // blank slot in the programme rather than silently vanishing.
+  `CREATE TABLE IF NOT EXISTS nk_training_program_sessions (
+     id                 SERIAL PRIMARY KEY,
+     program_id         INTEGER NOT NULL REFERENCES nk_training_programs(id) ON DELETE CASCADE,
+     weekday            INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6),
+     training_module_id INTEGER REFERENCES nk_training_modules(id) ON DELETE SET NULL,
+     position           INTEGER NOT NULL DEFAULT 0,
+     UNIQUE (program_id, weekday, position)
+  )`,
+
+  // One row per "athlete X started programme Y on date Z". Deliberately
+  // athlete_id (whose schedule) rather than user_id, since a coach can
+  // create one of these on an athlete's behalf - "who acted"
+  // (created_by_user_id, a nullable audit trail) and "whose calendar"
+  // are separate concerns. training_program_id is ON DELETE SET NULL so
+  // an enrollment (and the events it already generated) survives the
+  // programme definition later being edited or deleted.
+  `CREATE TABLE IF NOT EXISTS nk_training_program_enrollments (
+     id                  SERIAL PRIMARY KEY,
+     training_program_id INTEGER REFERENCES nk_training_programs(id) ON DELETE SET NULL,
+     athlete_id          INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     created_by_user_id  INTEGER REFERENCES nk_users(id) ON DELETE SET NULL,
+     start_date          DATE NOT NULL,
+     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  // program_enrollment_id: ON DELETE CASCADE - deleting an enrollment
+  // removes every event it generated for free via the FK, the same
+  // "capture Google Calendar links before the cascade, then delete"
+  // shape DELETE /:id/series already uses for recurrence_id, just for a
+  // heterogeneous set of events instead of repeats of one. sequence_index:
+  // generation order (0..N-1), set once at enroll time and never
+  // recomputed - this is what keeps "shift from here" well-defined even
+  // after some other event in the same enrollment has been individually
+  // dragged to an unrelated date.
+  `ALTER TABLE nk_events
+     ADD COLUMN IF NOT EXISTS program_enrollment_id INTEGER
+       REFERENCES nk_training_program_enrollments(id) ON DELETE CASCADE,
+     ADD COLUMN IF NOT EXISTS sequence_index INTEGER`,
 ];
 
 async function migrate() {
