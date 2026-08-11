@@ -56,7 +56,7 @@ async function braveRequest(url, apiKey) {
 }
 
 // Mirrors the limits/enum in api/src/routes/trainingModules.js's own
-// insertItems - create_training_module below replicates that validation
+// insertItems - create_training_session below replicates that validation
 // directly (per this file's own convention of talking to the DB rather
 // than through the HTTP routes) rather than importing from a route file.
 const TRAINING_ITEM_TYPES = ["exercise", "rest"];
@@ -361,9 +361,9 @@ const tools = [
     },
   },
   {
-    name: "list_training_module_types",
+    name: "list_training_session_types",
     description:
-      "List the training module categories (e.g. Cardio, Strength) a module can optionally be tagged with, so a new module can be matched to an existing one instead of left untyped.",
+      "List the training categories (e.g. Cardio, Strength) a training session can optionally be tagged with, so a new one can be matched to an existing category instead of left untyped.",
     input_schema: { type: "object", properties: {} },
     async handler() {
       const { rows } = await pool.query(
@@ -373,18 +373,18 @@ const tools = [
     },
   },
   {
-    name: "create_training_module",
+    name: "create_training_session",
     description:
-      "Creates a training module (shown to users as a 'training session'): a title/explanation plus an ordered list of exercise/rest items, each optionally carrying a demonstration video_url (see search_videos), sets/reps or duration_seconds or distance_meters, and its own explanation. Do NOT call this speculatively - only once the focus/goal, an appropriate skill or age level, roughly how many exercises, and each exercise's measurement format (sets/reps vs. timed vs. distance) are all actually known from the conversation. If any of those is still vague or unstated, ask about it and wait for the reply first; do not fill it with a plausible-sounding guess just to avoid asking.",
+      "Creates a training session: a title/explanation plus an ordered list of exercise/rest items, each optionally carrying a demonstration video_url (see search_videos), sets/reps or duration_seconds or distance_meters, and its own explanation. Do NOT call this speculatively - only once the focus/goal, an appropriate skill or age level, roughly how many exercises, and each exercise's measurement format (sets/reps vs. timed vs. distance) are all actually known from the conversation. If any of those is still vague or unstated, ask about it and wait for the reply first; do not fill it with a plausible-sounding guess just to avoid asking.",
     input_schema: {
       type: "object",
       properties: {
         title: { type: "string" },
-        explanation: { type: "string", description: "Overview shown at the top of the module." },
+        explanation: { type: "string", description: "Overview shown at the top of the session." },
         type_name: {
           type: "string",
           description:
-            "Matched case-insensitively against an existing training module type name (see list_training_module_types). Omit if none fits.",
+            "Matched case-insensitively against an existing category name (see list_training_session_types). Omit if none fits.",
         },
         icon: { type: "string", description: "A single emoji, optional." },
         items: {
@@ -519,7 +519,7 @@ const tools = [
         }
 
         await client.query("COMMIT");
-        return { module_id: moduleId, item_count: items.length };
+        return { session_id: moduleId, item_count: items.length };
       } catch (err) {
         await client.query("ROLLBACK");
         throw err;
@@ -529,9 +529,9 @@ const tools = [
     },
   },
   {
-    name: "list_training_modules",
+    name: "list_training_sessions",
     description:
-      "Search training sessions (id + title + icon) by title, substring case-insensitive. Omit query to list all. Use this to find the id of an existing session to reference in create_training_program's weekly pattern, or to check whether a suitable one already exists before creating a new one with create_training_module.",
+      "Search training sessions (id + title + icon) by title, substring case-insensitive. Omit query to list all. Use this to find the id of an existing session to reference in create_training_program's weekly pattern, or to check whether a suitable one already exists before creating a new one with create_training_session.",
     input_schema: {
       type: "object",
       properties: {
@@ -546,13 +546,13 @@ const tools = [
          LIMIT 50`,
         [query ?? null]
       );
-      return { modules: rows };
+      return { sessions: rows };
     },
   },
   {
     name: "create_training_program",
     description:
-      "Creates a training programme: a weekly pattern (which existing training session happens on which weekday) that repeats for duration_weeks. Every session referenced must already exist - use list_training_modules to find its id, or create_training_module first if none fits; never invent a training_module_id. This only defines the pattern - it does NOT assign it to anyone or touch any athlete's calendar, since athletes enroll into it themselves from the app by picking a start date. Do NOT call this speculatively - a programme request bundles several choices (which weekdays get a session, which existing session for each, how many weeks) that are each easy to leave vague, so confirm all of them are actually known from the conversation first; if any is still unclear, ask rather than guess a shape the admin didn't ask for.",
+      "Creates a training programme: a weekly pattern (which existing training session happens on which weekday) that repeats for duration_weeks. Every session referenced must already exist - use list_training_sessions to find its id, or create_training_session first if none fits; never invent a training_session_id. This only defines the pattern - it does NOT assign it to anyone or touch any athlete's calendar, since athletes enroll into it themselves from the app by picking a start date. Do NOT call this speculatively - a programme request bundles several choices (which weekdays get a session, which existing session for each, how many weeks) that are each easy to leave vague, so confirm all of them are actually known from the conversation first; if any is still unclear, ask rather than guess a shape the admin didn't ask for.",
     input_schema: {
       type: "object",
       properties: {
@@ -561,7 +561,7 @@ const tools = [
         type_name: {
           type: "string",
           description:
-            "Matched case-insensitively against an existing training module type name (see list_training_module_types). Omit if none fits.",
+            "Matched case-insensitively against an existing category name (see list_training_session_types). Omit if none fits.",
         },
         icon: { type: "string", description: "A single emoji, optional." },
         duration_weeks: {
@@ -575,18 +575,18 @@ const tools = [
             type: "object",
             properties: {
               weekday: { type: "integer", description: "0 = Sunday .. 6 = Saturday" },
-              training_module_id: {
+              training_session_id: {
                 type: "integer",
-                description: "An existing training session's id (see list_training_modules).",
+                description: "An existing training session's id (see list_training_sessions).",
               },
             },
-            required: ["weekday", "training_module_id"],
+            required: ["weekday", "training_session_id"],
           },
         },
       },
       required: ["title", "duration_weeks", "sessions"],
     },
-    // A sibling of input_schema, same reasoning as create_training_module's
+    // A sibling of input_schema, same reasoning as create_training_session's
     // own input_examples above.
     input_examples: [
       {
@@ -594,12 +594,12 @@ const tools = [
         explanation: "8-week base fitness block before competition season.",
         duration_weeks: 8,
         // Illustrative ids only - a real call must use ids returned by
-        // list_training_modules (or create_training_module), never a
+        // list_training_sessions (or create_training_session), never a
         // literal id copied from this example.
         sessions: [
-          { weekday: 1, training_module_id: 101 },
-          { weekday: 3, training_module_id: 102 },
-          { weekday: 5, training_module_id: 101 },
+          { weekday: 1, training_session_id: 101 },
+          { weekday: 3, training_session_id: 102 },
+          { weekday: 5, training_session_id: 101 },
         ],
       },
     ],
@@ -620,12 +620,12 @@ const tools = [
         if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
           throw new Error("Each session needs a weekday between 0 (Sunday) and 6 (Saturday)");
         }
-        if (!s?.training_module_id) {
-          throw new Error("Each session needs a training_module_id");
+        if (!s?.training_session_id) {
+          throw new Error("Each session needs a training_session_id");
         }
       }
 
-      const moduleIds = [...new Set(sessions.map((s) => s.training_module_id))];
+      const moduleIds = [...new Set(sessions.map((s) => s.training_session_id))];
       const { rows: existingModules } = await pool.query(
         `SELECT id FROM nk_training_modules WHERE id = ANY($1::int[])`,
         [moduleIds]
@@ -634,7 +634,7 @@ const tools = [
       const missing = moduleIds.filter((id) => !existingIds.has(id));
       if (missing.length > 0) {
         throw new Error(
-          `No training session found with id(s) ${missing.join(", ")} - check list_training_modules`
+          `No training session found with id(s) ${missing.join(", ")} - check list_training_sessions`
         );
       }
 
@@ -669,7 +669,7 @@ const tools = [
           await client.query(
             `INSERT INTO nk_training_program_sessions (program_id, weekday, training_module_id, position)
              VALUES ($1, $2, $3, $4)`,
-            [programId, weekday, s.training_module_id, position]
+            [programId, weekday, s.training_session_id, position]
           );
         }
 
