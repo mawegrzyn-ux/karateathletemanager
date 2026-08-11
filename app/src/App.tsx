@@ -25,6 +25,8 @@ import AdminCoachRoles from "./pages/admin/CoachRoles";
 import AdminAppIcon from "./pages/admin/AppIcon";
 import AdminOsuApiKey from "./pages/admin/OsuApiKey";
 import AdminBraveApiKey from "./pages/admin/BraveApiKey";
+import AdminGoogleCalendarConfig from "./pages/admin/GoogleCalendarConfig";
+import GoogleCalendarConnect from "./pages/GoogleCalendarConnect";
 import Osu from "./pages/Osu";
 import RequireAuth from "./components/RequireAuth";
 import RequireLogin from "./components/RequireLogin";
@@ -205,6 +207,7 @@ export default function App() {
         <Route path="/grades" element={<Grades />} />
         <Route path="/more" element={<More />} />
         <Route path="/menu-settings" element={<MenuSettings />} />
+        <Route path="/google-calendar" element={<GoogleCalendarConnect />} />
         <Route
           path="/admin/users"
           element={
@@ -330,6 +333,14 @@ export default function App() {
           element={
             <RequireAuth adminOnly>
               <AdminBraveApiKey />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/google-calendar-config"
+          element={
+            <RequireAuth adminOnly>
+              <AdminGoogleCalendarConfig />
             </RequireAuth>
           }
         />

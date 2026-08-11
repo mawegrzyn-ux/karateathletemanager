@@ -28,6 +28,7 @@ const grades = require("./grades");
 const osu = require("./osu");
 const eventTypes = require("./eventTypes");
 const geocode = require("./geocode");
+const googleCalendar = require("./googleCalendar");
 
 const router = Router();
 
@@ -60,5 +61,6 @@ router.use("/grades", grades);
 router.use("/osu", osu);
 router.use("/event-types", eventTypes);
 router.use("/geocode", geocode);
+router.use("/google-calendar", googleCalendar);
 
 module.exports = router;

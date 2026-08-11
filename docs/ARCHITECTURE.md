@@ -2566,10 +2566,27 @@ never drift apart on what a tool does or what it's called:
   simple for a first cut), `web_search` (calls the Brave Search API
   directly with its own `nk_settings`-backed key lookup, since the
   handler runs outside `osu.js`; returns up to 8 `{title, url, snippet}`
-  results). `tools.js` also exports `todayInfo()` directly (the same
-  function `get_current_date`'s handler calls) so `osu.js` can state
-  today's date up front in the system prompt (see below) without
-  spending a tool round-trip on the common case.
+  results), `search_videos` (Brave's *video* search endpoint, same key -
+  results are biased to `site:youtube.com` by default since `MediaField`
+  (`ui.tsx`) only ever renders a real inline embed for a YouTube link;
+  any other video URL just shows as plain text), `list_training_module_types`,
+  and `create_training_module` (builds a module - title/explanation/type +
+  an ordered list of exercise/rest items - in one call, mirroring
+  `trainingModules.js`'s own `insertItems` validation directly since this
+  file talks to the DB rather than through the HTTP routes). The latter
+  three exist so Osu can build a training module end-to-end from a
+  request like "make a warm-up for 8-year-olds": research technique via
+  `web_search`, find a demo clip per exercise via `search_videos` (skipped
+  for an item if nothing suitable turns up - not mandatory), then call
+  `create_training_module` once the shape is concrete. Osu's system
+  prompt (`osu.js`) tells it to ask a clarifying question first (focus
+  area, skill level, roughly how many exercises, sets/reps vs. timed vs.
+  distance) rather than guess when a training-module request is too
+  vague to build from, and never to invent a `video_url` that didn't come
+  from `search_videos` or the admin themselves. `tools.js` also exports
+  `todayInfo()` directly (the same function `get_current_date`'s handler
+  calls) so `osu.js` can state today's date up front in the system prompt
+  (see below) without spending a tool round-trip on the common case.
 - `api/src/mcp/server.js` is a standalone MCP server (stdio transport, the
   low-level `@modelcontextprotocol/sdk` `Server` class — not the
   Zod-based `McpServer` convenience wrapper, precisely so it can reuse the
@@ -2650,6 +2667,103 @@ never drift apart on what a tool does or what it's called:
   environment, no extra plumbing. `BRAVE_API_KEY` is the equivalent
   `.env` fallback for web search, both optional given the in-app
   configuration pages above.
+
+### Google Calendar sync
+
+One-way, automatic, per-user sync of Schedule (`nk_events`) into each
+member's own Google Calendar. Connect once (self-service OAuth) and
+every event that member's on stays mirrored going forward, with no
+further action — a push triggered by writes to `nk_events` in this app,
+not a pull from Google's side.
+
+- **Primary calendar, not a dedicated one.** Syncs straight onto each
+  user's own primary Google Calendar (`nk_google_calendar_accounts
+  .calendar_id`, defaults to `'primary'`) via the
+  `calendar.events` OAuth scope, deliberately avoiding a dedicated
+  secondary calendar — that needs the `calendar` scope, which Google
+  classifies as **restricted** and requires a paid third-party CASA
+  security assessment to get out of Testing publishing status.
+  `calendar.events` is merely **sensitive**: still needs Google app
+  verification (a reachable Privacy Policy page, an OAuth consent screen
+  review), but no paid audit.
+- **No SDK dependency.** `api/src/utils/googleCalendar.js` calls Google's
+  OAuth2 and Calendar v3 REST endpoints directly with `fetch`, matching
+  the precedent already set by `geocode.js` for talking to an external
+  API, rather than adding the `googleapis` npm package for a handful of
+  endpoints.
+- **Tokens encrypted at rest.** Unlike `nk_settings`'s plaintext app-wide
+  API keys (Anthropic/Brave — a leak there costs the app money), a
+  Google refresh token is a live credential into an individual member's
+  own Google account, so `access_token`/`refresh_token` are encrypted
+  with AES-256-GCM (`api/src/utils/tokenCrypto.js`, Node's built-in
+  `crypto`, no new dependency) before they touch
+  `nk_google_calendar_accounts`, using a `.env`-only
+  `GOOGLE_TOKEN_ENCRYPTION_KEY` (32 random bytes, base64).
+- **Which users an event syncs to** is resolved via `nk_user_athletes`
+  (the *full* set of athlete profiles a login owns), not
+  `nk_users.athlete_id` (just the currently active profile pointer used
+  everywhere else in the app) — background sync isn't tied to whichever
+  profile a user happens to be viewing right now, so it covers every
+  athlete profile their account can switch to. Coaches/admins can still
+  connect, but nothing syncs to them unless they also own an athlete
+  profile, matching the athlete-centric `nk_event_athletes` roster model.
+  Itinerary sub-items (`nk_event_items`) are not synced — a training
+  module's copied exercises get placeholder one-minute-apart times,
+  which would be nonsensical as real calendar entries.
+- **Event → Google time translation** (`eventToGoogleBody`) handles
+  three shapes: no times at all → an all-day event (`end.date` computed
+  as `end_date + 1 day`, since Google's `end.date` is exclusive but this
+  app's own `end_date` is inclusive); times set with `daily_times =
+  false` → one continuous `dateTime` span even across multiple days, no
+  Google recurrence; times set with `daily_times = true` → the same slot
+  repeats identically every day, the one case needing Google's own
+  `recurrence` RRULE — a different mechanism than this app's separate
+  `repeat` feature, which already generates independent `nk_events` rows
+  needing no Google-side recurrence at all.
+- **Fire-and-forget sync-on-write.** Every hook in `events.js` (create,
+  update, roster change, delete, series delete) calls into
+  `googleCalendar.js` without ever `await`ing it on the response path —
+  a Google API hiccup is caught and logged, never breaking the
+  underlying CRUD operation. There's no background job/queue
+  infrastructure in this app (single Express process under PM2), so this
+  deliberately avoids needing one.
+- **Deletion capture-before-cascade.**
+  `nk_google_calendar_events.event_id` has `ON DELETE CASCADE` to
+  `nk_events`, so the link row holding `google_event_id` (the only
+  record of which Google event to delete) vanishes the instant the
+  `nk_events` row is deleted. The delete/series-delete handlers `SELECT`
+  the affected `(user_id, calendar_id, google_event_id)` rows **before**
+  the `DELETE FROM nk_events`, and fire the Google-side deletes off that
+  pre-captured snapshot.
+- **Broken connections surface, they don't fail silently.** A refresh
+  failure (revoked grant, or an admin rotating the OAuth client secret —
+  which invalidates every existing refresh token issued under the old
+  client at once) sets `needs_reauth = true` /
+  `last_error` on the account row; every sync call treats that account
+  as "skip, don't retry" until the user reconnects, and
+  `GoogleCalendarConnect.tsx` (route `/google-calendar`, tile in
+  `More.tsx`'s top personal-settings section) surfaces it as "connection
+  needs to be renewed" rather than quietly doing nothing forever.
+- **Admin configuration** reuses `settings.js`'s existing
+  `registerSecretRoutes` helper for the app's own OAuth Client ID/Secret
+  (`GET`/`PATCH`/`DELETE /admin/settings/google-client-id` and
+  `-client-secret`) plus a plain (non-secret) `GET`/`PATCH
+  /admin/settings/default-timezone` pair — one global IANA timezone
+  covers every synced event, since the app has no per-club timezone
+  concept anywhere today. Configured at
+  `admin/GoogleCalendarConfig.tsx` (`/admin/google-calendar-config`, tile
+  under More's "Configuration" section).
+- **7-day tokens until Google verification is complete.** Until the
+  Google Cloud project's OAuth consent screen reaches **Production**
+  publishing status (submitted for verification, which requires a
+  reachable Privacy Policy page), refresh tokens Google issues expire
+  after 7 days regardless of anything this code does — a hard rule tied
+  to Testing status, not a bug here.
+- Needs `GOOGLE_OAUTH_REDIRECT_URI`, `PUBLIC_APP_URL`,
+  `GOOGLE_TOKEN_ENCRYPTION_KEY` set in `api/.env` (see Environment
+  Variables below); `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are an
+  optional `.env` fallback, since the in-app admin page above is the
+  primary way to configure them.
 
 ## Database
 
@@ -3082,6 +3196,11 @@ DB_PASSWORD=
 NODE_ENV=production
 ANTHROPIC_API_KEY=
 BRAVE_API_KEY=
+PUBLIC_APP_URL=https://nadakarate.com
+GOOGLE_OAUTH_REDIRECT_URI=https://nadakarate.com/api/google-calendar/callback
+GOOGLE_TOKEN_ENCRYPTION_KEY=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
 ```
 
 ## Git Conventions

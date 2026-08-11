@@ -37,6 +37,7 @@ export default function More() {
         <Tile to="/profile" icon="👤" label="My profile" />
         <Tile to="/grades" icon="🥋" label="Grades" />
         <Tile to="/menu-settings" icon="🧭" label="Customize menu" />
+        <Tile to="/google-calendar" icon="📆" label="Google Calendar" />
       </TileGrid>
 
       {user?.is_admin && (
@@ -82,6 +83,11 @@ export default function More() {
           <TileGrid>
             <Tile to="/admin/osu-api-key" icon="🔑" label="Osu API key" />
             <Tile to="/admin/brave-api-key" icon="🔍" label="Web search key" />
+            <Tile
+              to="/admin/google-calendar-config"
+              icon="📆"
+              label="Google Calendar"
+            />
           </TileGrid>
         </div>
       )}

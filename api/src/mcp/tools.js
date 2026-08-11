@@ -29,6 +29,42 @@ function todayInfo() {
   return { date, weekday, time };
 }
 
+async function getBraveApiKey() {
+  const { rows } = await pool.query(
+    `SELECT value FROM nk_settings WHERE key = 'brave_api_key'`
+  );
+  const apiKey = rows[0]?.value || process.env.BRAVE_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "Web search isn't configured yet - add a Brave Search API key under More > Configuration."
+    );
+  }
+  return apiKey;
+}
+
+async function braveRequest(url, apiKey) {
+  const res = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      "X-Subscription-Token": apiKey,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Brave Search request failed (${res.status})`);
+  }
+  return res;
+}
+
+// Mirrors the limits/enum in api/src/routes/trainingModules.js's own
+// insertItems - create_training_module below replicates that validation
+// directly (per this file's own convention of talking to the DB rather
+// than through the HTTP routes) rather than importing from a route file.
+const TRAINING_ITEM_TYPES = ["exercise", "rest"];
+const MAX_SETS = 50;
+const MAX_REPS = 1000;
+const MAX_DURATION_SECONDS = 6 * 60 * 60; // 6 hours
+const MAX_DISTANCE_METERS = 100000; // 100km
+
 const tools = [
   {
     name: "get_current_date",
@@ -270,30 +306,13 @@ const tools = [
     },
     async handler({ query }) {
       if (!query || !query.trim()) throw new Error("query is required");
-
-      const { rows } = await pool.query(
-        `SELECT value FROM nk_settings WHERE key = 'brave_api_key'`
-      );
-      const apiKey = rows[0]?.value || process.env.BRAVE_API_KEY;
-      if (!apiKey) {
-        throw new Error(
-          "Web search isn't configured yet - add a Brave Search API key under More > Configuration."
-        );
-      }
+      const apiKey = await getBraveApiKey();
 
       const url = new URL("https://api.search.brave.com/res/v1/web/search");
       url.searchParams.set("q", query);
       url.searchParams.set("count", "8");
 
-      const res = await fetch(url, {
-        headers: {
-          Accept: "application/json",
-          "X-Subscription-Token": apiKey,
-        },
-      });
-      if (!res.ok) {
-        throw new Error(`Brave Search request failed (${res.status})`);
-      }
+      const res = await braveRequest(url, apiKey);
       const data = await res.json();
       const results = (data.web?.results ?? []).map((r) => ({
         title: r.title,
@@ -301,6 +320,184 @@ const tools = [
         snippet: r.description,
       }));
       return { results };
+    },
+  },
+  {
+    name: "search_videos",
+    description:
+      "Search the web for instructional/demonstration videos (via Brave Video Search) and return each result's title, url, thumbnail, and duration. Use when building a training module to find a demonstration clip for an exercise. Results are biased toward YouTube by default (youtube_only, default true) since this app's video embed only renders a real inline player for YouTube links - a video_url on a training module item from any other site will just show as a plain link, not an embedded player.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        youtube_only: {
+          type: "boolean",
+          description: "Restrict results to youtube.com (default true).",
+        },
+      },
+      required: ["query"],
+    },
+    async handler({ query, youtube_only }) {
+      if (!query || !query.trim()) throw new Error("query is required");
+      const apiKey = await getBraveApiKey();
+      const restrictToYouTube = youtube_only !== false;
+
+      const url = new URL("https://api.search.brave.com/res/v1/videos/search");
+      url.searchParams.set(
+        "q",
+        restrictToYouTube ? `${query} site:youtube.com` : query
+      );
+      url.searchParams.set("count", "8");
+
+      const res = await braveRequest(url, apiKey);
+      const data = await res.json();
+      const results = (data.results ?? []).map((r) => ({
+        title: r.title,
+        url: r.url,
+        thumbnail: r.thumbnail?.src ?? null,
+        duration: r.video?.duration ?? null,
+      }));
+      return { results };
+    },
+  },
+  {
+    name: "list_training_module_types",
+    description:
+      "List the training module categories (e.g. Cardio, Strength) a module can optionally be tagged with, so a new module can be matched to an existing one instead of left untyped.",
+    input_schema: { type: "object", properties: {} },
+    async handler() {
+      const { rows } = await pool.query(
+        `SELECT id, name FROM nk_training_module_types ORDER BY name`
+      );
+      return { types: rows };
+    },
+  },
+  {
+    name: "create_training_module",
+    description:
+      "Creates a training module: a title/explanation plus an ordered list of exercise/rest items, each optionally carrying a demonstration video_url (see search_videos), sets/reps or duration_seconds or distance_meters, and its own explanation. Only build this once the plan is concrete - if the user's request is vague about focus area, skill level, exercise count, or format (sets/reps vs. timed vs. distance), ask a clarifying question first rather than guessing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        explanation: { type: "string", description: "Overview shown at the top of the module." },
+        type_name: {
+          type: "string",
+          description:
+            "Matched case-insensitively against an existing training module type name (see list_training_module_types). Omit if none fits.",
+        },
+        icon: { type: "string", description: "A single emoji, optional." },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              item_type: { type: "string", enum: ["exercise", "rest"] },
+              name: { type: "string", description: "Required for exercise items." },
+              explanation: { type: "string" },
+              video_url: {
+                type: "string",
+                description: "A demonstration video link, ideally from search_videos.",
+              },
+              sets: { type: "integer" },
+              reps: { type: "integer" },
+              duration_seconds: { type: "integer" },
+              distance_meters: { type: "integer" },
+            },
+            required: ["item_type"],
+          },
+        },
+      },
+      required: ["title", "items"],
+    },
+    async handler({ title, explanation, type_name, icon, items }) {
+      if (!title || !title.trim()) throw new Error("title is required");
+      if (!Array.isArray(items) || items.length === 0) {
+        throw new Error("items must be a non-empty array");
+      }
+      if (icon != null && (typeof icon !== "string" || icon.length > 8)) {
+        throw new Error("icon must be a string of 8 characters or fewer");
+      }
+
+      let typeId = null;
+      if (type_name) {
+        const { rows } = await pool.query(
+          `SELECT id FROM nk_training_module_types WHERE name ILIKE $1 LIMIT 1`,
+          [type_name]
+        );
+        typeId = rows[0]?.id ?? null;
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const { rows } = await client.query(
+          `INSERT INTO nk_training_modules (title, explanation, type_id, icon)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id`,
+          [title, explanation ?? null, typeId, icon || null]
+        );
+        const moduleId = rows[0].id;
+
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i] ?? {};
+          if (!TRAINING_ITEM_TYPES.includes(it.item_type)) {
+            throw new Error("Each item needs a valid item_type (exercise or rest)");
+          }
+          const sets = it.sets != null ? Number(it.sets) : null;
+          const reps = it.reps != null ? Number(it.reps) : null;
+          const duration = it.duration_seconds != null ? Number(it.duration_seconds) : null;
+          const distance = it.distance_meters != null ? Number(it.distance_meters) : null;
+          if (sets != null && (!Number.isInteger(sets) || sets <= 0 || sets > MAX_SETS)) {
+            throw new Error(`sets must be a whole number between 1 and ${MAX_SETS}`);
+          }
+          if (reps != null && (!Number.isInteger(reps) || reps <= 0 || reps > MAX_REPS)) {
+            throw new Error(`reps must be a whole number between 1 and ${MAX_REPS}`);
+          }
+          if (
+            duration != null &&
+            (!Number.isInteger(duration) || duration <= 0 || duration > MAX_DURATION_SECONDS)
+          ) {
+            throw new Error(
+              `duration_seconds must be a whole number between 1 and ${MAX_DURATION_SECONDS}`
+            );
+          }
+          if (
+            distance != null &&
+            (!Number.isInteger(distance) || distance <= 0 || distance > MAX_DISTANCE_METERS)
+          ) {
+            throw new Error(
+              `distance_meters must be a whole number between 1 and ${MAX_DISTANCE_METERS}`
+            );
+          }
+
+          await client.query(
+            `INSERT INTO nk_training_module_items
+               (module_id, position, item_type, name, explanation, video_url, sets, reps, duration_seconds, distance_meters)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+              moduleId,
+              i,
+              it.item_type,
+              it.item_type === "exercise" ? it.name ?? null : null,
+              it.explanation ?? null,
+              it.video_url ?? null,
+              sets,
+              reps,
+              duration,
+              distance,
+            ]
+          );
+        }
+
+        await client.query("COMMIT");
+        return { module_id: moduleId, item_count: items.length };
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
     },
   },
 ];
