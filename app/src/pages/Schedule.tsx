@@ -1209,7 +1209,9 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             </div>
           )}
           {groupOccurrencesByDate(expandEventsForList(filteredEvents)).map(
-            ({ date, occurrences }) => (
+            ({ date, occurrences }) => {
+              const isToday = date === todayStr();
+              return (
               <div
                 key={date}
                 ref={(el) => {
@@ -1217,7 +1219,13 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                 }}
                 className="flex scroll-mt-[190px] flex-col gap-2"
               >
-                <h2 className="text-sm font-semibold text-stone-500">
+                <h2
+                  className={
+                    isToday
+                      ? "inline-flex w-fit items-center rounded-full bg-red-50 px-2.5 py-0.5 text-sm font-semibold text-red-600"
+                      : "text-sm font-semibold text-stone-500"
+                  }
+                >
                   {dateLabel(date)}
                 </h2>
                 {occurrences.map((occ) => {
@@ -1466,7 +1474,8 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                   );
                 })}
               </div>
-            )
+              );
+            }
           )}
           {filteredEvents.length === 0 && (
             <p className="px-1 py-2 text-sm text-stone-500">
