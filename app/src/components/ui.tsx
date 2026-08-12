@@ -5,6 +5,7 @@ import {
   type ChangeEvent,
   type PointerEvent as ReactPointerEvent,
   type PropsWithChildren,
+  type ReactNode,
 } from "react";
 import { dateLabel } from "../utils/dates";
 import { useApi } from "../hooks/useApi";
@@ -940,6 +941,375 @@ export function Toast({ message }: { message: string }) {
   return (
     <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full bg-red-600 px-4 py-2 text-sm text-white shadow-lg">
       {message}
+    </div>
+  );
+}
+
+export const SWIPE_THRESHOLD = 64;
+export const DEEP_SWIPE_THRESHOLD = 108;
+const CYCLE_HINT_WIDTH = 150;
+const DEEP_HINT_WIDTH = 205;
+const DISABLED_SWIPE_MAX = 220;
+const OPTION_CYCLE_DISTANCE = 36;
+
+// Wraps a row with horizontal swipe-to-flag. Pointer events (not HTML5
+// drag-and-drop) so it works on touch, same approach as Schedule's Day view
+// drag-to-move. When `disabled` (coaches/admins can't swipe someone else's
+// status), dragging still tracks and reveals `disabledMessage` behind the
+// row instead of the option hints, growing with drag distance so the
+// message can be read - but releasing never fires anything.
+//
+// Each side has an independent shallow/deep pair: swiping past
+// SWIPE_THRESHOLD fires `leftOptions`/`rightAction` (defaulting to a
+// single "✓ Completed"/"✗ Failed" built from `onSwipeComplete`/
+// `onSwipeFailed` when omitted - Schedule's ItemsSection rows use only this
+// shallow tier); swiping
+// further past DEEP_SWIPE_THRESHOLD switches to `deepLeftOptions`/
+// `deepRightAction` instead, when the caller provides them (Schedule's List
+// view's ✓ Completed / ✗ Failed picker deepens into 🏆 Record result /
+// 📝 Add post on the left, and its 📷 capture action deepens into a 🖼
+// Gallery view on the right) - a snap to a fixed, wider width
+// (DEEP_HINT_WIDTH) rather than a gradual stretch, so the hint reads
+// cleanly at both sizes. Any option array with more than one entry is
+// cyclable: holding in that zone and dragging vertically cycles which
+// entry is selected (every OPTION_CYCLE_DISTANCE px of vertical drag
+// moves one step, clamped to the array's ends rather than wrapping) -
+// chunky ▲/▼ indicators flank the label (dimmed at whichever end is
+// already selected), matching the weight of the List view's own ◀/▶
+// "keep swiping" chevrons (rendered by the caller, tracking live dragX -
+// see Schedule.tsx's List view) rather than the small, thin indicators an
+// earlier pass used. Only the left side ever cycles multiple options at a
+// given tier; the right side's shallow/deep actions are always single.
+// Vertical drag only starts counting once a zone is entered (tracked from
+// the Y position at that moment, and reset whenever the active zone
+// changes - shallow<->deep or leaving the swipe range entirely - so
+// incidental vertical motion never pre-offsets a fresh zone's selection),
+// and touchAction only switches to "none" (blocking the browser's own
+// vertical pan) while actively cycling, so the row scrolls normally at
+// every other drag stage.
+//
+// A right side can also be deep-only (`deepRightAction` with no
+// `rightAction` - Training's session rows use this for a swipe-right-deep
+// archive with no shallow tier at all): the hint previews the deep
+// action's own label/color the whole time instead of a generic "✗", but
+// releasing before DEEP_SWIPE_THRESHOLD still fires nothing, same as any
+// other release that doesn't clear its zone's threshold.
+//
+// The label packs against the tile's true outer edge (`justify-end` on
+// the left hint, `justify-start` on the right) rather than centering in
+// the box, so it reads consistently at the boundary regardless of how
+// wide the box currently is. Deliberately no directional (◀/▶) or cycle
+// (▲/▼) icons live in this static hint box itself - a box that only ever
+// snaps between a couple of fixed widths can't track the live drag
+// position, so anything pinned to it either shows up too early (before
+// the card has actually receded that far) or not at all. A caller that
+// wants a live-tracking cue (see Schedule.tsx's List view) renders it as
+// part of its own sliding segments instead, which already translate by
+// the live `dragX`.
+//
+// Every option label is "EMOJI text" (e.g. "🏆 Record result",
+// "✓ Completed") - splitLabel pulls the emoji out; the hint box itself
+// only ever renders the text half, in `font-display` (the same
+// Oswald/uppercase treatment as Schedule's own date-grouping headings) -
+// no icon glyph alongside it, so a mid-drag glance reads as a plain label
+// rather than an icon+text pairing. Every option used anywhere in the app
+// carries a text half for exactly this reason; a bare, spaceless label
+// would fall back to rendering the (icon-sized) icon glyph instead, since
+// there'd be nothing else to show, but nothing currently exercises that
+// path.
+function splitLabel(label: string): { icon: string; text: string } {
+  const spaceIndex = label.indexOf(" ");
+  return spaceIndex === -1
+    ? { icon: label, text: "" }
+    : { icon: label.slice(0, spaceIndex), text: label.slice(spaceIndex + 1) };
+}
+
+export function SwipeableRow({
+  children,
+  onSwipeComplete,
+  onSwipeFailed,
+  leftOptions,
+  deepLeftOptions,
+  rightAction,
+  deepRightAction,
+  disabled,
+  disabledMessage = "Only athletes can swipe",
+  className,
+}: {
+  // A plain ReactNode slides as one rigid block (translateX(dragX)) - the
+  // original behavior, still used by Schedule's ItemsSection rows. Passing
+  // a function instead hands the caller the live dragX so it can give
+  // individual segments their own transform - see Schedule's List view
+  // tile, where the icon segment stays put during a left swipe and the
+  // result segment stays put during a right swipe, rather than the whole
+  // tile translating as a unit.
+  children: ReactNode | ((dragX: number) => ReactNode);
+  onSwipeComplete?: () => void;
+  onSwipeFailed?: () => void;
+  leftOptions?: { label: string; onTrigger: () => void }[];
+  deepLeftOptions?: { label: string; onTrigger: () => void }[];
+  rightAction?: { label: string; onTrigger: () => void };
+  deepRightAction?: { label: string; onTrigger: () => void };
+  disabled?: boolean;
+  disabledMessage?: string;
+  className?: string;
+}) {
+  const [dragX, setDragX] = useState(0);
+  const [cycleIndex, setCycleIndex] = useState(0);
+  const startXRef = useRef<number | null>(null);
+  const cycleEntryYRef = useRef<number | null>(null);
+  const leftZoneRef = useRef<"shallow" | "deep" | null>(null);
+  const draggedRef = useRef(false);
+  const pastSwipeRef = useRef(false);
+  const pastDeepRef = useRef(false);
+  const cycleIndexRef = useRef(0);
+
+  const shallowOptions =
+    leftOptions ?? (onSwipeComplete ? [{ label: "✓ Completed", onTrigger: onSwipeComplete }] : []);
+  const shallowRight =
+    rightAction ?? (onSwipeFailed ? { label: "✗ Failed", onTrigger: onSwipeFailed } : null);
+  const hasDeepLeft = !!deepLeftOptions && deepLeftOptions.length > 0;
+  const hasDeepRight = !!deepRightAction;
+  const customRight = !!rightAction;
+  // A deep-right action with no shallow counterpart (e.g. Training's
+  // archive-only swipe) still gets previewed - by the deep action's own
+  // label/color - throughout the shallow zone, rather than falling back to
+  // the generic "✗ Failed" styling that's meaningless without a real
+  // shallow action behind it. It never fires early, though: onPointerUp
+  // below only ever triggers it once dragX actually clears
+  // DEEP_SWIPE_THRESHOLD.
+  const rightPreviewsDeep = !shallowRight && hasDeepRight;
+
+  function onPointerDown(e: ReactPointerEvent) {
+    startXRef.current = e.clientX;
+    cycleEntryYRef.current = null;
+    leftZoneRef.current = null;
+    draggedRef.current = false;
+    pastSwipeRef.current = false;
+    pastDeepRef.current = false;
+    cycleIndexRef.current = 0;
+    setCycleIndex(0);
+    (e.target as Element).setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e: ReactPointerEvent) {
+    if (startXRef.current == null) return;
+    const delta = e.clientX - startXRef.current;
+    if (Math.abs(delta) > 8) draggedRef.current = true;
+    const goingLeft = delta < 0;
+    const max = disabled
+      ? DISABLED_SWIPE_MAX
+      : goingLeft
+      ? hasDeepLeft
+        ? DEEP_HINT_WIDTH
+        : shallowOptions.length > 1
+        ? CYCLE_HINT_WIDTH
+        : Infinity
+      : hasDeepRight
+      ? DEEP_HINT_WIDTH
+      : Infinity;
+    const clampedX = Math.max(-max, Math.min(max, delta));
+    setDragX(clampedX);
+
+    if (!disabled) {
+      const isPastSwipe = Math.abs(clampedX) >= SWIPE_THRESHOLD;
+      if (isPastSwipe !== pastSwipeRef.current) {
+        pastSwipeRef.current = isPastSwipe;
+        if (isPastSwipe) feedbackTick(600);
+      }
+      const isPastDeep =
+        (hasDeepLeft && clampedX <= -DEEP_SWIPE_THRESHOLD) ||
+        (hasDeepRight && clampedX >= DEEP_SWIPE_THRESHOLD);
+      if (isPastDeep !== pastDeepRef.current) {
+        pastDeepRef.current = isPastDeep;
+        if (isPastDeep) feedbackTick(350);
+      }
+    }
+
+    const inDeepLeft = hasDeepLeft && clampedX <= -DEEP_SWIPE_THRESHOLD;
+    const activeLeftOptions = inDeepLeft ? deepLeftOptions! : shallowOptions;
+    const currentZone: "shallow" | "deep" | null =
+      !disabled && clampedX <= -SWIPE_THRESHOLD ? (inDeepLeft ? "deep" : "shallow") : null;
+
+    if (currentZone !== leftZoneRef.current) {
+      leftZoneRef.current = currentZone;
+      cycleEntryYRef.current = null;
+      cycleIndexRef.current = 0;
+      setCycleIndex(0);
+    }
+    if (currentZone && activeLeftOptions.length > 1) {
+      if (cycleEntryYRef.current == null) cycleEntryYRef.current = e.clientY;
+      const deltaY = e.clientY - cycleEntryYRef.current;
+      const step = Math.round(-deltaY / OPTION_CYCLE_DISTANCE);
+      const clampedStep = Math.max(0, Math.min(activeLeftOptions.length - 1, step));
+      if (clampedStep !== cycleIndexRef.current) {
+        cycleIndexRef.current = clampedStep;
+        feedbackTick(700 + clampedStep * 60);
+      }
+      setCycleIndex(clampedStep);
+    }
+  }
+
+  function onPointerUp() {
+    if (startXRef.current == null) return;
+    if (!disabled) {
+      if (dragX <= -SWIPE_THRESHOLD) {
+        const inDeep = hasDeepLeft && dragX <= -DEEP_SWIPE_THRESHOLD;
+        const opts = inDeep ? deepLeftOptions! : shallowOptions;
+        if (opts[cycleIndex]) {
+          feedbackConfirm(opts.length > 1 ? 450 : inDeep ? 450 : 500);
+          opts[cycleIndex].onTrigger();
+        }
+      } else if (dragX >= SWIPE_THRESHOLD) {
+        const inDeep = hasDeepRight && dragX >= DEEP_SWIPE_THRESHOLD;
+        const action = inDeep ? deepRightAction! : shallowRight;
+        if (action) {
+          feedbackConfirm(inDeep ? 450 : 400);
+          action.onTrigger();
+        }
+      }
+    }
+    setDragX(0);
+    setCycleIndex(0);
+    cycleEntryYRef.current = null;
+    leftZoneRef.current = null;
+    pastSwipeRef.current = false;
+    pastDeepRef.current = false;
+    cycleIndexRef.current = 0;
+    startXRef.current = null;
+  }
+
+  const leftInDeep = hasDeepLeft && dragX <= -DEEP_SWIPE_THRESHOLD;
+  const leftActiveOptions = leftInDeep ? deepLeftOptions! : shallowOptions;
+  const leftCyclableNow = leftActiveOptions.length > 1;
+  const leftHintWidth = disabled
+    ? Math.abs(dragX)
+    : leftInDeep
+    ? DEEP_HINT_WIDTH
+    : shallowOptions.length > 1
+    ? CYCLE_HINT_WIDTH
+    : SWIPE_THRESHOLD;
+
+  const rightInDeep = hasDeepRight && dragX >= DEEP_SWIPE_THRESHOLD;
+  const rightActive = rightInDeep ? deepRightAction! : shallowRight ?? (rightPreviewsDeep ? deepRightAction! : null);
+  const rightHintWidth = disabled
+    ? Math.abs(dragX)
+    : rightInDeep
+    ? DEEP_HINT_WIDTH
+    : customRight || rightPreviewsDeep
+    ? CYCLE_HINT_WIDTH
+    : SWIPE_THRESHOLD;
+
+  const hintOpacity = disabled
+    ? Math.min(1, Math.abs(dragX) / 40)
+    : Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD);
+
+  const { icon: leftIcon, text: leftText } = splitLabel(
+    leftActiveOptions[cycleIndex]?.label ?? "✓"
+  );
+  const { icon: rightIcon, text: rightText } = splitLabel(rightActive?.label ?? "✗");
+
+  return (
+    <div className={`relative overflow-hidden rounded-md ${className ?? ""}`}>
+      {/* Positioned on the side the slide actually exposes: dragging left
+          (dragX<0) slides content left, uncovering the row's right edge, so
+          the left-option hint - which fires for dragX<0 - lives at
+          right-0 (and vice versa for the right action at left-0). Content
+          packs against that same true edge (`justify-end`/`items-end` here,
+          mirrored to `justify-start`/`items-start` on the other side)
+          rather than centering in the box, so it reads consistently right
+          at the tile's boundary regardless of how wide the box is. The
+          directional ◀/▶ "keep swiping" cue lives on the caller's own
+          sliding segments instead of here (see Schedule.tsx's List view) -
+          since those actually track the live drag position, whereas this
+          box's width only ever snaps between fixed sizes. The vertical
+          ▲/▼ cycle cue has no such problem (it isn't tied to drag
+          distance, just which option is selected), so it renders right
+          here, flanking the label. */}
+      <div
+        className={`pointer-events-none absolute inset-y-0 right-0 flex items-center justify-end overflow-hidden whitespace-nowrap px-2.5 text-right text-xs font-medium transition-[width] duration-150 ease-out ${
+          disabled
+            ? "bg-stone-200 text-stone-600"
+            : leftInDeep
+            ? "bg-orange-100 text-orange-800"
+            : shallowOptions.length > 1
+            ? "bg-amber-100 text-amber-800"
+            : "bg-green-100 text-green-700"
+        }`}
+        style={{ opacity: dragX < 0 ? hintOpacity : 0, width: leftHintWidth }}
+      >
+        {disabled ? (
+          disabledMessage
+        ) : leftText ? (
+          <div className="flex flex-col items-end gap-0.5">
+            {leftCyclableNow && (
+              <span
+                className={`text-2xl font-black leading-none ${
+                  cycleIndex > 0 ? "opacity-90" : "opacity-25"
+                }`}
+              >
+                ▲
+              </span>
+            )}
+            <span className="whitespace-nowrap font-display text-sm font-semibold uppercase leading-tight tracking-[0.02em]">
+              {leftText}
+            </span>
+            {leftCyclableNow && (
+              <span
+                className={`text-2xl font-black leading-none ${
+                  cycleIndex < leftActiveOptions.length - 1 ? "opacity-90" : "opacity-25"
+                }`}
+              >
+                ▼
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-2xl leading-none">{leftIcon}</span>
+        )}
+      </div>
+      <div
+        className={`pointer-events-none absolute inset-y-0 left-0 flex items-center justify-start overflow-hidden whitespace-nowrap px-2.5 text-left text-xs font-medium ${
+          disabled
+            ? "bg-stone-200 text-stone-600"
+            : rightInDeep
+            ? "bg-indigo-100 text-indigo-800"
+            : customRight || rightPreviewsDeep
+            ? "bg-blue-100 text-blue-700"
+            : "bg-red-100 text-red-700"
+        }`}
+        style={{ opacity: dragX > 0 ? hintOpacity : 0, width: rightHintWidth }}
+      >
+        {disabled ? (
+          disabledMessage
+        ) : rightText ? (
+          <span className="whitespace-nowrap font-display text-sm font-semibold uppercase leading-tight tracking-[0.02em]">
+            {rightText}
+          </span>
+        ) : (
+          <span className="text-2xl leading-none">{rightIcon}</span>
+        )}
+      </div>
+      <div
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onClickCapture={(e) => {
+          if (draggedRef.current) {
+            e.stopPropagation();
+            e.preventDefault();
+            draggedRef.current = false;
+          }
+        }}
+        style={{
+          transform: typeof children === "function" ? undefined : `translateX(${dragX}px)`,
+          touchAction: leftCyclableNow && dragX <= -SWIPE_THRESHOLD ? "none" : "pan-y",
+          transition: dragX === 0 ? "transform 150ms ease-out" : "none",
+        }}
+      >
+        {typeof children === "function" ? children(dragX) : children}
+      </div>
     </div>
   );
 }
