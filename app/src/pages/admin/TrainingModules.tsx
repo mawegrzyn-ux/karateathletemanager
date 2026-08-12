@@ -15,7 +15,9 @@ import {
   MediaField,
   Toast,
   Badge,
+  SwipeableRow,
 } from "../../components/ui";
+import { todayStr } from "../../utils/dates";
 import {
   TrainingModuleView,
   itemSummary,
@@ -59,6 +61,12 @@ interface TrainingModuleType {
   name: string;
   icon: string | null;
   bg_color: string;
+}
+
+interface AthleteOption {
+  id: number;
+  first_name: string;
+  last_name: string;
 }
 
 // Matches the funnel icon used for Schedule's own type-filter drawer, so
@@ -1054,6 +1062,133 @@ function EditModuleWizard({
   );
 }
 
+// Opened by a session row's swipe-left "📅 Schedule" action (see ModuleRow
+// below) - a trimmed-down alternative to the full Schedule "New Event"
+// wizard, since the session itself is already fixed by which row was
+// swiped. Same search-based multi-select shape as TrainingProgrammes.tsx's
+// coach/admin athlete picker (CLAUDE.md's membership-picker convention),
+// just scoped to a single POST /events call instead of an enrollment.
+function ScheduleSessionDrawer({
+  module,
+  athletes,
+  onClose,
+  onScheduled,
+}: {
+  module: TrainingModule | null;
+  athletes: AthleteOption[];
+  onClose: () => void;
+  onScheduled: () => void;
+}) {
+  const api = useApi();
+  const [date, setDate] = useState(todayStr());
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDate(todayStr());
+    setQuery("");
+    setSelected(new Set());
+    setError(null);
+  }, [module?.id]);
+
+  function toggle(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const filteredAthletes = athletes.filter((a) =>
+    `${a.first_name} ${a.last_name}`.toLowerCase().includes(query.trim().toLowerCase())
+  );
+
+  async function submit() {
+    if (!module || selected.size === 0 || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.post("/events", {
+        title: module.title,
+        event_type: "training",
+        start_date: date,
+        end_date: date,
+        training_module_id: module.id,
+        athlete_ids: [...selected],
+      });
+      onScheduled();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Drawer
+      open={module !== null}
+      onClose={onClose}
+      title={module ? `Schedule "${module.title}"` : ""}
+    >
+      <div className="flex flex-col gap-4">
+        <Field label="Date">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+          />
+        </Field>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search athletes..."
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+        />
+        <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+          {filteredAthletes.map((a) => {
+            const isSelected = selected.has(a.id);
+            return (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => toggle(a.id)}
+                className="flex min-h-[44px] items-center justify-between rounded-xl bg-stone-50 px-3 text-left text-sm"
+              >
+                <span>
+                  {a.first_name} {a.last_name}
+                </span>
+                <span className={isSelected ? "font-medium text-green-700" : "text-stone-400"}>
+                  {isSelected ? "✓ Added" : "+ Add"}
+                </span>
+              </button>
+            );
+          })}
+          {filteredAthletes.length === 0 && (
+            <p className="px-1 py-2 text-sm text-stone-500">No athletes found.</p>
+          )}
+        </div>
+        {error && <p className="text-sm text-red-700">{error}</p>}
+        <button
+          type="button"
+          onClick={submit}
+          disabled={selected.size === 0 || submitting}
+          className="min-h-[44px] rounded-xl bg-red-600 font-medium text-white disabled:opacity-50"
+        >
+          {submitting ? (
+            <Spinner />
+          ) : (
+            `Schedule${selected.size > 0 ? ` for ${selected.size} athlete${selected.size === 1 ? "" : "s"}` : ""}`
+          )}
+        </button>
+      </div>
+    </Drawer>
+  );
+}
+
 export default function TrainingModules({
   defaultTab = "sessions",
 }: {
@@ -1086,6 +1221,8 @@ export default function TrainingModules({
   );
   const [editGeneralInfo, setEditGeneralInfo] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [athletes, setAthletes] = useState<AthleteOption[]>([]);
+  const [schedulingModule, setSchedulingModule] = useState<TrainingModule | null>(null);
 
   useEffect(() => {
     load();
@@ -1093,6 +1230,12 @@ export default function TrainingModules({
       .get<{ types: TrainingModuleType[] }>("/training-module-types")
       .then((res) => setTypes(res.types))
       .catch(() => {});
+    if (canEdit) {
+      api
+        .get<{ athletes: AthleteOption[] }>("/athletes")
+        .then((res) => setAthletes(res.athletes))
+        .catch(() => {});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1316,17 +1459,13 @@ export default function TrainingModules({
       </div>
     );
 
-    if (!showIcon) {
-      return <div className="overflow-hidden rounded-2xl shadow-card">{content}</div>;
-    }
-
-    return (
+    const rowBody = !showIcon ? (
+      <div className="overflow-hidden rounded-2xl shadow-card">{content}</div>
+    ) : (
       <div className="isolate flex overflow-hidden rounded-2xl shadow-card">
         {/* Same angled chevron cut as Schedule's own icon-capped rows
             (clip-path, drop-shadow, tucked under the content via -ml-3
-            above), colored by the module's type - just without the
-            swipe-driven transforms, since these rows have no swipe
-            actions. */}
+            above), colored by the module's type. */}
         <div
           aria-hidden
           className="relative z-10 flex w-12 shrink-0 items-center justify-center text-xl"
@@ -1340,6 +1479,26 @@ export default function TrainingModules({
         </div>
         {content}
       </div>
+    );
+
+    // Swipe left to quickly schedule this session onto the calendar
+    // (opens ScheduleSessionDrawer); swipe right past the deep threshold
+    // to archive/unarchive - a deliberate deep swipe since it's a status
+    // change, not a light action, even though it's non-destructive and
+    // needs no confirmation (see the row's own 📦/📤 tap icon above,
+    // which the swipe is an additional way to trigger, not a
+    // replacement for).
+    return (
+      <SwipeableRow
+        leftOptions={[{ label: "📅 Schedule", onTrigger: () => setSchedulingModule(m) }]}
+        deepRightAction={{
+          label: m.archived ? "📤 Unarchive" : "📦 Archive",
+          onTrigger: () => updateModule(m.id, { archived: !m.archived }),
+        }}
+        className="rounded-2xl"
+      >
+        {rowBody}
+      </SwipeableRow>
     );
   }
 
@@ -1504,6 +1663,16 @@ export default function TrainingModules({
           </div>
         )}
       </Drawer>
+
+      <ScheduleSessionDrawer
+        module={schedulingModule}
+        athletes={athletes}
+        onClose={() => setSchedulingModule(null)}
+        onScheduled={() => {
+          showToast("Scheduled");
+          setSchedulingModule(null);
+        }}
+      />
 
       {toast && <Toast message={toast} />}
     </div>
