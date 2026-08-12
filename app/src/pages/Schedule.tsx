@@ -537,10 +537,13 @@ const GRID_HOURS = Array.from(
   (_, i) => DAY_START_HOUR + i
 );
 
-// The list view initially loads a 4-week window centered on today (2 back,
-// 2 forward) rather than the whole schedule, then lazy-loads another 2
-// weeks in whichever direction the user scrolls toward, capped a year out
-// either way so an empty schedule can't make the observer fetch forever.
+// The list view initially loads only from today forward (a 2-week window,
+// so today - or the next upcoming date if nothing's scheduled today - is
+// always the first item, with nothing from the past pre-loaded above it)
+// rather than the whole schedule, then lazy-loads another 2 weeks in
+// whichever direction the user scrolls toward (scrolling up past the top
+// reaches yesterday and earlier on demand), capped a year out either way
+// so an empty schedule can't make the observer fetch forever.
 const INITIAL_WINDOW_DAYS = 14;
 const LAZY_LOAD_STEP_DAYS = 14;
 const MAX_WINDOW_DAYS = 365;
@@ -608,8 +611,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   );
   const [focusedDate, setFocusedDate] = useState(todayStr());
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const hasAutoScrolledRef = useRef(false);
-  const loadedFromRef = useRef(addDaysStr(todayStr(), -INITIAL_WINDOW_DAYS));
+  const loadedFromRef = useRef(todayStr());
   const loadedToRef = useRef(addDaysStr(todayStr(), INITIAL_WINDOW_DAYS));
   const loadingPastRef = useRef(false);
   const loadingFutureRef = useRef(false);
@@ -714,14 +716,6 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (events && !hasAutoScrolledRef.current) {
-      hasAutoScrolledRef.current = true;
-      requestAnimationFrame(() => scrollToToday("auto"));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events]);
 
   // List view lazy-loads further past/future weeks only in response to an
   // actual scroll gesture on the page's scroll container (App.tsx's
@@ -1225,7 +1219,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                 <h2
                   className={
                     isToday
-                      ? "inline-flex w-fit items-center rounded-full bg-red-50 px-2.5 py-0.5 text-sm font-semibold text-red-600"
+                      ? "inline-flex w-fit items-center rounded-full bg-red-600 px-2.5 py-0.5 text-sm font-semibold text-white shadow-sm"
                       : "text-sm font-semibold text-stone-500"
                   }
                 >
