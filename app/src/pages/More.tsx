@@ -36,6 +36,7 @@ export default function More() {
       <TileGrid>
         <Tile to="/profile" icon="👤" label="My profile" />
         <Tile to="/grades" icon="🥋" label="Grades" />
+        <Tile to="/kata-tracker" icon="🎥" label="Kata tracker" />
         <Tile to="/menu-settings" icon="🧭" label="Customize menu" />
         <Tile to="/google-calendar" icon="📆" label="Google Calendar" />
         <Tile to="/training-programs" icon="🗓️" label="Training" />

@@ -879,9 +879,12 @@ coach-run attendance) — this is personal athlete itinerary planning.
   numbering). `style` is a free-text tag applied only to the subset of
   katas the app also uses elsewhere (Shotokan/Goju-ryu/Shito-ryu/
   Wado-ryu); it's independent of `wkf_number` and fully correctable via
-  the admin Katas page. `api/src/routes/katas.js` — `GET` open to
-  any authenticated user (ordered by style then `wkf_number`),
-  `POST`/`PATCH`/`DELETE` `authorize.requireAdmin`. A `kata_performance`
+  the admin Katas page. `api/src/routes/katas.js` — `GET` and `POST`
+  open to any active authenticated user (an athlete/coach can add a
+  kata missing from the catalog straight from the Kata tracker page,
+  see below), `PATCH`/`DELETE` stay `authorize.requireAdmin` so the
+  shared catalog's official names/WKF numbers can't be rewritten by
+  whoever just wants to log a performance. A `kata_performance`
   item links to one kata via `kata_id`; picking a kata in `Schedule.tsx`
   shows its WKF number and style in the picker ("3. Kanku Dai
   (Shotokan)") and auto-fills the item's (still-editable) title with the
@@ -1313,6 +1316,34 @@ coach-run attendance) — this is personal athlete itinerary planning.
   replies routinely contain the same markdown even though nothing there
   prompts a user to type it, so without this its `**`/`` ` `` markers
   showed up literally instead of rendering.
+- **Kata tracker** (`app/src/pages/KataTracker.tsx`, `/kata-tracker`):
+  a self-service page for an athlete to log kata performances — pick a
+  kata (search box + list from `GET /katas`, or add one missing from
+  the catalog inline, see the Katas bullet above) and it shows, scoped
+  to that one kata: a read-only "From your calendar" pull of any
+  `kata_performance` event/item already logged with matching `kata_id`
+  for this athlete (`GET /athletes/:id/kata-log?kata_id=`, same
+  visibility as the social profile below), and a "Performance posts"
+  feed reusing `AthleteSocialProfile.tsx`'s existing `Composer`/
+  `PostCard` (now exported) rather than a second posting UI — a photo
+  or video (`MediaField` with `allowVideo`, previously photo-only there)
+  plus the same Bold/Italic "WYSIWYG-lite" note. This is a fifth
+  `share_kind` on `nk_athlete_posts` (`"kata"` + `share_kata_id`,
+  `ON DELETE CASCADE` like the other four) alongside event/event_item/
+  grading/competition_result — unlike those, a kata isn't something the
+  athlete owns, so `POST .../posts` only checks the kata id exists
+  rather than that this athlete has some prior claim to it.
+  `GET .../posts` takes an optional `?kata_id=` to scope the feed to one
+  kata. `Composer` takes an optional `fixedShare` prop for this case:
+  the share is fixed at open time (no "Share from schedule" button, no
+  ✕ to remove it) rather than picked from the athlete's own history.
+  Since posting is self-only (same as the rest of the social profile),
+  the page only works for the `athlete` role/identity — a coach or
+  admin without a linked athlete profile sees a message pointing them at
+  the profile switcher instead of a broken page; a coach who wants to
+  *view* an athlete's kata posts already can, via that athlete's own
+  social profile feed, since kata-tagged posts render there too
+  (`ShareBadge` gained a `"kata"` case: 🥋 name, style, WKF #).
 - **Events and itinerary items share one type set**: no more hardcoded
   `EVENT_TYPES`/`ITEM_TYPES` arrays — event and item types are now the
   per-club `nk_event_types` rows described below, and both event and item

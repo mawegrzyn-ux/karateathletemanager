@@ -1239,6 +1239,17 @@ const migrations = [
      ADD COLUMN IF NOT EXISTS program_enrollment_id INTEGER
        REFERENCES nk_training_program_enrollments(id) ON DELETE CASCADE,
      ADD COLUMN IF NOT EXISTS sequence_index INTEGER`,
+
+  // A fifth share_kind for nk_athlete_posts, alongside event/event_item/
+  // grading/competition_result: a post logged against a specific kata
+  // from the Kata tracker page. Unlike the other four, a kata isn't
+  // something the athlete "owns" (it's a shared catalog entry, see
+  // nk_katas/katas.js), so there's no per-athlete ownership check at
+  // create time - only that the kata id exists. CASCADE matches the
+  // other share_* columns (deleting the kata removes posts tagged with
+  // it rather than leaving them blank).
+  `ALTER TABLE nk_athlete_posts ADD COLUMN IF NOT EXISTS share_kata_id INTEGER
+     REFERENCES nk_katas(id) ON DELETE CASCADE`,
 ];
 
 async function migrate() {

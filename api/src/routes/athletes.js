@@ -802,20 +802,25 @@ const POST_JOIN_SQL = `
          cr.competition_name AS share_competition_name,
          cr.competition_date AS share_competition_date,
          cr.final_position AS share_final_position,
-         cr.rounds_completed AS share_rounds_completed
+         cr.rounds_completed AS share_rounds_completed,
+         p.share_kata_id, k.name AS share_kata_name, k.style AS share_kata_style,
+         k.wkf_number AS share_kata_wkf_number
   FROM nk_athlete_posts p
   LEFT JOIN nk_events e ON e.id = p.share_event_id
   LEFT JOIN nk_event_items ei ON ei.id = p.share_event_item_id
   LEFT JOIN nk_grades g ON g.id = p.share_grading_id
   LEFT JOIN nk_grade_levels gl ON gl.id = g.grade_id
   LEFT JOIN nk_competition_results cr ON cr.id = p.share_competition_result_id
+  LEFT JOIN nk_katas k ON k.id = p.share_kata_id
 `;
 
 // A post is either a plain freeform note (body/image_url only) or a share
 // of something from the athlete's own schedule/history - share_kind says
-// which of the four nullable share_* columns to read, resolved via JOIN at
+// which of the five nullable share_* columns to read, resolved via JOIN at
 // read time (rather than duplicating the shared record's fields) so an
 // edit to the underlying grading/result stays reflected in the feed.
+// ?kata_id= narrows to posts logged against one kata - used by the Kata
+// tracker page, which shows one kata's performance history at a time.
 router.get(
   "/:id/posts",
   asyncHandler(async (req, res) => {
@@ -829,9 +834,11 @@ router.get(
         .json({ error: { message: "This profile is private" } });
     }
 
+    const kataId = req.query.kata_id ? Number(req.query.kata_id) : null;
     const { rows } = await pool.query(
-      `${POST_JOIN_SQL} WHERE p.athlete_id = $1 ORDER BY p.created_at DESC`,
-      [req.params.id]
+      `${POST_JOIN_SQL} WHERE p.athlete_id = $1 AND ($2::int IS NULL OR p.share_kata_id = $2)
+       ORDER BY p.created_at DESC`,
+      [req.params.id, kataId]
     );
     res.json({ posts: rows });
   })
@@ -845,6 +852,14 @@ const SHARE_OWNERSHIP_QUERIES = {
   grading: `SELECT 1 FROM nk_grades WHERE id = $1 AND athlete_id = $2`,
   competition_result: `SELECT 1 FROM nk_competition_results WHERE id = $1 AND athlete_id = $2`,
 };
+
+// A kata isn't owned by an athlete the way an event/grading/result is
+// (it's the shared nk_katas catalog, editable by anyone - see katas.js) -
+// so sharing one only needs to confirm the id exists, not a per-athlete
+// ownership check. Kept separate from SHARE_OWNERSHIP_QUERIES since that
+// map's queries all take the same (share_id, athlete_id) shape and this
+// one doesn't need the second parameter.
+const KATA_EXISTS_QUERY = `SELECT 1 FROM nk_katas WHERE id = $1`;
 
 // Posting as an athlete is self-only (even coach/admin can't post in
 // someone else's voice) - it's their own facebook-style feed, not a
@@ -871,26 +886,34 @@ router.post(
       share_event_item_id: null,
       share_grading_id: null,
       share_competition_result_id: null,
+      share_kata_id: null,
     };
 
     if (share_kind) {
-      const ownershipQuery = SHARE_OWNERSHIP_QUERIES[share_kind];
-      if (!ownershipQuery) {
-        return res.status(400).json({ error: { message: "Invalid share_kind" } });
-      }
       if (!Number.isInteger(share_id)) {
         return res
           .status(400)
           .json({ error: { message: "share_id is required when sharing" } });
       }
-      const { rows: ownRows } = await pool.query(ownershipQuery, [
-        share_id,
-        req.params.id,
-      ]);
-      if (ownRows.length === 0) {
-        return res
-          .status(400)
-          .json({ error: { message: "You can only share your own items" } });
+      if (share_kind === "kata") {
+        const { rows: kataRows } = await pool.query(KATA_EXISTS_QUERY, [share_id]);
+        if (kataRows.length === 0) {
+          return res.status(400).json({ error: { message: "Kata not found" } });
+        }
+      } else {
+        const ownershipQuery = SHARE_OWNERSHIP_QUERIES[share_kind];
+        if (!ownershipQuery) {
+          return res.status(400).json({ error: { message: "Invalid share_kind" } });
+        }
+        const { rows: ownRows } = await pool.query(ownershipQuery, [
+          share_id,
+          req.params.id,
+        ]);
+        if (ownRows.length === 0) {
+          return res
+            .status(400)
+            .json({ error: { message: "You can only share your own items" } });
+        }
       }
       shareColumns[`share_${share_kind}_id`] = share_id;
     }
@@ -898,8 +921,9 @@ router.post(
     const { rows } = await pool.query(
       `INSERT INTO nk_athlete_posts
          (athlete_id, title, body, image_url, share_kind, share_event_id,
-          share_event_item_id, share_grading_id, share_competition_result_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          share_event_item_id, share_grading_id, share_competition_result_id,
+          share_kata_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         req.params.id,
@@ -911,6 +935,7 @@ router.post(
         shareColumns.share_event_item_id,
         shareColumns.share_grading_id,
         shareColumns.share_competition_result_id,
+        shareColumns.share_kata_id,
       ]
     );
 
@@ -1038,6 +1063,51 @@ router.get(
       gradings: gradings.rows,
       competitionResults: results.rows,
     });
+  })
+);
+
+// Feeds the Kata tracker page's "From your calendar" section: every
+// event/itinerary item flagged kata_performance and tagged with this
+// specific kata_id that the athlete is assigned to (see Schedule.tsx's
+// kata_performance event/item type). Read-only, same visibility as the
+// rest of the social profile (self/coach/admin always, others only if
+// the profile is public) since this is just surfacing schedule history,
+// not a share the athlete has explicitly opted into like nk_athlete_posts.
+router.get(
+  "/:id/kata-log",
+  asyncHandler(async (req, res) => {
+    const athlete = await loadSocialProfile(Number(req.params.id));
+    if (!athlete) {
+      return res.status(404).json({ error: { message: "Athlete not found" } });
+    }
+    if (!canViewSocialProfile(req, athlete)) {
+      return res
+        .status(403)
+        .json({ error: { message: "This profile is private" } });
+    }
+
+    const kataId = Number(req.query.kata_id);
+    if (!Number.isInteger(kataId)) {
+      return res.status(400).json({ error: { message: "kata_id is required" } });
+    }
+
+    const [events, items] = await Promise.all([
+      pool.query(
+        `SELECT e.id, e.title, e.start_date, e.notes FROM nk_events e
+         JOIN nk_event_athletes ea ON ea.event_id = e.id
+         WHERE ea.athlete_id = $1 AND e.kata_id = $2
+         ORDER BY e.start_date DESC`,
+        [req.params.id, kataId]
+      ),
+      pool.query(
+        `SELECT ei.id, ei.event_id, ei.title, ei.item_date, ei.notes FROM nk_event_items ei
+         JOIN nk_event_athletes ea ON ea.event_id = ei.event_id
+         WHERE ea.athlete_id = $1 AND ei.kata_id = $2
+         ORDER BY ei.item_date DESC`,
+        [req.params.id, kataId]
+      ),
+    ]);
+    res.json({ events: events.rows, items: items.rows });
   })
 );
 

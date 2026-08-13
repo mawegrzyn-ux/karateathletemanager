@@ -15,7 +15,7 @@ export interface SocialProfile {
   belt_color: string | null;
 }
 
-type ShareKind = "event" | "event_item" | "grading" | "competition_result";
+export type ShareKind = "event" | "event_item" | "grading" | "competition_result" | "kata";
 
 export interface Post {
   id: number;
@@ -38,6 +38,10 @@ export interface Post {
   share_competition_date: string | null;
   share_final_position: string | null;
   share_rounds_completed: number | null;
+  share_kata_id: number | null;
+  share_kata_name: string | null;
+  share_kata_style: string | null;
+  share_kata_wkf_number: number | null;
 }
 
 interface Shareable {
@@ -51,7 +55,7 @@ interface Shareable {
   }[];
 }
 
-function ShareBadge({ post }: { post: Post }) {
+export function ShareBadge({ post }: { post: Post }) {
   if (post.share_kind === "event" || post.share_kind === "event_item") {
     const title =
       post.share_kind === "event" ? post.share_event_title : post.share_item_title;
@@ -76,6 +80,20 @@ function ShareBadge({ post }: { post: Post }) {
         </span>
         {post.share_graded_at && (
           <span className="text-stone-500">{post.share_graded_at.slice(0, 10)}</span>
+        )}
+      </div>
+    );
+  }
+  if (post.share_kind === "kata") {
+    if (!post.share_kata_name) return null;
+    return (
+      <div className="flex items-center gap-2 rounded-xl bg-stone-100 px-3 py-2 text-sm">
+        <span className="font-medium text-stone-700">🥋 {post.share_kata_name}</span>
+        {post.share_kata_style && (
+          <span className="text-stone-500">{post.share_kata_style}</span>
+        )}
+        {post.share_kata_wkf_number != null && (
+          <span className="text-stone-500">WKF #{post.share_kata_wkf_number}</span>
         )}
       </div>
     );
@@ -108,7 +126,7 @@ function ShareBadge({ post }: { post: Post }) {
   return null;
 }
 
-function PostCard({
+export function PostCard({
   post,
   profile,
   canEdit,
@@ -308,14 +326,21 @@ function ShareFromSchedulePicker({
   );
 }
 
-function Composer({
+export function Composer({
   athleteId,
   post,
+  fixedShare,
   onSaved,
   showToast,
 }: {
   athleteId: number;
   post?: Post;
+  // When set, the post is always logged against this one share target
+  // (e.g. a kata, from the Kata tracker page) rather than letting the
+  // athlete pick one via "Share from schedule" - that button and the
+  // share row's remove (✕) affordance are both hidden, since there's
+  // nothing to change.
+  fixedShare?: { kind: ShareKind; id: number; label: string };
   onSaved: (post: Post) => void;
   showToast: (message: string) => void;
 }) {
@@ -324,7 +349,7 @@ function Composer({
   const [body, setBody] = useState(post?.body ?? "");
   const [imageUrl, setImageUrl] = useState(post?.image_url ?? "");
   const [share, setShare] = useState<{ kind: ShareKind; id: number; label: string } | null>(
-    null
+    fixedShare ?? null
   );
   const [picking, setPicking] = useState(false);
   const [shareable, setShareable] = useState<Shareable | null>(null);
@@ -432,8 +457,9 @@ function Composer({
         autoFocus
       />
       <MediaField
-        label="Photo"
+        label="Photo or video"
         kind="image"
+        allowVideo
         value={imageUrl}
         onChange={setImageUrl}
         onError={showToast}
@@ -441,13 +467,15 @@ function Composer({
       {share && (
         <div className="flex items-center justify-between rounded-xl bg-stone-100 px-3 py-2 text-sm">
           <span>{share.label}</span>
-          <button
-            type="button"
-            onClick={() => setShare(null)}
-            className="text-stone-500"
-          >
-            ✕
-          </button>
+          {!fixedShare && (
+            <button
+              type="button"
+              onClick={() => setShare(null)}
+              className="text-stone-500"
+            >
+              ✕
+            </button>
+          )}
         </div>
       )}
       {picking && (
@@ -462,7 +490,7 @@ function Composer({
         />
       )}
       <div className="flex gap-2">
-        {!post && (
+        {!post && !fixedShare && (
           <button
             type="button"
             onClick={openPicker}
