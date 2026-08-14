@@ -19,9 +19,14 @@ router.get(
   })
 );
 
+// Creating a kata is open to any active user (not just admin) - the Kata
+// tracker page (app/src/pages/KataTracker.tsx) lets an athlete/coach add
+// one that's missing from the catalog while picking what to log a
+// performance against. Editing/deleting stays admin-only so the shared
+// catalog's official names/WKF numbers aren't rewritten by anyone who
+// just wants to log a performance.
 router.post(
   "/",
-  authorize.requireAdmin,
   asyncHandler(async (req, res) => {
     const { name, style, wkf_number } = req.body ?? {};
 

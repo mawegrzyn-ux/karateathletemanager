@@ -4,6 +4,7 @@ import { Avatar } from "./components/ui";
 import Schedule from "./pages/Schedule";
 import Athletes from "./pages/Athletes";
 import Grades from "./pages/Grades";
+import KataTracker from "./pages/KataTracker";
 import More from "./pages/More";
 import MenuSettings from "./pages/MenuSettings";
 import Login from "./pages/Login";
@@ -205,6 +206,7 @@ export default function App() {
         <Route path="/athletes" element={<Athletes />} />
         <Route path="/athletes/:id/profile" element={<AthleteProfile />} />
         <Route path="/grades" element={<Grades />} />
+        <Route path="/kata-tracker" element={<KataTracker />} />
         <Route path="/more" element={<More />} />
         <Route path="/menu-settings" element={<MenuSettings />} />
         <Route path="/google-calendar" element={<GoogleCalendarConnect />} />
