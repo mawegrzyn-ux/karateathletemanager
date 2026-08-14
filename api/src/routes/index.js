@@ -30,6 +30,7 @@ const eventTypes = require("./eventTypes");
 const geocode = require("./geocode");
 const googleCalendar = require("./googleCalendar");
 const trainingPrograms = require("./trainingPrograms");
+const ascendApi = require("./ascendApi");
 
 const router = Router();
 
@@ -64,5 +65,6 @@ router.use("/event-types", eventTypes);
 router.use("/geocode", geocode);
 router.use("/google-calendar", googleCalendar);
 router.use("/training-programs", trainingPrograms);
+router.use("/admin/ascend-api", ascendApi);
 
 module.exports = router;

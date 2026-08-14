@@ -26,6 +26,7 @@ import AdminCoachRoles from "./pages/admin/CoachRoles";
 import AdminAppIcon from "./pages/admin/AppIcon";
 import AdminOsuApiKey from "./pages/admin/OsuApiKey";
 import AdminBraveApiKey from "./pages/admin/BraveApiKey";
+import AdminAscendApiKey from "./pages/admin/AscendApiKey";
 import AdminGoogleCalendarConfig from "./pages/admin/GoogleCalendarConfig";
 import GoogleCalendarConnect from "./pages/GoogleCalendarConnect";
 import Osu from "./pages/Osu";
@@ -339,6 +340,14 @@ export default function App() {
           element={
             <RequireAuth adminOnly>
               <AdminBraveApiKey />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/ascendapi-key"
+          element={
+            <RequireAuth adminOnly>
+              <AdminAscendApiKey />
             </RequireAuth>
           }
         />
