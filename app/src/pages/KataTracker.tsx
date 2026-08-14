@@ -26,23 +26,43 @@ interface KataLogItem {
   notes: string | null;
 }
 
-// Search box + result list, same shape as the app's other single-select
-// pickers (Schedule.tsx's SingleSelectPicker, admin/Clubs.tsx's
-// AssociationPicker) - but this one also lets the athlete add a kata
-// that's missing from the catalog, since the point of this page is
-// logging a performance, not just browsing the reference list.
-function KataPicker({
-  katas,
-  onPick,
+function kataRowLabel(k: Kata) {
+  return (
+    <span>
+      {k.name}
+      {k.style && <span className="ml-2 text-xs font-normal text-stone-500">{k.style}</span>}
+    </span>
+  );
+}
+
+// Search box + result list, same shape as the app's other membership
+// pickers (admin/Clubs.tsx's MemberEditor): every kata in the catalog
+// shows up, already-tracked ones flagged "✓ Tracked" (tap to untrack)
+// rather than hidden, not-yet-tracked ones "+ Track". Also lets the
+// athlete add a kata that's missing from the catalog entirely, since the
+// point of this page is logging a performance, not just browsing the
+// reference list.
+function TrackKatasDrawer({
+  open,
+  onClose,
+  allKatas,
+  trackedIds,
+  onTrack,
+  onUntrack,
   onCreate,
 }: {
-  katas: Kata[];
-  onPick: (kata: Kata) => void;
+  open: boolean;
+  onClose: () => void;
+  allKatas: Kata[] | null;
+  trackedIds: Set<number>;
+  onTrack: (kata: Kata) => void;
+  onUntrack: (kataId: number) => void;
   onCreate: (name: string) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const q = query.trim().toLowerCase();
+  const katas = allKatas ?? [];
   const results = katas.filter((k) => k.name.toLowerCase().includes(q));
   const exactMatch = katas.some((k) => k.name.toLowerCase() === q);
 
@@ -50,70 +70,78 @@ function KataPicker({
     setCreating(true);
     try {
       await onCreate(query.trim());
+      setQuery("");
     } finally {
       setCreating(false);
     }
   }
 
   return (
-    <div className="flex flex-col gap-3 p-4">
-      <h1 className="text-2xl font-bold tracking-tight">Kata tracker</h1>
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search katas..."
-        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-        autoFocus
-      />
-      <div className="flex flex-col gap-2">
-        {results.map((k) => (
+    <Drawer open={open} onClose={onClose} title="Track katas">
+      <div className="flex flex-col gap-3">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search katas..."
+          className="min-h-[44px] rounded-xl border border-stone-300 px-3"
+          autoFocus
+        />
+        {allKatas === null ? (
+          <Spinner />
+        ) : (
+          <div className="flex max-h-96 flex-col gap-2 overflow-y-auto">
+            {results.map((k) => {
+              const tracked = trackedIds.has(k.id);
+              return (
+                <button
+                  key={k.id}
+                  type="button"
+                  onClick={() => (tracked ? onUntrack(k.id) : onTrack(k))}
+                  className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
+                    tracked ? "border-green-200 bg-green-50 text-green-800" : "border-stone-200"
+                  }`}
+                >
+                  {kataRowLabel(k)}
+                  <span className="text-sm">{tracked ? "✓ Tracked" : "+ Track"}</span>
+                </button>
+              );
+            })}
+            {results.length === 0 && (
+              <p className="px-1 py-2 text-sm text-stone-500">No katas found.</p>
+            )}
+          </div>
+        )}
+        {query.trim() && !exactMatch && (
           <button
-            key={k.id}
-            onClick={() => onPick(k)}
-            className="flex min-h-[44px] items-center justify-between rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
+            type="button"
+            disabled={creating}
+            onClick={handleCreate}
+            className="min-h-[44px] rounded-xl border border-dashed border-red-300 text-sm font-medium text-red-700 disabled:opacity-50"
           >
-            <span>
-              {k.name}
-              {k.style && (
-                <span className="ml-2 text-xs font-normal text-stone-500">
-                  {k.style}
-                </span>
-              )}
-            </span>
-            {k.wkf_number != null && <Badge>WKF #{k.wkf_number}</Badge>}
+            + Add "{query.trim()}" as a new kata
           </button>
-        ))}
-        {results.length === 0 && (
-          <p className="px-1 py-2 text-sm text-stone-500">No katas found.</p>
         )}
       </div>
-      {query.trim() && !exactMatch && (
-        <button
-          type="button"
-          disabled={creating}
-          onClick={handleCreate}
-          className="min-h-[44px] rounded-xl border border-dashed border-red-300 text-sm font-medium text-red-700 disabled:opacity-50"
-        >
-          + Add "{query.trim()}" as a new kata
-        </button>
-      )}
-    </div>
+    </Drawer>
   );
 }
 
-// The athlete's per-kata tracking view: pick a kata (or add one missing
-// from the catalog), then log performances against it - a photo/video
-// plus the app's usual Bold/Italic "wysiwyg-lite" note (reusing the same
-// Composer/PostCard the social profile feed uses, just scoped to one
-// kata via share_kind: "kata" instead of the athlete's whole feed), and
-// a read-only pull of anything already logged on the calendar as a
-// kata_performance event/item against this same kata (Schedule.tsx).
+// The athlete's per-kata tracking view: pick which katas to track (or add
+// one missing from the catalog), then log performances against any of
+// them - a photo/video plus the app's usual Bold/Italic "wysiwyg-lite"
+// note (reusing the same Composer/PostCard the social profile feed uses,
+// just scoped to one kata via share_kind: "kata" instead of the
+// athlete's whole feed), and a read-only pull of anything already logged
+// on the calendar as a kata_performance event/item against this same
+// kata (Schedule.tsx).
 export default function KataTracker() {
   const api = useApi();
   const { user } = useAuth();
   const athleteId = user?.role === "athlete" ? user.athlete_id : null;
 
-  const [katas, setKatas] = useState<Kata[] | null>(null);
+  const [trackedKatas, setTrackedKatas] = useState<Kata[] | null>(null);
+  const [allKatas, setAllKatas] = useState<Kata[] | null>(null);
+  const [trackDrawerOpen, setTrackDrawerOpen] = useState(false);
   const [profile, setProfile] = useState<SocialProfile | null>(null);
   const [selected, setSelected] = useState<Kata | null>(null);
   const [posts, setPosts] = useState<Post[] | null>(null);
@@ -130,9 +158,9 @@ export default function KataTracker() {
   useEffect(() => {
     if (!athleteId) return;
     api
-      .get<{ katas: Kata[] }>("/katas")
-      .then((res) => setKatas(res.katas))
-      .catch(() => setKatas([]));
+      .get<{ katas: Kata[] }>(`/athletes/${athleteId}/tracked-katas`)
+      .then((res) => setTrackedKatas(res.katas))
+      .catch(() => setTrackedKatas([]));
     api
       .get<{ athlete: SocialProfile }>(`/athletes/${athleteId}/social-profile`)
       .then((res) => setProfile(res.athlete))
@@ -157,12 +185,43 @@ export default function KataTracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [athleteId, selected]);
 
+  function openTrackDrawer() {
+    setTrackDrawerOpen(true);
+    if (allKatas === null) {
+      api
+        .get<{ katas: Kata[] }>("/katas")
+        .then((res) => setAllKatas(res.katas))
+        .catch(() => setAllKatas([]));
+    }
+  }
+
+  async function trackKata(kata: Kata) {
+    if (!athleteId) return;
+    try {
+      await api.post(`/athletes/${athleteId}/tracked-katas`, { kata_id: kata.id });
+      setTrackedKatas((prev) => (prev && !prev.some((k) => k.id === kata.id) ? [...prev, kata] : prev));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to track kata");
+    }
+  }
+
+  async function untrackKata(kataId: number) {
+    if (!athleteId) return;
+    try {
+      await api.del(`/athletes/${athleteId}/tracked-katas/${kataId}`);
+      setTrackedKatas((prev) => (prev ? prev.filter((k) => k.id !== kataId) : prev));
+      setSelected((prev) => (prev && prev.id === kataId ? null : prev));
+    } catch {
+      showToast("Failed to untrack kata");
+    }
+  }
+
   async function createKata(name: string) {
-    if (!name) return;
+    if (!name || !athleteId) return;
     try {
       const { kata } = await api.post<{ kata: Kata }>("/katas", { name });
-      setKatas((prev) => (prev ? [...prev, kata] : [kata]));
-      setSelected(kata);
+      setAllKatas((prev) => (prev ? [...prev, kata] : [kata]));
+      await trackKata(kata);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to add kata");
     }
@@ -187,7 +246,7 @@ export default function KataTracker() {
     );
   }
 
-  if (!katas || !profile) {
+  if (!trackedKatas || !profile) {
     return (
       <div className="flex justify-center p-8">
         <Spinner />
@@ -195,8 +254,44 @@ export default function KataTracker() {
     );
   }
 
+  const trackedIds = new Set(trackedKatas.map((k) => k.id));
+
   if (!selected) {
-    return <KataPicker katas={katas} onPick={setSelected} onCreate={createKata} />;
+    return (
+      <div className="flex flex-col gap-3 p-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Kata tracker</h1>
+          <AddButton onClick={openTrackDrawer} />
+        </div>
+        <div className="flex flex-col gap-2">
+          {trackedKatas.map((k) => (
+            <button
+              key={k.id}
+              onClick={() => setSelected(k)}
+              className="flex min-h-[44px] items-center justify-between rounded-2xl bg-white px-4 py-3 text-left font-medium shadow-card"
+            >
+              {kataRowLabel(k)}
+              {k.wkf_number != null && <Badge>WKF #{k.wkf_number}</Badge>}
+            </button>
+          ))}
+          {trackedKatas.length === 0 && (
+            <p className="px-1 py-2 text-sm text-stone-500">
+              You're not tracking any katas yet. Tap + to add one.
+            </p>
+          )}
+        </div>
+        <TrackKatasDrawer
+          open={trackDrawerOpen}
+          onClose={() => setTrackDrawerOpen(false)}
+          allKatas={allKatas}
+          trackedIds={trackedIds}
+          onTrack={trackKata}
+          onUntrack={untrackKata}
+          onCreate={createKata}
+        />
+        {toast && <Toast message={toast} />}
+      </div>
+    );
   }
 
   return (

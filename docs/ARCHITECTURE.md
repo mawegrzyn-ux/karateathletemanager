@@ -1317,10 +1317,23 @@ coach-run attendance) — this is personal athlete itinerary planning.
   prompts a user to type it, so without this its `**`/`` ` `` markers
   showed up literally instead of rendering.
 - **Kata tracker** (`app/src/pages/KataTracker.tsx`, `/kata-tracker`):
-  a self-service page for an athlete to log kata performances — pick a
-  kata (search box + list from `GET /katas`, or add one missing from
-  the catalog inline, see the Katas bullet above) and it shows, scoped
-  to that one kata: a read-only "From your calendar" pull of any
+  a self-service page for an athlete to log kata performances. The page
+  no longer opens onto the full (100+ entry) `nk_katas` catalog — it
+  opens onto the athlete's own `nk_athlete_tracked_katas` list (plain
+  `(athlete_id, kata_id)` join table, `ON DELETE CASCADE` both ways,
+  `GET`/`POST`/`DELETE /athletes/:id/tracked-katas[/:kataId]`,
+  self-only like the rest of this athlete's own tracking data — not
+  part of the optionally-public social profile below, so no
+  `canViewSocialProfile` gate). Which katas to track is managed from a
+  "Track katas" `Drawer` (`+` in the header) — the same search-box +
+  full-list membership-picker shape as `admin/Clubs.tsx`'s
+  `MemberEditor` (every kata in `GET /katas` shown, already-tracked ones
+  flagged "✓ Tracked" in place rather than hidden, tap to untrack;
+  not-yet-tracked "+ Track", tap to add), plus the same "add one missing
+  from the catalog inline" affordance the picker had before (see the
+  Katas bullet above) — creating now also tracks it in the same action.
+  Tapping a tracked kata in the main list scopes the rest of the page to
+  it: a read-only "From your calendar" pull of any
   `kata_performance` event/item already logged with matching `kata_id`
   for this athlete (`GET /athletes/:id/kata-log?kata_id=`, same
   visibility as the social profile below), and a "Performance posts"

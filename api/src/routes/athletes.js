@@ -1111,4 +1111,83 @@ router.get(
   })
 );
 
+// Which katas this athlete has chosen to track on the Kata tracker page
+// (app/src/pages/KataTracker.tsx) - the page no longer opens onto the
+// full nk_katas catalog, only this personal subset, picked via a
+// "Track katas" search+add drawer. Self-only throughout, like the
+// composer/shareable endpoints above: this is the athlete's own list,
+// not part of the (optionally public) social profile, so no
+// canViewSocialProfile gate here.
+router.get(
+  "/:id/tracked-katas",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT k.id, k.name, k.style, k.wkf_number
+       FROM nk_athlete_tracked_katas atk
+       JOIN nk_katas k ON k.id = atk.kata_id
+       WHERE atk.athlete_id = $1
+       ORDER BY k.style NULLS LAST, k.wkf_number NULLS LAST, k.name`,
+      [req.params.id]
+    );
+    res.json({ katas: rows });
+  })
+);
+
+router.post(
+  "/:id/tracked-katas",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const kataId = Number(req.body?.kata_id);
+    if (!Number.isInteger(kataId)) {
+      return res.status(400).json({ error: { message: "kata_id is required" } });
+    }
+
+    const { rows: kataRows } = await pool.query(
+      `SELECT id, name, style, wkf_number FROM nk_katas WHERE id = $1`,
+      [kataId]
+    );
+    if (kataRows.length === 0) {
+      return res.status(404).json({ error: { message: "Kata not found" } });
+    }
+
+    await pool.query(
+      `INSERT INTO nk_athlete_tracked_katas (athlete_id, kata_id)
+       VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [req.params.id, kataId]
+    );
+    res.status(201).json({ kata: kataRows[0] });
+  })
+);
+
+router.delete(
+  "/:id/tracked-katas/:kataId",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    await pool.query(
+      `DELETE FROM nk_athlete_tracked_katas WHERE athlete_id = $1 AND kata_id = $2`,
+      [req.params.id, req.params.kataId]
+    );
+    res.status(204).end();
+  })
+);
+
 module.exports = router;

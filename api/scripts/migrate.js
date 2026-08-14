@@ -1250,6 +1250,19 @@ const migrations = [
   // it rather than leaving them blank).
   `ALTER TABLE nk_athlete_posts ADD COLUMN IF NOT EXISTS share_kata_id INTEGER
      REFERENCES nk_katas(id) ON DELETE CASCADE`,
+
+  // The Kata tracker page no longer opens onto the entire nk_katas
+  // catalog (which can grow to 100+ entries once local variants get
+  // added) - an athlete now explicitly picks which katas they're
+  // tracking, via a "Track katas" search+add drawer (same shape as the
+  // app's other membership pickers). Plain join table, no surrogate id
+  // needed since the only thing ever done with a row is add/remove it.
+  `CREATE TABLE IF NOT EXISTS nk_athlete_tracked_katas (
+     athlete_id INTEGER NOT NULL REFERENCES nk_athletes(id) ON DELETE CASCADE,
+     kata_id    INTEGER NOT NULL REFERENCES nk_katas(id) ON DELETE CASCADE,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (athlete_id, kata_id)
+  )`,
 ];
 
 async function migrate() {
