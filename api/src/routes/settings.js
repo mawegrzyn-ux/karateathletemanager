@@ -91,6 +91,12 @@ registerSecretRoutes("/brave-key", "brave_api_key", "BRAVE_API_KEY");
 registerSecretRoutes("/google-client-id", "google_client_id", "GOOGLE_CLIENT_ID");
 registerSecretRoutes("/google-client-secret", "google_client_secret", "GOOGLE_CLIENT_SECRET");
 
+// AscendAPI's ExerciseDB (RapidAPI) - lets Training modules pull real
+// exercise data (video/image, target muscles, equipment, instructions)
+// instead of every exercise item being typed/uploaded by hand. See
+// api/src/routes/ascendApi.js for where this key is used.
+registerSecretRoutes("/ascendapi-key", "ascendapi_key", "ASCENDAPI_KEY");
+
 // Not a secret (the admin needs to see/edit it), so it gets its own
 // GET/PATCH pair modeled on branding-icon above rather than
 // registerSecretRoutes. One global IANA timezone covers every synced
