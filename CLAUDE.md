@@ -198,6 +198,16 @@ without leaving the list. This `bg_color` is what feeds both the filter
 tiles above and any per-row icon segment on the entity's own list (e.g.
 Training modules' row icon, below).
 
+Below that Icon/Color pair, a `MediaField` (`kind="image"`) lets an admin
+upload a real icon image instead of relying on an emoji glyph -
+`icon_url`, admin-swappable the same way `photo_url`/`video_url` are
+elsewhere, takes precedence over the plain-text `icon` column when set.
+Render either via the shared `TypeIcon` (`ui.tsx`, `icon`/`iconUrl`/`size`
+props) rather than printing `{type.icon}` directly, so every spot stays
+in sync on which one wins - `TypeIcon` isn't usable inside a native
+`<select><option>` though (browsers only render plain text there), so
+those specific dropdowns fall back to the bare `icon` string.
+
 ## UI convention: nested line items in a drawer
 
 When a record has its own dated sub-entries (e.g. an event's day-by-day

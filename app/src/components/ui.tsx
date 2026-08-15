@@ -50,6 +50,48 @@ export function Avatar({
   );
 }
 
+// Every "type-with-icon-and-color library" (Schedule's event types,
+// Training modules' own types - see admin/EventTypes.tsx,
+// admin/TrainingModuleTypes.tsx) stores an emoji `icon` plus an optional
+// admin-uploaded `iconUrl` that takes precedence when set - one shared
+// renderer so both surfaces stay visually consistent and can't drift on
+// how the two are picked between. `size` (px) gives the image and the
+// emoji fallback the same visual footprint regardless of which is
+// configured, since font-size and image width/height aren't otherwise
+// comparable units. Not usable inside a native <select><option> (which
+// can only ever render plain text) - those spots fall back to the plain
+// `icon` string directly instead of this component.
+export function TypeIcon({
+  icon,
+  iconUrl,
+  size = 24,
+  className = "",
+}: {
+  icon: string | null | undefined;
+  iconUrl?: string | null;
+  size?: number;
+  className?: string;
+}) {
+  if (iconUrl) {
+    return (
+      <img
+        src={iconUrl}
+        alt=""
+        style={{ width: size, height: size }}
+        className={`inline-block shrink-0 rounded-sm object-contain ${className}`}
+      />
+    );
+  }
+  return (
+    <span
+      style={{ fontSize: size, lineHeight: 1 }}
+      className={`inline-block shrink-0 ${className}`}
+    >
+      {icon}
+    </span>
+  );
+}
+
 export async function uploadFile(file: File): Promise<string> {
   const formData = new FormData();
   formData.append("file", file);

@@ -1,15 +1,25 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useApi } from "../../hooks/useApi";
-import { Spinner, Drawer, AddButton, DeleteButton, Field } from "../../components/ui";
+import {
+  Spinner,
+  Drawer,
+  AddButton,
+  DeleteButton,
+  Field,
+  MediaField,
+  TypeIcon,
+  Toast,
+} from "../../components/ui";
 
 interface TrainingModuleType {
   id: number;
   name: string;
   icon: string | null;
+  icon_url: string | null;
   bg_color: string;
 }
 
-const EMPTY_FORM = { name: "", icon: "", bg_color: "#78716c" };
+const EMPTY_FORM = { name: "", icon: "", icon_url: "", bg_color: "#78716c" };
 
 export default function TrainingModuleTypes() {
   const api = useApi();
@@ -20,6 +30,12 @@ export default function TrainingModuleTypes() {
     "closed"
   );
   const [form, setForm] = useState(EMPTY_FORM);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 4000);
+  }
 
   useEffect(() => {
     load();
@@ -105,7 +121,7 @@ export default function TrainingModuleTypes() {
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg"
               style={{ backgroundColor: t.bg_color }}
             >
-              {t.icon}
+              <TypeIcon icon={t.icon} iconUrl={t.icon_url} size={20} />
             </span>
             <span className="font-medium">{t.name}</span>
           </button>
@@ -147,6 +163,13 @@ export default function TrainingModuleTypes() {
               />
             </Field>
           </div>
+          <MediaField
+            label="Custom icon image (optional - overrides the emoji above)"
+            kind="image"
+            value={form.icon_url}
+            onChange={(url) => setForm({ ...form, icon_url: url })}
+            onError={showToast}
+          />
           <button
             type="submit"
             className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
@@ -197,6 +220,13 @@ export default function TrainingModuleTypes() {
                 />
               </Field>
             </div>
+            <MediaField
+              label="Custom icon image (optional - overrides the emoji above)"
+              kind="image"
+              value={editing.icon_url ?? ""}
+              onChange={(url) => updateType(editing.id, { icon_url: url })}
+              onError={showToast}
+            />
             <DeleteButton
               onClick={() => deleteType(editing.id)}
               itemLabel={editing.name}
@@ -204,6 +234,8 @@ export default function TrainingModuleTypes() {
           </div>
         )}
       </Drawer>
+
+      {toast && <Toast message={toast} />}
     </div>
   );
 }

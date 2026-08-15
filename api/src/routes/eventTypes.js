@@ -6,7 +6,7 @@ const { isClubAdmin } = require("../utils/permissions");
 
 const router = Router();
 
-const FIELDS = `id, club_id, key, label, icon, bg_color, is_standard, created_at`;
+const FIELDS = `id, club_id, key, label, icon, icon_url, bg_color, is_standard, created_at`;
 const KEY_RE = /^[a-z0-9_]+$/;
 
 router.use(authorize());
@@ -38,7 +38,7 @@ router.get(
 router.post(
   "/",
   asyncHandler(async (req, res) => {
-    const { club_id, key, label, icon, bg_color } = req.body ?? {};
+    const { club_id, key, label, icon, icon_url, bg_color } = req.body ?? {};
     const clubId = Number(club_id);
     if (!Number.isInteger(clubId)) {
       return res.status(400).json({ error: { message: "club_id is required" } });
@@ -57,10 +57,10 @@ router.post(
 
     try {
       const { rows } = await pool.query(
-        `INSERT INTO nk_event_types (club_id, key, label, icon, bg_color, is_standard)
-         VALUES ($1, $2, $3, $4, $5, false)
+        `INSERT INTO nk_event_types (club_id, key, label, icon, icon_url, bg_color, is_standard)
+         VALUES ($1, $2, $3, $4, $5, $6, false)
          RETURNING ${FIELDS}`,
-        [clubId, key, label.trim(), icon || "📌", bg_color || "#78716c"]
+        [clubId, key, label.trim(), icon || "📌", icon_url || null, bg_color || "#78716c"]
       );
       res.status(201).json({ type: rows[0] });
     } catch (err) {
@@ -90,14 +90,22 @@ router.patch(
 
     const body = req.body ?? {};
     // key and is_standard are immutable after creation - only label/icon/
-    // bg_color can be restyled, matching the same presence-based dynamic
-    // SET clause every other PATCH in the app uses.
-    const fields = { label: body.label, icon: body.icon, bg_color: body.bg_color };
+    // icon_url/bg_color can be restyled, matching the same presence-based
+    // dynamic SET clause every other PATCH in the app uses.
+    const fields = {
+      label: body.label,
+      icon: body.icon,
+      icon_url: body.icon_url,
+      bg_color: body.bg_color,
+    };
     const setClauses = [];
     const values = [];
     for (const [k, value] of Object.entries(fields)) {
       if (k in body) {
-        values.push(value);
+        // MediaField's clear (trash icon) button calls onChange("") -
+        // store that as NULL, not an empty string, same as icon already
+        // did before icon_url existed.
+        values.push(k === "icon_url" && value === "" ? null : value);
         setClauses.push(`${k} = $${values.length}`);
       }
     }
