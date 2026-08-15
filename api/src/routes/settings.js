@@ -1,7 +1,9 @@
 const { Router } = require("express");
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
 const asyncHandler = require("../utils/asyncHandler");
+const { getS3Config, publicUrlFor } = require("../utils/s3");
 
 const router = Router();
 router.use(authorize.requireAdmin);
@@ -165,6 +167,76 @@ router.delete(
        )`
     );
     res.json({ ok: true });
+  })
+);
+
+// One fixed key, overwritten in place on every run (rather than a fresh
+// UUID each time) so repeat testing doesn't litter the bucket with
+// throwaway objects - the app never deletes uploaded media anywhere else
+// either, so this deliberately doesn't need s3:DeleteObject added to the
+// IAM policy documented in docs/ARCHITECTURE.md. Uploads a real object
+// (proves the credentials + s3:PutObject actually work), then fetches
+// its own public URL unauthenticated (proves the bucket policy actually
+// grants public s3:GetObject too - a PutObject success alone wouldn't
+// catch a bucket that still blocks public reads).
+router.post(
+  "/s3-config/test",
+  asyncHandler(async (req, res) => {
+    const s3 = await getS3Config();
+    if (!s3) {
+      return res.status(400).json({
+        error: {
+          message:
+            "S3 isn't fully configured yet - fill in bucket, region, access key, and secret above, then save before testing.",
+        },
+      });
+    }
+
+    const client = new S3Client({
+      region: s3.region,
+      credentials: {
+        accessKeyId: s3.accessKeyId,
+        secretAccessKey: s3.secretAccessKey,
+      },
+    });
+    const key = "_connection-test.txt";
+
+    try {
+      await client.send(
+        new PutObjectCommand({
+          Bucket: s3.bucket,
+          Key: key,
+          Body: `Nada Karate S3 connection test - ${new Date().toISOString()}`,
+          ContentType: "text/plain",
+        })
+      );
+    } catch (err) {
+      return res.status(502).json({
+        error: {
+          message: `Upload failed: ${err.message} - check the bucket name/region, and that the IAM user has s3:PutObject on this bucket.`,
+        },
+      });
+    }
+
+    const url = publicUrlFor(s3, key);
+    try {
+      const getRes = await fetch(url);
+      if (!getRes.ok) {
+        return res.status(502).json({
+          error: {
+            message: `Upload worked, but the public URL returned ${getRes.status} - check the bucket policy grants public s3:GetObject (see docs/ARCHITECTURE.md's "S3 Storage Setup").`,
+          },
+          url,
+        });
+      }
+    } catch (err) {
+      return res.status(502).json({
+        error: { message: `Upload worked, but fetching the public URL failed: ${err.message}` },
+        url,
+      });
+    }
+
+    res.json({ ok: true, url });
   })
 );
 
