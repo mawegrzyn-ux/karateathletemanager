@@ -7,6 +7,8 @@ import {
   DeleteButton,
   Field,
   Badge,
+  MediaField,
+  TypeIcon,
   Toast,
 } from "../../components/ui";
 
@@ -21,12 +23,13 @@ interface EventType {
   key: string;
   label: string;
   icon: string;
+  icon_url: string | null;
   bg_color: string;
   is_standard: boolean;
   created_at: string;
 }
 
-const EMPTY_FORM = { key: "", label: "", icon: "📌", bg_color: "#78716c" };
+const EMPTY_FORM = { key: "", label: "", icon: "📌", icon_url: "", bg_color: "#78716c" };
 const KEY_RE = /^[a-z0-9_]+$/;
 
 export default function EventTypes() {
@@ -89,6 +92,7 @@ export default function EventTypes() {
         key: form.key.trim(),
         label: form.label.trim(),
         icon: form.icon,
+        icon_url: form.icon_url || undefined,
         bg_color: form.bg_color,
       });
       setTypes((prev) => (prev ? [...prev, created] : [created]));
@@ -206,7 +210,7 @@ export default function EventTypes() {
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg"
                 style={{ backgroundColor: t.bg_color }}
               >
-                {t.icon}
+                <TypeIcon icon={t.icon} iconUrl={t.icon_url} size={20} />
               </span>
               <span className="flex-1 font-medium">{t.label}</span>
               {t.is_standard && <Badge>Standard</Badge>}
@@ -257,6 +261,13 @@ export default function EventTypes() {
               />
             </Field>
           </div>
+          <MediaField
+            label="Custom icon image (optional - overrides the emoji above)"
+            kind="image"
+            value={form.icon_url}
+            onChange={(url) => setForm({ ...form, icon_url: url })}
+            onError={showToast}
+          />
           <button
             type="submit"
             className="min-h-[44px] rounded-full bg-red-600 font-medium text-white"
@@ -312,6 +323,13 @@ export default function EventTypes() {
                 />
               </Field>
             </div>
+            <MediaField
+              label="Custom icon image (optional - overrides the emoji above)"
+              kind="image"
+              value={editing.icon_url ?? ""}
+              onChange={(url) => updateType(editing.id, { icon_url: url })}
+              onError={showToast}
+            />
             {!editing.is_standard && (
               <DeleteButton
                 onClick={() => deleteType(editing.id)}

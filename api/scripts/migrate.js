@@ -1263,6 +1263,15 @@ const migrations = [
      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
      PRIMARY KEY (athlete_id, kata_id)
   )`,
+
+  // An uploaded icon image, admin-swappable per club (event types) or
+  // globally (training module types) via the same upload pipeline as
+  // photo_url/video_url elsewhere - takes precedence over the plain
+  // emoji `icon` column when set (TypeIcon, ui.tsx), which stays as the
+  // fallback for spots that can't render an image at all (a native
+  // <select><option> can only ever show plain text).
+  `ALTER TABLE nk_event_types ADD COLUMN IF NOT EXISTS icon_url VARCHAR(500)`,
+  `ALTER TABLE nk_training_module_types ADD COLUMN IF NOT EXISTS icon_url VARCHAR(500)`,
 ];
 
 async function migrate() {
