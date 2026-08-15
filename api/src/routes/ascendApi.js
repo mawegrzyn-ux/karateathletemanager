@@ -68,4 +68,27 @@ registerPassthrough("/muscles", "/api/v1/muscles");
 registerPassthrough("/exercisetypes", "/api/v1/exercisetypes");
 registerPassthrough("/exercises", "/api/v1/exercises");
 
+// The /exercises list projection only carries imageUrl (a still frame) -
+// no video/instructions field. Guessing this is a per-exercise detail
+// endpoint (REST-conventional path using the real exerciseId values the
+// list now confirmed, e.g. exr_41n2ha5iPFpN3hEJ) that might carry the
+// richer fields the AscendAPI marketing page mentions (video, step-by-
+// step instructions). Unconfirmed - if the path is wrong this just
+// surfaces AscendAPI's own error message via the same try/catch as the
+// other passthroughs.
+router.get(
+  "/exercises/:exerciseId",
+  asyncHandler(async (req, res) => {
+    try {
+      const body = await ascendApiRequest(
+        `/api/v1/exercises/${encodeURIComponent(req.params.exerciseId)}`,
+        req.query
+      );
+      res.json(body);
+    } catch (err) {
+      res.status(err.status ?? 502).json({ error: { message: err.message } });
+    }
+  })
+);
+
 module.exports = router;
