@@ -21,6 +21,8 @@ export default function AscendApiKey() {
   const [toast, setToast] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [result, setResult] = useState<{ endpoint: string; json: string } | null>(null);
+  const [queryString, setQueryString] = useState("");
+  const [exerciseId, setExerciseId] = useState("");
 
   function showToast(message: string) {
     setToast(message);
@@ -65,11 +67,11 @@ export default function AscendApiKey() {
     }
   }
 
-  async function test(endpointKey: string) {
+  async function test(endpointKey: string, path: string) {
     setTesting(endpointKey);
     setResult(null);
     try {
-      const json = await api.get(`/admin/ascend-api/${endpointKey}`);
+      const json = await api.get(`/admin/ascend-api/${path}`);
       setResult({ endpoint: endpointKey, json: JSON.stringify(json, null, 2) });
     } catch (err) {
       setResult({
@@ -151,19 +153,59 @@ export default function AscendApiKey() {
             development - tap a button below (from the deployed app) to see
             the real response shape for that endpoint.
           </p>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-stone-600">
+              Query string (optional, applied to the buttons below - e.g.
+              search=squat&limit=5)
+            </span>
+            <input
+              value={queryString}
+              onChange={(e) => setQueryString(e.target.value)}
+              placeholder="search=squat&limit=5"
+              className="min-h-[44px] rounded-xl border border-stone-300 px-3 font-mono text-sm"
+            />
+          </label>
           <div className="flex flex-wrap gap-2">
             {ENDPOINTS.map((e) => (
               <button
                 key={e.key}
                 type="button"
                 disabled={testing !== null}
-                onClick={() => test(e.key)}
+                onClick={() =>
+                  test(e.key, `${e.key}${queryString.trim() ? `?${queryString.trim()}` : ""}`)
+                }
                 className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-sm font-medium disabled:opacity-50"
               >
                 {testing === e.key ? "Loading..." : e.label}
               </button>
             ))}
           </div>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-stone-600">
+              Exercise detail - paste an exerciseId from the "Exercises
+              (sample)" result above (e.g. exr_41n2ha5iPFpN3hEJ)
+            </span>
+            <div className="flex gap-2">
+              <input
+                value={exerciseId}
+                onChange={(e) => setExerciseId(e.target.value)}
+                placeholder="exr_..."
+                className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3 font-mono text-sm"
+              />
+              <button
+                type="button"
+                disabled={testing !== null || !exerciseId.trim()}
+                onClick={() =>
+                  test("exercise-detail", `exercises/${encodeURIComponent(exerciseId.trim())}`)
+                }
+                className="min-h-[44px] rounded-xl border border-stone-300 px-3 text-sm font-medium disabled:opacity-50"
+              >
+                {testing === "exercise-detail" ? "Loading..." : "Look up"}
+              </button>
+            </div>
+          </label>
+
           {result && (
             <pre className="max-h-96 overflow-auto rounded-xl bg-stone-900 p-3 text-xs text-stone-100">
               {result.json}
