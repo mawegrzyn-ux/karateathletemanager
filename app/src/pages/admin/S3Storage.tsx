@@ -24,6 +24,10 @@ export default function S3Storage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string; url?: string } | null>(
+    null
+  );
 
   function showToast(message: string) {
     setToast(message);
@@ -85,6 +89,30 @@ export default function S3Storage() {
       showToast(err instanceof ApiError ? err.message : "Failed to save settings");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Uploads a small real object, then fetches its own public URL
+  // unauthenticated - catches both a bad credential/permission (the
+  // upload itself fails) and a bucket policy that isn't actually public
+  // yet (upload succeeds but the public fetch 403s), which a "did the
+  // PATCH above succeed" check alone wouldn't.
+  async function testConnection() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await api.post<{ ok: boolean; url: string }>(
+        "/admin/settings/s3-config/test",
+        {}
+      );
+      setTestResult({ ok: true, message: "Upload and public read both worked.", url: res.url });
+    } catch (err) {
+      setTestResult({
+        ok: false,
+        message: err instanceof ApiError ? err.message : "Test failed",
+      });
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -188,11 +216,42 @@ export default function S3Storage() {
         </form>
 
         {configured && (
-          <DeleteButton
-            onClick={clear}
-            itemLabel="the saved S3 settings"
-            label="Remove settings"
-          />
+          <>
+            <button
+              type="button"
+              onClick={testConnection}
+              disabled={testing}
+              className="min-h-[44px] rounded-xl border border-stone-300 font-medium text-stone-700 disabled:opacity-50"
+            >
+              {testing ? "Testing..." : "Test connection"}
+            </button>
+            {testResult && (
+              <div
+                className={`rounded-xl p-3 text-sm ${
+                  testResult.ok
+                    ? "bg-green-50 text-green-800"
+                    : "bg-red-50 text-red-700"
+                }`}
+              >
+                <p>{testResult.ok ? "✓" : "✗"} {testResult.message}</p>
+                {testResult.url && (
+                  <a
+                    href={testResult.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block break-all underline"
+                  >
+                    {testResult.url}
+                  </a>
+                )}
+              </div>
+            )}
+            <DeleteButton
+              onClick={clear}
+              itemLabel="the saved S3 settings"
+              label="Remove settings"
+            />
+          </>
         )}
       </div>
 
