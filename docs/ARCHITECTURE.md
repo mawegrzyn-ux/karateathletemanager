@@ -3397,6 +3397,69 @@ sudo certbot --nginx -d nadakarate.com -d www.nadakarate.com
 curl -I https://nadakarate.com
 ```
 
+## S3 Storage Setup
+
+Uploads (`api/src/routes/uploads.js`) and the app icon
+(`api/src/routes/publicBranding.js`) write to the local disk by default -
+fine to start, but doesn't scale for video (fills the instance's disk,
+every playback streams off that one small VM's bandwidth). Configuring
+S3 (**More → Configuration → S3 storage**, admin-only, takes effect
+immediately) moves new uploads there instead; uploads already made
+before this was set up keep working from local disk either way, no
+migration needed. `api/src/utils/s3.js`'s `getS3Config()` treats
+bucket/region/access key/secret as all-or-nothing - if any one is
+missing, uploads silently fall back to local disk rather than half-
+configured behavior.
+
+This needs two things created in the AWS console (or CLI) first, since
+the app has no way to provision AWS resources itself:
+
+**1. The bucket**, with public read via a bucket policy - not an object
+ACL, since modern buckets default to Object Ownership "Bucket owner
+enforced," which disables ACLs entirely (`uploads.js` never sets one on
+`PutObject` for exactly this reason). Under the bucket's Permissions
+tab, allow public bucket policies (uncheck the two "block public access"
+policy checkboxes - it's fine to leave the ACL-related ones on), then
+attach:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PublicReadGetObject",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::YOUR-BUCKET-NAME/*"
+    }
+  ]
+}
+```
+
+**2. An IAM user** (or role, if the server ever moves off Lightsail onto
+something that supports instance profiles) with an inline policy scoped
+to just this bucket - not full S3 access:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "arn:aws:s3:::YOUR-BUCKET-NAME/*"
+    }
+  ]
+}
+```
+
+Generate an access key for that user and paste bucket/region/access key
+ID/secret access key into the admin page. `public_base_url` is optional -
+set it if a CDN (e.g. CloudFront) or custom domain fronts the bucket;
+left blank, uploaded URLs point straight at the bucket's own
+virtual-hosted-style endpoint (`https://<bucket>.s3.<region>.amazonaws.com/<key>`).
+
 ## Environment Variables
 
 ### API (`api/.env`)
@@ -3411,11 +3474,20 @@ DB_PASSWORD=
 NODE_ENV=production
 ANTHROPIC_API_KEY=
 BRAVE_API_KEY=
+ASCENDAPI_KEY=
 PUBLIC_APP_URL=https://nadakarate.com
 GOOGLE_OAUTH_REDIRECT_URI=https://nadakarate.com/api/google-calendar/callback
 GOOGLE_TOKEN_ENCRYPTION_KEY=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+# S3 storage - optional, all-or-nothing fallback for the admin-UI
+# settings above (see "S3 Storage Setup"); uploads use local disk
+# unless every one of these (or their nk_settings equivalent) is set.
+AWS_S3_BUCKET=
+AWS_REGION=
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+S3_PUBLIC_BASE_URL=
 ```
 
 ## Git Conventions

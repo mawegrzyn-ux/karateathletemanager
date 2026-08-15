@@ -97,6 +97,77 @@ registerSecretRoutes("/google-client-secret", "google_client_secret", "GOOGLE_CL
 // api/src/routes/ascendApi.js for where this key is used.
 registerSecretRoutes("/ascendapi-key", "ascendapi_key", "ASCENDAPI_KEY");
 
+// S3 storage for uploads (api/src/utils/s3.js, api/src/routes/uploads.js,
+// api/src/routes/publicBranding.js) - bucket/region/access key id aren't
+// sensitive on their own so they're shown back to the admin (like
+// branding-icon/default-timezone above), only secret_access_key is
+// write-only like the registerSecretRoutes keys. A PATCH only touches
+// whichever fields are present in the body (same dynamic-SET-clause
+// convention as every other PATCH in the app) so e.g. rotating just the
+// secret key doesn't require resending the bucket/region too. Uploads
+// fall back to local disk automatically whenever this isn't (fully)
+// configured - see docs/ARCHITECTURE.md's S3 storage bullet for the
+// bucket policy / IAM policy needed on the AWS side.
+router.get(
+  "/s3-config",
+  asyncHandler(async (req, res) => {
+    const { rows } = await pool.query(
+      `SELECT key, value FROM nk_settings WHERE key IN (
+         's3_bucket', 's3_region', 's3_access_key_id', 's3_secret_access_key', 's3_public_base_url'
+       )`
+    );
+    const found = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    res.json({
+      bucket: found.s3_bucket ?? null,
+      region: found.s3_region ?? null,
+      access_key_id: found.s3_access_key_id ?? null,
+      public_base_url: found.s3_public_base_url ?? null,
+      secret_access_key_configured: !!found.s3_secret_access_key,
+    });
+  })
+);
+
+router.patch(
+  "/s3-config",
+  asyncHandler(async (req, res) => {
+    const body = req.body ?? {};
+    const fields = {
+      s3_bucket: body.bucket,
+      s3_region: body.region,
+      s3_access_key_id: body.access_key_id,
+      s3_secret_access_key: body.secret_access_key,
+      s3_public_base_url: body.public_base_url,
+    };
+
+    for (const [key, value] of Object.entries(fields)) {
+      if (value === undefined) continue;
+      if (value === null || String(value).trim() === "") {
+        await pool.query(`DELETE FROM nk_settings WHERE key = $1`, [key]);
+      } else {
+        await pool.query(
+          `INSERT INTO nk_settings (key, value, updated_at)
+           VALUES ($1, $2, NOW())
+           ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+          [key, String(value).trim()]
+        );
+      }
+    }
+    res.json({ ok: true });
+  })
+);
+
+router.delete(
+  "/s3-config",
+  asyncHandler(async (req, res) => {
+    await pool.query(
+      `DELETE FROM nk_settings WHERE key IN (
+         's3_bucket', 's3_region', 's3_access_key_id', 's3_secret_access_key', 's3_public_base_url'
+       )`
+    );
+    res.json({ ok: true });
+  })
+);
+
 // Not a secret (the admin needs to see/edit it), so it gets its own
 // GET/PATCH pair modeled on branding-icon above rather than
 // registerSecretRoutes. One global IANA timezone covers every synced

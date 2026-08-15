@@ -39,8 +39,8 @@ const SLOTS = {
   "social-image.png": { width: 1200, height: 630, fit: "cover" },
 };
 
-async function renderSlot(sourcePath, slot) {
-  const img = sharp(sourcePath);
+async function renderSlot(source, slot) {
+  const img = sharp(source);
 
   if (slot.maskable) {
     // Safe zone is the inner ~80% - shrink the image to that and pad
@@ -79,26 +79,44 @@ async function renderSlot(sourcePath, slot) {
 // and Android's PWA-installability checks require icons that actually
 // are the declared size/format, or they silently downgrade "Install app"
 // to a plain bookmark-style "Add to Home Screen".
+// The configured branding_icon_url is either a local /api/uploads/files/
+// path (uploads.js's local-disk fallback) or, once S3 storage is
+// configured, an absolute S3/CDN URL - sharp can read a local path or a
+// Buffer but not fetch a URL itself, so a remote source gets pulled into
+// a Buffer first. Falls back to the committed default on any failure
+// (missing setting, deleted local file, unreachable remote URL) rather
+// than erroring the whole branding response.
+async function loadIconSource() {
+  const { rows } = await pool.query(
+    `SELECT value FROM nk_settings WHERE key = 'branding_icon_url'`
+  );
+  const url = rows[0]?.value;
+  if (!url) return DEFAULT_ICON_PATH;
+
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return Buffer.from(await res.arrayBuffer());
+    } catch {
+      // fall through to default
+    }
+    return DEFAULT_ICON_PATH;
+  }
+
+  const filename = url.split("/").pop();
+  if (filename && SAFE_FILENAME.test(filename)) {
+    const uploadedPath = path.join(UPLOADS_DIR, filename);
+    if (fs.existsSync(uploadedPath)) return uploadedPath;
+  }
+  return DEFAULT_ICON_PATH;
+}
+
 router.get(
   Object.keys(SLOTS).map((name) => `/${name}`),
   asyncHandler(async (req, res) => {
     const slot = SLOTS[req.path.slice(1)];
-
-    const { rows } = await pool.query(
-      `SELECT value FROM nk_settings WHERE key = 'branding_icon_url'`
-    );
-    const url = rows[0]?.value;
-    const filename = url?.split("/").pop();
-
-    let sourcePath = DEFAULT_ICON_PATH;
-    if (filename && SAFE_FILENAME.test(filename)) {
-      const uploadedPath = path.join(UPLOADS_DIR, filename);
-      if (fs.existsSync(uploadedPath)) {
-        sourcePath = uploadedPath;
-      }
-    }
-
-    const buffer = await renderSlot(sourcePath, slot);
+    const source = await loadIconSource();
+    const buffer = await renderSlot(source, slot);
     res.set("Content-Type", "image/png");
     res.set("Cache-Control", "public, max-age=300");
     res.send(buffer);
