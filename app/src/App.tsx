@@ -27,6 +27,7 @@ import AdminAppIcon from "./pages/admin/AppIcon";
 import AdminOsuApiKey from "./pages/admin/OsuApiKey";
 import AdminBraveApiKey from "./pages/admin/BraveApiKey";
 import AdminAscendApiKey from "./pages/admin/AscendApiKey";
+import AdminS3Storage from "./pages/admin/S3Storage";
 import AdminGoogleCalendarConfig from "./pages/admin/GoogleCalendarConfig";
 import GoogleCalendarConnect from "./pages/GoogleCalendarConnect";
 import Osu from "./pages/Osu";
@@ -348,6 +349,14 @@ export default function App() {
           element={
             <RequireAuth adminOnly>
               <AdminAscendApiKey />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/s3-storage"
+          element={
+            <RequireAuth adminOnly>
+              <AdminS3Storage />
             </RequireAuth>
           }
         />
