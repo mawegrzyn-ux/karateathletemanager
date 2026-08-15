@@ -31,6 +31,7 @@ const geocode = require("./geocode");
 const googleCalendar = require("./googleCalendar");
 const trainingPrograms = require("./trainingPrograms");
 const ascendApi = require("./ascendApi");
+const exerciseSearch = require("./exerciseSearch");
 
 const router = Router();
 
@@ -66,5 +67,6 @@ router.use("/geocode", geocode);
 router.use("/google-calendar", googleCalendar);
 router.use("/training-programs", trainingPrograms);
 router.use("/admin/ascend-api", ascendApi);
+router.use("/exercise-search", exerciseSearch);
 
 module.exports = router;

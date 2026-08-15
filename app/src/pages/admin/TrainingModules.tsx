@@ -261,6 +261,185 @@ function stageValid(item: DraftItem, stage: Stage): boolean {
   return true;
 }
 
+interface ExerciseSearchResult {
+  exerciseId: string;
+  name: string;
+  imageUrl: string | null;
+  bodyParts: string[];
+  equipments: string[];
+  exerciseType: string | null;
+}
+
+interface ExerciseImportFields {
+  name: string;
+  explanation: string;
+  video_url: string;
+  image_url: string;
+}
+
+// Search box + result list over AscendAPI's ExerciseDB (api/src/routes/
+// exerciseSearch.js) - picking a result fetches that exercise's detail
+// and hands name/explanation/video_url/image_url back via onImport,
+// pre-filling the rest of this item's fields instead of a coach typing/
+// uploading everything by hand. `name` fuzzy-matches by relevance
+// upstream (confirmed against a real key), not a strict substring.
+function ExerciseImportDrawer({
+  open,
+  onClose,
+  onImport,
+  onError,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onImport: (fields: ExerciseImportFields) => void;
+  onError: (message: string) => void;
+}) {
+  const api = useApi();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ExerciseSearchResult[] | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [importingId, setImportingId] = useState<string | null>(null);
+  const [notConfigured, setNotConfigured] = useState(false);
+
+  async function search(nextCursor?: string | null) {
+    setSearching(true);
+    if (!nextCursor) setNotConfigured(false);
+    try {
+      const params = new URLSearchParams();
+      if (query.trim()) params.set("name", query.trim());
+      if (nextCursor) params.set("cursor", nextCursor);
+      const res = await api.get<{
+        exercises: ExerciseSearchResult[];
+        nextCursor: string | null;
+        hasNextPage: boolean;
+      }>(`/exercise-search?${params.toString()}`);
+      setResults((prev) => (nextCursor && prev ? [...prev, ...res.exercises] : res.exercises));
+      setCursor(res.nextCursor);
+      setHasNextPage(res.hasNextPage);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 400) {
+        setNotConfigured(true);
+        setResults([]);
+      } else {
+        onError(err instanceof ApiError ? err.message : "Search failed");
+      }
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+      setResults(null);
+      search();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  async function importExercise(exerciseId: string) {
+    setImportingId(exerciseId);
+    try {
+      const detail = await api.get<{
+        name: string;
+        explanation: string | null;
+        video_url: string | null;
+        image_url: string | null;
+      }>(`/exercise-search/${encodeURIComponent(exerciseId)}`);
+      onImport({
+        name: detail.name,
+        explanation: detail.explanation ?? "",
+        video_url: detail.video_url ?? "",
+        image_url: detail.image_url ?? "",
+      });
+      onClose();
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Failed to import exercise");
+    } finally {
+      setImportingId(null);
+    }
+  }
+
+  return (
+    <Drawer open={open} onClose={onClose} title="Import from ExerciseDB">
+      <div className="flex flex-col gap-3">
+        <div className="flex gap-2">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && search()}
+            placeholder="Search exercises..."
+            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
+          />
+          <button
+            type="button"
+            onClick={() => search()}
+            disabled={searching}
+            className="min-h-[44px] rounded-xl border border-stone-300 px-4 text-sm font-medium disabled:opacity-50"
+          >
+            Search
+          </button>
+        </div>
+
+        {notConfigured && (
+          <p className="text-sm text-stone-500">
+            AscendAPI isn't configured yet - ask an admin to add a key under
+            More → Configuration → AscendAPI key.
+          </p>
+        )}
+
+        {results === null ? (
+          <div className="flex justify-center p-4">
+            <Spinner />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {results.map((r) => (
+              <button
+                key={r.exerciseId}
+                type="button"
+                disabled={importingId !== null}
+                onClick={() => importExercise(r.exerciseId)}
+                className="flex min-h-[44px] items-center gap-3 rounded-xl border border-stone-200 p-2 text-left disabled:opacity-50"
+              >
+                {r.imageUrl && (
+                  <img
+                    src={r.imageUrl}
+                    alt=""
+                    className="h-12 w-12 shrink-0 rounded-lg object-cover"
+                  />
+                )}
+                <span className="flex flex-1 flex-col">
+                  <span className="text-sm font-medium">{r.name}</span>
+                  <span className="text-xs text-stone-500">
+                    {[...r.bodyParts, ...r.equipments].join(" · ")}
+                  </span>
+                </span>
+                {importingId === r.exerciseId && <Spinner />}
+              </button>
+            ))}
+            {results.length === 0 && !notConfigured && (
+              <p className="px-1 py-2 text-sm text-stone-500">No exercises found.</p>
+            )}
+            {hasNextPage && (
+              <button
+                type="button"
+                onClick={() => search(cursor)}
+                disabled={searching}
+                className="min-h-[44px] rounded-xl border border-stone-300 text-sm font-medium disabled:opacity-50"
+              >
+                {searching ? "Loading..." : "Load more"}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </Drawer>
+  );
+}
+
 // The fields for a single stage of a single item - shared by the create
 // wizard (one stage of one item on screen at a time) and the edit-flow's
 // per-step editor (same stages, reached by expanding a step in the list).
@@ -275,6 +454,19 @@ function ItemStageContent({
   onChange: (patch: Partial<DraftItem>) => void;
   onError: (message: string) => void;
 }) {
+  // Hoisted above the switch (never called conditionally) even though
+  // only the "name" case renders anything with it - the Rules of Hooks
+  // require every render of this component instance to call the same
+  // hooks in the same order, and `stage` (hence which case runs) can
+  // change across renders of the *same* instance in the edit-flow's
+  // per-step editor. importVersion forces the name/explanation inputs
+  // below to remount (picking up their new defaultValue) after an
+  // import, since they're otherwise uncontrolled - onChange updates
+  // `item.name`/`item.explanation` in the parent, but an uncontrolled
+  // input ignores a changed defaultValue on a normal re-render.
+  const [importOpen, setImportOpen] = useState(false);
+  const [importVersion, setImportVersion] = useState(0);
+
   switch (stage) {
     case "type":
       return (
@@ -294,19 +486,37 @@ function ItemStageContent({
         <>
           <Field label="Name">
             <input
+              key={`name-${importVersion}`}
               required
               defaultValue={item.name}
               onBlur={(e) => onChange({ name: e.target.value })}
               className="min-h-[44px] rounded-xl border border-stone-300 px-3"
             />
           </Field>
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="min-h-[44px] rounded-xl border border-stone-300 text-sm font-medium text-stone-600"
+          >
+            🔍 Import from ExerciseDB
+          </button>
           <Field label="Explanation">
             <textarea
+              key={`explanation-${importVersion}`}
               defaultValue={item.explanation}
               onBlur={(e) => onChange({ explanation: e.target.value })}
               className="rounded-xl border border-stone-300 px-3 py-2"
             />
           </Field>
+          <ExerciseImportDrawer
+            open={importOpen}
+            onClose={() => setImportOpen(false)}
+            onImport={(fields) => {
+              onChange(fields);
+              setImportVersion((v) => v + 1);
+            }}
+            onError={onError}
+          />
         </>
       );
     case "measure":

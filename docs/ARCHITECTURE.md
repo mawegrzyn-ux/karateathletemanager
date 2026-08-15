@@ -1357,6 +1357,44 @@ coach-run attendance) — this is personal athlete itinerary planning.
   *view* an athlete's kata posts already can, via that athlete's own
   social profile feed, since kata-tagged posts render there too
   (`ShareBadge` gained a `"kata"` case: 🥋 name, style, WKF #).
+- **AscendAPI exercise import** (Training modules): a coach building an
+  exercise item can search AscendAPI's ExerciseDB (RapidAPI) instead of
+  typing/uploading name, explanation, video, and image by hand. Key
+  storage mirrors the existing Brave/Osu pattern
+  (`registerSecretRoutes("/ascendapi-key", "ascendapi_key",
+  "ASCENDAPI_KEY")` in `settings.js`, admin-only, entered at **More →
+  Configuration → AscendAPI key**). `api/src/utils/ascendApi.js` holds
+  the shared key lookup + fetch wrapper against
+  `edb-with-videos-and-images-by-ascendapi.p.rapidapi.com`, used by two
+  routers: `api/src/routes/ascendApi.js` (admin-only raw passthrough
+  backing that settings page's "Test connection" panel — kept as a
+  standing debug tool, not just scaffolding) and
+  `api/src/routes/exerciseSearch.js` (`coach`-authorized, the real
+  feature) — `GET /exercise-search?name=&cursor=` normalizes AscendAPI's
+  list response (`name` fuzzy-matches by relevance upstream, not a
+  strict substring; cursor-paginated) down to just what a result row
+  needs, and `GET /exercise-search/:exerciseId` fetches that exercise's
+  detail and maps it onto `nk_training_module_items`' shape:
+  `name`→`name`, `overview` + numbered `instructions[]`→`explanation`,
+  `videoUrl`→`video_url`, `imageUrls["720p"]` (falling back to the plain
+  `imageUrl`)→`image_url` — `sets`/`reps`/`duration_seconds` stay
+  coach-entered since AscendAPI doesn't provide those. On the frontend,
+  `admin/TrainingModules.tsx`'s `ExerciseImportDrawer` (search box +
+  result list, tap a result to import) sits on the exercise-item
+  wizard's existing "name" stage (`ItemStageContent`) behind an "🔍
+  Import from ExerciseDB" button, and hands back
+  `{name, explanation, video_url, image_url}` via the same `onChange`
+  every other field on that stage already uses. The name/explanation
+  inputs are normally uncontrolled (`defaultValue` + `onBlur`, matching
+  the app's own field-saves-itself convention) so an import's `onChange`
+  alone wouldn't visually update them — a local `importVersion` counter,
+  bumped on every import, is used as part of their `key` to force a
+  remount and pick up the new `defaultValue`; the "media" stage's
+  `MediaField`s are already `value`-controlled so they update for free.
+  Not configured yet → `exerciseSearch.js` returns 400 with a message
+  the drawer shows inline rather than an error toast, so a club that
+  hasn't set up a key just sees "ask an admin" text instead of a broken
+  search box.
 - **Events and itinerary items share one type set**: no more hardcoded
   `EVENT_TYPES`/`ITEM_TYPES` arrays — event and item types are now the
   per-club `nk_event_types` rows described below, and both event and item
