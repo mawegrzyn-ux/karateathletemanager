@@ -45,4 +45,46 @@ async function ascendApiRequest(path, query) {
   return body;
 }
 
-module.exports = { RAPIDAPI_HOST, getAscendApiKey, ascendApiRequest };
+// Shared by api/src/routes/exerciseSearch.js (the coach-facing search UI
+// in Training modules) and api/src/mcp/tools.js (Osu's search_exercises/
+// get_exercise_details tools) - one normalization so the two surfaces
+// can't drift apart on field names.
+function normalizeExerciseListItem(e) {
+  return {
+    exerciseId: e.exerciseId,
+    name: (e.name || "").trim(),
+    imageUrl: e.imageUrl ?? null,
+    bodyParts: Array.isArray(e.bodyParts) ? e.bodyParts : [],
+    equipments: Array.isArray(e.equipments) ? e.equipments : [],
+    exerciseType: e.exerciseType ?? null,
+  };
+}
+
+// Maps one AscendAPI exercise detail onto name/explanation/video_url/
+// image_url - the exact shape a training-module exercise item (or Osu's
+// create_training_session item) already has, so both callers can hand
+// this straight through rather than each doing their own translation.
+function normalizeExerciseDetail(d) {
+  const instructions = Array.isArray(d.instructions) ? d.instructions : [];
+  const explanationParts = [];
+  if (d.overview) explanationParts.push(String(d.overview).trim());
+  if (instructions.length > 0) {
+    explanationParts.push(
+      instructions.map((step, i) => `${i + 1}. ${step}`).join("\n")
+    );
+  }
+  return {
+    name: (d.name || "").trim(),
+    explanation: explanationParts.join("\n\n") || null,
+    video_url: d.videoUrl ?? null,
+    image_url: d.imageUrls?.["720p"] ?? d.imageUrl ?? null,
+  };
+}
+
+module.exports = {
+  RAPIDAPI_HOST,
+  getAscendApiKey,
+  ascendApiRequest,
+  normalizeExerciseListItem,
+  normalizeExerciseDetail,
+};

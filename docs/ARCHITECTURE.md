@@ -2661,18 +2661,32 @@ never drift apart on what a tool does or what it's called:
   reply text, per `osu.js`'s system prompt - says "session," never
   "module," since the model otherwise picks up "module" from the tool
   surface regardless of prose instructions telling it to say "session").
-  The latter three exist so Osu can build a training session end-to-end
-  from a request like "make a warm-up for 8-year-olds": research
-  technique via `web_search`, find a demo clip per exercise via
-  `search_videos` (skipped for an item if nothing suitable turns up - not
-  mandatory), then call `create_training_session` once the shape is
-  concrete. Osu's system prompt (`osu.js`) tells it to ask a clarifying
-  question first (focus area, skill level, roughly how many exercises,
-  sets/reps vs. timed vs. distance) rather than guess when a
-  training-session request is too vague to build from - explicitly
-  closing the "fill it with a reasonable default" loophole, since a
-  plausible guess is still a guess - and never to invent a `video_url`
-  that didn't come from `search_videos` or the admin themselves.
+  Also `search_exercises` and `get_exercise_details` (AscendAPI's
+  ExerciseDB, same `api/src/utils/ascendApi.js` helper the coach-facing
+  `exerciseSearch.js`/Training-modules import picker uses -
+  `normalizeExerciseListItem`/`normalizeExerciseDetail` are shared
+  between the two so they can't drift apart on field names): search by
+  name (fuzzy, by relevance), then fetch one match's real
+  name/explanation/`video_url` to drop straight into a
+  `create_training_session` item. ExerciseDB only covers general
+  fitness/gym exercises, not karate-specific techniques or drills - the
+  system prompt tells Osu to reach for `search_exercises` first for the
+  former and fall back to `search_videos` for the latter, rather than
+  querying ExerciseDB for something like "roundhouse kick" that it won't
+  have. The latter three (plus these two) exist so Osu can build a
+  training session end-to-end from a request like "make a warm-up for
+  8-year-olds": research technique via `web_search`, find real content
+  per exercise via `search_exercises`/`get_exercise_details` or
+  `search_videos` as appropriate (skipped for an item if nothing
+  suitable turns up - not mandatory), then call `create_training_session`
+  once the shape is concrete. Osu's system prompt (`osu.js`) tells it to
+  ask a clarifying question first (focus area, skill level, roughly how
+  many exercises, sets/reps vs. timed vs. distance) rather than guess
+  when a training-session request is too vague to build from -
+  explicitly closing the "fill it with a reasonable default" loophole,
+  since a plausible guess is still a guess - and never to invent a
+  `video_url` that didn't come from one of those tools or the admin
+  themselves.
   `list_training_sessions` (search existing sessions by title) and
   `create_training_program` extend this to Training Programmes: a
   programme's weekly pattern references *existing* sessions by id, so

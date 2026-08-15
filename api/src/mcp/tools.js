@@ -11,6 +11,11 @@
 // same way api/src/utils/activateUser.js does.
 const pool = require("../db/pool");
 const { activateUser } = require("../utils/activateUser");
+const {
+  ascendApiRequest,
+  normalizeExerciseListItem,
+  normalizeExerciseDetail,
+} = require("../utils/ascendApi");
 
 // Server "today" - UTC-based, same convention the rest of the backend uses
 // for date strings (see events.js) and that the frontend's todayStr() mirrors.
@@ -361,6 +366,50 @@ const tools = [
     },
   },
   {
+    name: "search_exercises",
+    description:
+      "Search AscendAPI's ExerciseDB (11,000+ general fitness/gym exercises - squats, presses, lunges, etc.) by name; fuzzy-matches by relevance, not a strict substring. Returns each match's exerciseId, name, bodyParts, equipments, and exerciseType, but NOT its video or instructions - use get_exercise_details on the specific one you pick for that. This only covers general conditioning exercises, not karate-specific techniques/drills (kicks, strikes, kata elements) - use search_videos for those instead, since ExerciseDB won't have them. Requires an AscendAPI key to be configured (More > Configuration > AscendAPI key); if it isn't, this throws a clear error rather than a confusing one.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Exercise name to search for, e.g. 'squat' or 'push up'." },
+        limit: { type: "integer", description: "Max results, default 10, capped at 20." },
+      },
+      required: ["query"],
+    },
+    async handler({ query, limit }) {
+      if (!query || !query.trim()) throw new Error("query is required");
+      const cappedLimit = limit ? Math.min(Math.max(Number(limit), 1), 20) : 10;
+      const body = await ascendApiRequest("/api/v1/exercises", {
+        name: query,
+        limit: cappedLimit,
+      });
+      const results = (body.data ?? []).map(normalizeExerciseListItem);
+      return { results };
+    },
+  },
+  {
+    name: "get_exercise_details",
+    description:
+      "Fetches one AscendAPI exercise's full detail by exerciseId (from search_exercises): name, explanation (overview + numbered instructions), and a demonstration video_url. Use this right before adding it to create_training_session's items, so the explanation/video_url come from real instructional content instead of being invented - pass the returned name/explanation/video_url straight through into that item.",
+    input_schema: {
+      type: "object",
+      properties: {
+        exercise_id: { type: "string", description: "An exerciseId from search_exercises, e.g. exr_41n2ha5iPFpN3hEJ." },
+      },
+      required: ["exercise_id"],
+    },
+    async handler({ exercise_id }) {
+      if (!exercise_id || !exercise_id.trim()) {
+        throw new Error("exercise_id is required");
+      }
+      const body = await ascendApiRequest(
+        `/api/v1/exercises/${encodeURIComponent(exercise_id.trim())}`
+      );
+      return normalizeExerciseDetail(body.data ?? {});
+    },
+  },
+  {
     name: "list_training_session_types",
     description:
       "List the training categories (e.g. Cardio, Strength) a training session can optionally be tagged with, so a new one can be matched to an existing category instead of left untyped.",
@@ -375,7 +424,7 @@ const tools = [
   {
     name: "create_training_session",
     description:
-      "Creates a training session: a title/explanation plus an ordered list of exercise/rest items, each optionally carrying a demonstration video_url (see search_videos), sets/reps or duration_seconds or distance_meters, and its own explanation. Do NOT call this speculatively - only once the focus/goal, an appropriate skill or age level, roughly how many exercises, and each exercise's measurement format (sets/reps vs. timed vs. distance) are all actually known from the conversation. If any of those is still vague or unstated, ask about it and wait for the reply first; do not fill it with a plausible-sounding guess just to avoid asking.",
+      "Creates a training session: a title/explanation plus an ordered list of exercise/rest items, each optionally carrying a demonstration video_url (see search_videos, or get_exercise_details for a general fitness exercise found via search_exercises), sets/reps or duration_seconds or distance_meters, and its own explanation. Do NOT call this speculatively - only once the focus/goal, an appropriate skill or age level, roughly how many exercises, and each exercise's measurement format (sets/reps vs. timed vs. distance) are all actually known from the conversation. If any of those is still vague or unstated, ask about it and wait for the reply first; do not fill it with a plausible-sounding guess just to avoid asking.",
     input_schema: {
       type: "object",
       properties: {
@@ -397,7 +446,8 @@ const tools = [
               explanation: { type: "string" },
               video_url: {
                 type: "string",
-                description: "A demonstration video link, ideally from search_videos.",
+                description:
+                  "A demonstration video link, ideally from get_exercise_details (for a general fitness exercise) or search_videos (for a karate-specific technique).",
               },
               sets: { type: "integer" },
               reps: { type: "integer" },
