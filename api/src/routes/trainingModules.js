@@ -13,7 +13,8 @@ const MAX_DISTANCE_METERS = 100000; // 100km
 
 const MODULE_QUERY = `
   SELECT tm.id, tm.title, tm.explanation, tm.type_id, tmt.name AS type_name,
-    tm.icon, tmt.icon AS type_icon, tmt.bg_color AS type_bg_color, tm.archived,
+    tm.icon, tmt.icon AS type_icon, tmt.icon_url AS type_icon_url,
+    tmt.bg_color AS type_bg_color, tm.archived,
     tm.created_at, tm.updated_at,
     COALESCE(
       json_agg(json_build_object(
@@ -28,7 +29,7 @@ const MODULE_QUERY = `
   FROM nk_training_modules tm
   LEFT JOIN nk_training_module_types tmt ON tmt.id = tm.type_id
   LEFT JOIN nk_training_module_items i ON i.module_id = tm.id
-  GROUP BY tm.id, tmt.name, tmt.icon, tmt.bg_color
+  GROUP BY tm.id, tmt.name, tmt.icon, tmt.icon_url, tmt.bg_color
 `;
 
 function validIcon(icon) {
