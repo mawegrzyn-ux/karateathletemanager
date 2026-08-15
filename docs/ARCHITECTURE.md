@@ -1439,18 +1439,33 @@ coach-run attendance) — this is personal athlete itinerary planning.
   `roles={["coach"]}` — `is_admin` bypass covers admins), the standard
   list+drawer page with a club switcher (hidden for single-club coaches,
   a search-`Drawer` `ClubPicker` for multi-club ones) and an Icon
-  (emoji text input) + Color (`<input type="color">`) pair per type.
+  (emoji text input) + Color (`<input type="color">`) pair per type, plus
+  an `icon_url` (`MediaField`, admin-uploaded, same pattern as
+  `photo_url`/`video_url` elsewhere) that takes precedence over the plain
+  emoji when set — shared with `nk_training_module_types` (same column,
+  same `MediaField` in `admin/TrainingModuleTypes.tsx`).
   `typeInfo(eventTypes, clubId, key)` (`Schedule.tsx`) is the shared
-  lookup every view uses to render a type's icon/label/bg_color: exact
-  `(club_id, key)` match → any `is_standard` row sharing `key` → a small
-  hardcoded `FALLBACK_TYPE_LABELS`/`FALLBACK_TYPE_ICONS` map, so a fetch
+  lookup every view uses to render a type's icon/icon_url/label/bg_color:
+  exact `(club_id, key)` match → any `is_standard` row sharing `key` → a
+  small hardcoded `FALLBACK_TYPE_LABELS`/`FALLBACK_TYPE_ICONS` map (no
+  `icon_url` fallback - the hardcoded map is emoji-only), so a fetch
   failure or fully-undetermined-club event never renders blank.
   **Icon+bg strip**: every view (List, Day, Week, Month) renders a
-  type's `icon` on its `bg_color` as a small leading strip/badge — the
-  same visual language the overdue `!` marker already used (a colored
-  block occupying part of the tile) — with the overdue marker taking
-  priority over the type strip whenever both would apply to the same
-  event.
+  type's icon (via the shared `TypeIcon`, `ui.tsx` — `iconUrl` wins over
+  `icon` when set, sized in px so an uploaded image and the emoji
+  fallback occupy the same visual footprint; not usable inside a native
+  `<select><option>`, which stays emoji-only) on its `bg_color` as a
+  small leading strip/badge — the same visual language the overdue `!`
+  marker already used (a colored block occupying part of the tile) —
+  with the overdue marker taking priority over the type strip whenever
+  both would apply to the same event. An event-level icon override
+  (`nk_events.icon`, below) or a training-module-inherited icon are
+  always plain emoji with no image of their own, so `eventTypeInfo`'s
+  `icon_url` is only ever non-null on the final, type-level fallback -
+  same reasoning covers `moduleIconUrl` (`TrainingModuleView.tsx`) for a
+  training-module-type's own `icon_url`, which
+  `admin/TrainingModules.tsx`'s list rows and grouped-by-type section
+  headers render the same way.
 - **Per-event icon override**: `nk_events.icon` (nullable `VARCHAR(8)`)
   lets a user override the leading icon for one specific schedule entry
   instead of always inheriting its event type's shared `nk_event_types`

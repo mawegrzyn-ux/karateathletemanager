@@ -16,12 +16,14 @@ import {
   Toast,
   Badge,
   SwipeableRow,
+  TypeIcon,
 } from "../../components/ui";
 import { todayStr } from "../../utils/dates";
 import {
   TrainingModuleView,
   itemSummary,
   moduleIcon,
+  moduleIconUrl,
   type TrainingModule,
   type TrainingModuleItem,
   type TrainingModuleItemType as ItemType,
@@ -60,6 +62,7 @@ interface TrainingModuleType {
   id: number;
   name: string;
   icon: string | null;
+  icon_url: string | null;
   bg_color: string;
 }
 
@@ -1604,7 +1607,13 @@ export default function TrainingModules({
     ? (() => {
         const map = new Map<
           string,
-          { key: string; label: string; icon: string | null; modules: TrainingModule[] }
+          {
+            key: string;
+            label: string;
+            icon: string | null;
+            iconUrl: string | null;
+            modules: TrainingModule[];
+          }
         >();
         for (const m of filtered) {
           const key = m.type_id != null ? String(m.type_id) : "none";
@@ -1613,6 +1622,7 @@ export default function TrainingModules({
               key,
               label: m.type_name ?? "No type",
               icon: m.type_icon,
+              iconUrl: m.type_icon_url,
               modules: [],
             });
           }
@@ -1685,7 +1695,7 @@ export default function TrainingModules({
             filter: "drop-shadow(0 2px 2px rgba(28,25,23,0.35))",
           }}
         >
-          {moduleIcon(m) ?? "🏋️"}
+          <TypeIcon icon={moduleIcon(m) ?? "🏋️"} iconUrl={moduleIconUrl(m)} size={20} />
         </div>
         {content}
       </div>
@@ -1749,7 +1759,11 @@ export default function TrainingModules({
                     headers, so the global h2 rule (Oswald, uppercase,
                     tracked) gives both an identical look. */}
                 <h2 className="flex items-center gap-1 px-1 text-sm font-semibold text-stone-500">
-                  {group.icon && <span aria-hidden>{group.icon}</span>}
+                  {(group.icon || group.iconUrl) && (
+                    <span aria-hidden>
+                      <TypeIcon icon={group.icon} iconUrl={group.iconUrl} size={14} />
+                    </span>
+                  )}
                   {group.label}
                 </h2>
                 {group.modules.map((m) => (
@@ -1813,7 +1827,7 @@ export default function TrainingModules({
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-stone-100 text-lg"
                     style={selected ? { backgroundColor: "rgba(255,255,255,0.5)" } : undefined}
                   >
-                    {t.icon ?? "🏷"}
+                    <TypeIcon icon={t.icon ?? "🏷"} iconUrl={t.icon_url} size={20} />
                   </span>
                   <span
                     className={`text-xs font-medium ${

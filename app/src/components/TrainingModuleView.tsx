@@ -24,6 +24,7 @@ export interface TrainingModule {
   type_name: string | null;
   icon: string | null;
   type_icon: string | null;
+  type_icon_url: string | null;
   type_bg_color: string | null;
   archived: boolean;
   items: TrainingModuleItem[];
@@ -31,9 +32,18 @@ export interface TrainingModule {
 
 // A module's effective icon: its own override if set, else its type's
 // default icon (null if neither is set - callers fall back further, e.g.
-// to the schedule event type's icon).
+// to the schedule event type's icon). A module has no image of its own
+// (only its type does, via type_icon_url) - moduleIconUrl below is null
+// whenever the plain override wins, same reasoning as eventTypeInfo's
+// icon_url in Schedule.tsx.
 export function moduleIcon(module: Pick<TrainingModule, "icon" | "type_icon">) {
   return module.icon ?? module.type_icon ?? null;
+}
+
+export function moduleIconUrl(
+  module: Pick<TrainingModule, "icon" | "type_icon_url">
+) {
+  return module.icon ? null : module.type_icon_url ?? null;
 }
 
 export function itemSummary(it: TrainingModuleItem) {

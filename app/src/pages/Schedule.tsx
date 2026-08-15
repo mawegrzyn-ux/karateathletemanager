@@ -25,6 +25,7 @@ import {
   MediaField,
   Modal,
   Toast,
+  TypeIcon,
   uploadFile,
   SwipeableRow,
   SWIPE_THRESHOLD,
@@ -130,6 +131,7 @@ interface EventTypeRow {
   key: string;
   label: string;
   icon: string;
+  icon_url: string | null;
   bg_color: string;
   is_standard: boolean;
 }
@@ -233,6 +235,7 @@ function typeInfo(eventTypes: EventTypeRow[], clubId: number | null, key: string
   return {
     label: match?.label ?? FALLBACK_TYPE_LABELS[key] ?? key,
     icon: match?.icon ?? FALLBACK_TYPE_ICONS[key] ?? "📌",
+    icon_url: match?.icon_url ?? null,
     bg_color: match?.bg_color ?? "#78716c",
   };
 }
@@ -258,14 +261,22 @@ function inheritedIcon(
 }
 
 // Same as typeInfo, but resolves the icon through the full inheritance
-// chain: a per-event custom icon override (event.icon) always wins,
-// otherwise falls back to inheritedIcon() above.
+// chain: a per-event custom icon override (event.icon) always wins, then
+// the linked training module's own icon, otherwise the plain event type.
+// icon_url only ever comes from that last, type-level fallback - an
+// event-level override and a training module's own icon are always a
+// plain emoji string, with no image concept of their own.
 function eventTypeInfo(eventTypes: EventTypeRow[], event: Event, modules: TrainingModule[]) {
   const info = typeInfo(eventTypes, event.club_id, event.event_type);
-  const icon = event.icon
-    ? event.icon
-    : inheritedIcon(eventTypes, modules, event.club_id, event.event_type, event.training_module_id);
-  return { ...info, icon };
+  if (event.icon) {
+    return { ...info, icon: event.icon, icon_url: null };
+  }
+  if (event.training_module_id) {
+    const module = modules.find((m) => m.id === event.training_module_id);
+    const inherited = module ? moduleIcon(module) : null;
+    if (inherited) return { ...info, icon: inherited, icon_url: null };
+  }
+  return info;
 }
 
 const EMPTY_FORM = {
@@ -634,13 +645,17 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   }, [events, query, typeFilters, hideCompleted, eventTypes]);
 
   const typeFilterOptions = useMemo(() => {
-    const seen = new Map<string, { label: string; icon: string; bg_color: string }>();
+    const seen = new Map<
+      string,
+      { label: string; icon: string; icon_url: string | null; bg_color: string }
+    >();
     for (const e of events ?? []) {
       if (!seen.has(e.event_type)) {
         const info = typeInfo(eventTypes, e.club_id, e.event_type);
         seen.set(e.event_type, {
           label: info.label,
           icon: info.icon,
+          icon_url: info.icon_url,
           bg_color: info.bg_color,
         });
       }
@@ -1171,7 +1186,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                     className="flex h-9 w-9 items-center justify-center rounded-full text-lg"
                     style={{ backgroundColor: selected ? "rgba(255,255,255,0.5)" : t.bg_color }}
                   >
-                    {t.icon}
+                    <TypeIcon icon={t.icon} iconUrl={t.icon_url} size={20} />
                   </span>
                   <span
                     className={`text-xs font-medium ${
@@ -1354,7 +1369,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                   transition: segTransition,
                                 }}
                               >
-                                {info.icon}
+                                <TypeIcon icon={info.icon} iconUrl={info.icon_url} size={20} />
                                 {showRightChevron && (
                                   <span className="absolute left-0.5 text-2xl font-black leading-none text-white/80">
                                     ▶
@@ -1800,7 +1815,7 @@ function CreateEventWizard({
                     className="flex h-9 w-9 items-center justify-center rounded-full text-lg"
                     style={{ backgroundColor: "rgba(255,255,255,0.5)" }}
                   >
-                    {t.icon}
+                    <TypeIcon icon={t.icon} iconUrl={t.icon_url} size={20} />
                   </span>
                   <span className="text-xs font-medium text-white">{t.label}</span>
                 </button>
@@ -2486,7 +2501,11 @@ function EventDetail({
       ) : (
         <>
           <Badge>
-            {eventTypeInfo(eventTypes, event, modules).icon}{" "}
+            <TypeIcon
+              icon={eventTypeInfo(eventTypes, event, modules).icon}
+              iconUrl={eventTypeInfo(eventTypes, event, modules).icon_url}
+              size={14}
+            />{" "}
             {eventTypeInfo(eventTypes, event, modules).label}
           </Badge>
           <p className="text-base font-semibold text-stone-800">{eventWhenLabel(event)}</p>
@@ -2859,11 +2878,14 @@ function MonthView({
                 {Number(date.slice(8, 10))}
               </span>
               <div className="flex flex-wrap justify-center gap-0.5 leading-none">
-                {dayEvents.slice(0, 3).map((e) => (
-                  <span key={e.id} title={e.title}>
-                    {eventTypeInfo(eventTypes, e, modules).icon}
-                  </span>
-                ))}
+                {dayEvents.slice(0, 3).map((e) => {
+                  const info = eventTypeInfo(eventTypes, e, modules);
+                  return (
+                    <span key={e.id} title={e.title}>
+                      <TypeIcon icon={info.icon} iconUrl={info.icon_url} size={10} />
+                    </span>
+                  );
+                })}
                 {dayEvents.length > 3 && (
                   <span className="text-[10px] text-stone-500">
                     +{dayEvents.length - 3}
@@ -2960,17 +2982,20 @@ function WeekView({
                 </span>
                 {allDay.length > 0 && (
                   <div className="flex gap-0.5">
-                    {allDay.slice(0, 3).map((e) => (
-                      <button
-                        key={e.id}
-                        type="button"
-                        title={e.title}
-                        onClick={() => onOpenEvent(e)}
-                        className="text-xs leading-none"
-                      >
-                        {eventTypeInfo(eventTypes, e, modules).icon}
-                      </button>
-                    ))}
+                    {allDay.slice(0, 3).map((e) => {
+                      const info = eventTypeInfo(eventTypes, e, modules);
+                      return (
+                        <button
+                          key={e.id}
+                          type="button"
+                          title={e.title}
+                          onClick={() => onOpenEvent(e)}
+                          className="leading-none"
+                        >
+                          <TypeIcon icon={info.icon} iconUrl={info.icon_url} size={11} />
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>,
@@ -3007,7 +3032,7 @@ function WeekView({
                       }`}
                       style={{ left, width, borderTopColor: info.bg_color }}
                     >
-                      {info.icon} {e.title}
+                      <TypeIcon icon={info.icon} iconUrl={info.icon_url} size={9} /> {e.title}
                     </button>
                   );
                 })}
@@ -3149,7 +3174,7 @@ function DayView({
                   className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm"
                   style={{ backgroundColor: info.bg_color }}
                 >
-                  {info.icon}
+                  <TypeIcon icon={info.icon} iconUrl={info.icon_url} size={13} />
                 </span>
                 <span className="truncate">{e.title}</span>
               </button>
@@ -3231,7 +3256,7 @@ function DayView({
                     className="flex w-6 shrink-0 items-center justify-center text-xs"
                     style={{ backgroundColor: info.bg_color }}
                   >
-                    {info.icon}
+                    <TypeIcon icon={info.icon} iconUrl={info.icon_url} size={12} />
                   </div>
                 )}
                 <div className="flex min-w-0 flex-1 flex-col justify-center px-2 py-0.5 text-left">
