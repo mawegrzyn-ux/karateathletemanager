@@ -3397,6 +3397,17 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # sw.js/workbox-*.js keep stable filenames across deploys (unlike the
+    # content-hashed app bundle below), so they're carved out of the 1y
+    # cache - otherwise the browser never re-fetches them to notice a new
+    # precache manifest, defeating registerType: "autoUpdate".
+    location ^~ /sw.js {
+        add_header Cache-Control "no-cache";
+    }
+    location ^~ /workbox- {
+        add_header Cache-Control "no-cache";
+    }
+
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2|woff|ttf)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
@@ -3461,7 +3472,15 @@ line below "Log out" (`v<sha> · built <date>`) — since the PWA's service
 worker (`registerType: "autoUpdate"`) can leave a device on a stale
 cached build for a while, this is how anyone (including without server
 access) confirms whether what they're looking at actually is the latest
-deploy, by comparing the shown SHA against the tip of `main`.
+deploy, by comparing the shown SHA against the tip of `main`. Nginx's own
+1-year `immutable` cache on static assets (see "Nginx" above) used to
+make this worse than necessary — it was also catching `sw.js` and
+`workbox-*.js`, which keep stable filenames across deploys unlike the
+content-hashed app bundle, so the browser had no reason to ever re-fetch
+them and notice a new precache manifest. Those two are now carved out
+with their own `Cache-Control: no-cache` `location` blocks, so browsers
+still check on their own cadence but at least aren't being told to
+trust a year-old copy.
 
 ### Smoke tests
 
