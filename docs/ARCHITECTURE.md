@@ -1528,11 +1528,18 @@ coach-run attendance) — this is personal athlete itinerary planning.
 - **New Event's Type stage is the wizard's only entry point** — the old
   "+" → choice-sheet (New event / Training programme) → Type grid detour
   is gone; the floating "+" opens straight onto the Type grid (still
-  stage 1 of the wizard), with a plain "📋 Enroll in a training programme
-  instead" text link under the grid for the rarer bulk-enroll flow
+  stage 1 of the wizard). The grid also reorders and gains a tile of its
+  own for the bulk-enroll flow: `isTrainingType` (matches "training"
+  case-insensitively against a type's `key` or `label`, so it also picks
+  up any custom club type named similarly, not just the two standard
+  `training`/`training_camp` ones) pulls every training-flavored type out
+  of the otherwise alphabetical order and groups them as a contiguous
+  block at the end of the grid, and an "Enroll in programme" tile
   (`onSwitchToProgramEnroll` closes the wizard drawer and opens
   `EnrollInProgramDrawer`, same destination the old choice sheet's second
-  option led to).
+  option led to) renders right after that block, styled identically to
+  the real type tiles even though it isn't backed by an `nk_event_types`
+  row - so training-related choices read as one visual cluster.
 - **New Event's End date/time defaults to the Start, not +2h**, and stays
   mirrored to Start as the user edits Start — `onStartDateChange`/
   `onStartTimeChange` in `CreateEventWizard` only carry the End field
