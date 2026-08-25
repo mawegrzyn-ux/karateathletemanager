@@ -1656,16 +1656,12 @@ export default function TrainingModules({
             {m.items.map(itemSummary).join(", ")}
           </span>
         )}
-        {canEdit && (
-          <div className="absolute right-2 top-2 z-10">
-            <button
-              type="button"
-              onClick={() => updateModule(m.id, { archived: !m.archived })}
-              aria-label={m.archived ? `Unarchive ${m.title}` : `Archive ${m.title}`}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-stone-500"
-            >
-              {m.archived ? "📤" : "📦"}
-            </button>
+        {m.archived && (
+          <div
+            aria-hidden
+            className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center text-lg text-stone-400"
+          >
+            📦
           </div>
         )}
         <button
@@ -1705,9 +1701,11 @@ export default function TrainingModules({
     // (opens ScheduleSessionDrawer); swipe right past the deep threshold
     // to archive/unarchive - a deliberate deep swipe since it's a status
     // change, not a light action, even though it's non-destructive and
-    // needs no confirmation (see the row's own 📦/📤 tap icon above,
-    // which the swipe is an additional way to trigger, not a
-    // replacement for).
+    // needs no confirmation. This is the only way to archive/unarchive a
+    // module now - the row used to also have a tap-to-archive 📦/📤 icon
+    // in the corner, but that was redundant with the swipe, so it's gone;
+    // the 📦 still shown in that corner (above, in `content`) is now
+    // purely a status indicator on an archived row, not a control.
     return (
       <SwipeableRow
         leftOptions={[{ label: "📅 Schedule", onTrigger: () => setSchedulingModule(m) }]}

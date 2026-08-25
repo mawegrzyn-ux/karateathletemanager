@@ -103,13 +103,18 @@ in `AthleteSocialProfile.tsx`), pass `iconOnly` rather than rolling a
 separate button; the confirm `Modal` behavior is unchanged either way.
 
 For an entity that supports **archiving** (e.g. Training modules), the
-list row's icon-only action is an archive/unarchive toggle (📦 to
-archive, 📤 to unarchive) instead of an icon-only delete — archiving is
-reversible and non-destructive, so it needs no confirmation, unlike
-`DeleteButton`. Actual deletion moves entirely into the entity's detail
-`Drawer`, as a full `DeleteButton` (not `iconOnly`) at the bottom, same
-placement as any other detail-drawer delete. This still honors "never
-inline on the list row" for the one truly destructive action; only the
+list row has no icon-only tap control for it at all — archive/unarchive
+is triggered by swiping the row (a deliberate deep swipe, since it's a
+status change worth some intent behind it, even though it's reversible
+and non-destructive so it needs no confirmation, unlike `DeleteButton`).
+An archived row instead shows a plain, non-interactive 📦 in the same
+top-right corner spot as a status indicator — nothing renders there when
+the row isn't archived, and nothing renders there for `📤`/unarchiving
+either, since that's just "archived or not," not a second icon to tap.
+Actual deletion moves entirely into the entity's detail `Drawer`, as a
+full `DeleteButton` (not `iconOnly`) at the bottom, same placement as any
+other detail-drawer delete. This still honors "never inline on the list
+row" for the one truly destructive action; only the
 reversible one gets a row-level shortcut.
 
 ## UI convention: search-based membership pickers
