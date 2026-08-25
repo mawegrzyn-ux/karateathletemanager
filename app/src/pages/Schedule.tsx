@@ -1757,6 +1757,18 @@ function CreateEventWizard({
           : true;
 
   const typesForClub = eventTypes.filter((t) => t.club_id === form.club_id);
+  // Training-flavored types (standard "Training"/"Training camp" plus any
+  // custom type a club named similarly) are pulled out of the otherwise
+  // alphabetical order and grouped as a contiguous block at the end of
+  // the grid, immediately followed by the "Enroll in a training
+  // programme" tile below - so everything training-related reads as one
+  // cluster instead of being scattered by alphabetical label order.
+  const isTrainingType = (t: EventTypeRow) =>
+    /training/i.test(t.key) || /training/i.test(t.label);
+  const typesForClubOrdered = [
+    ...typesForClub.filter((t) => !isTrainingType(t)),
+    ...typesForClub.filter(isTrainingType),
+  ];
 
   return (
     <div className="flex flex-col gap-4">
@@ -1790,7 +1802,7 @@ function CreateEventWizard({
             </Field>
           )}
           <div className="grid grid-cols-3 gap-3">
-            {typesForClub.map((t) => {
+            {typesForClubOrdered.map((t) => {
               const selected = form.event_type === t.key;
               return (
                 <button
@@ -1815,6 +1827,27 @@ function CreateEventWizard({
                 </button>
               );
             })}
+            {/* Not a real event type (no key/row in nk_event_types) - a
+                shortcut into the separate bulk-enroll flow, styled and
+                sized identically to the type tiles above and placed right
+                after the training-cluster group so it reads as part of
+                that same "training" cluster rather than a stray action. */}
+            <button
+              type="button"
+              onClick={onSwitchToProgramEnroll}
+              className="flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl p-2 text-center shadow-card"
+              style={{ backgroundColor: "#0d9488" }}
+            >
+              <span
+                className="flex h-9 w-9 items-center justify-center rounded-full text-lg"
+                style={{ backgroundColor: "rgba(255,255,255,0.5)" }}
+              >
+                <TypeIcon icon="📋" size={20} />
+              </span>
+              <span className="text-xs font-medium text-white">
+                Enroll in programme
+              </span>
+            </button>
           </div>
           {typesForClub.length === 0 && (
             <div className="flex flex-col gap-2">
@@ -1830,13 +1863,6 @@ function CreateEventWizard({
               </button>
             </div>
           )}
-          <button
-            type="button"
-            onClick={onSwitchToProgramEnroll}
-            className="min-h-[44px] text-center text-sm font-medium text-red-700"
-          >
-            📋 Enroll in a training programme instead
-          </button>
         </>
       )}
 
