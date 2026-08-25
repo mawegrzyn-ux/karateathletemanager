@@ -8,7 +8,7 @@ import { NavLink, Outlet, Route, Routes } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import { useProfileSwitching } from "./hooks/useProfileSwitching";
 import { feedbackTick } from "./utils/feedback";
-import { Avatar } from "./components/ui";
+import { Avatar, Toast, SWIPE_THRESHOLD } from "./components/ui";
 import { ProfileSwitchSheet } from "./components/ProfileSwitchSheet";
 import Schedule from "./pages/Schedule";
 import Athletes from "./pages/Athletes";
@@ -56,63 +56,63 @@ const PROFILE_LABELS: Record<string, string> = {
   referee: "Referee",
 };
 
-// Matches Schedule.tsx's DayView long-press-to-drag thresholds, for the
-// same feel across the app's two press-and-hold gestures.
-const LONG_PRESS_MS = 350;
-const MOVE_CANCEL_PX = 10;
+// How far sideways a swipe-up is allowed to drift and still count -
+// beyond this it reads as a diagonal/horizontal gesture instead.
+const SWIPE_SIDEWAYS_TOLERANCE_PX = SWIPE_THRESHOLD;
 
 function Shell() {
   const { user } = useAuth();
   const { canSwitch } = useProfileSwitching();
   const hasProfile = !!(user?.athlete_id || user?.coach_id || user?.referee_id);
   const [switcherOpen, setSwitcherOpen] = useState(false);
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressFiredRef = useRef(false);
+  const [profileToast, setProfileToast] = useState<string | null>(null);
   const pressStartRef = useRef<{ x: number; y: number } | null>(null);
+  const swipeFiredRef = useRef(false);
 
-  function clearLongPressTimer() {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
+  function showNoOtherProfileToast() {
+    setProfileToast("No other profile to switch to");
+    setTimeout(() => setProfileToast(null), 3000);
   }
 
-  // Press-and-hold the Profile tab to jump straight to the quick switcher
-  // (ProfileSwitchSheet) instead of navigating - only armed when there's
-  // actually more than one profile to switch between, so a single-profile
-  // account's long press does nothing extra. onClick below cancels the
-  // navigation a completed long press would otherwise still trigger on
-  // pointer-up, same justDraggedRef-style suppression DayView uses.
+  // Swipe up on the Profile tab to raise the quick switcher
+  // (ProfileSwitchSheet) instead of navigating - previously this was a
+  // press-and-hold, but on mobile browsers a stationary hold on a link
+  // trips the OS's own long-press context menu (copy link / open in new
+  // tab) before our own timer ever fires, so a real gesture (movement,
+  // not a hold) is used instead. Swiping with no other profile to switch
+  // to just surfaces a Toast rather than doing nothing silently. onClick
+  // below cancels the navigation a completed swipe would otherwise still
+  // trigger on pointer-up, same justDraggedRef-style suppression
+  // Schedule.tsx's DayView uses for its own drag gesture.
   function handleProfilePointerDown(e: ReactPointerEvent) {
-    if (!canSwitch) return;
     pressStartRef.current = { x: e.clientX, y: e.clientY };
-    clearLongPressTimer();
-    longPressTimerRef.current = setTimeout(() => {
-      longPressFiredRef.current = true;
-      feedbackTick(600);
-      setSwitcherOpen(true);
-    }, LONG_PRESS_MS);
+    swipeFiredRef.current = false;
   }
 
   function handleProfilePointerMove(e: ReactPointerEvent) {
-    if (!pressStartRef.current) return;
+    if (!pressStartRef.current || swipeFiredRef.current) return;
     const dx = e.clientX - pressStartRef.current.x;
     const dy = e.clientY - pressStartRef.current.y;
-    if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) {
-      clearLongPressTimer();
+    if (dy <= -SWIPE_THRESHOLD && Math.abs(dx) < SWIPE_SIDEWAYS_TOLERANCE_PX) {
+      swipeFiredRef.current = true;
       pressStartRef.current = null;
+      feedbackTick(600);
+      if (canSwitch) {
+        setSwitcherOpen(true);
+      } else {
+        showNoOtherProfileToast();
+      }
     }
   }
 
   function handleProfilePointerUp() {
-    clearLongPressTimer();
     pressStartRef.current = null;
   }
 
   function handleProfileClick(e: ReactMouseEvent) {
-    if (longPressFiredRef.current) {
+    if (swipeFiredRef.current) {
       e.preventDefault();
-      longPressFiredRef.current = false;
+      swipeFiredRef.current = false;
     }
   }
   const tabs = resolveNavTabs(
@@ -175,8 +175,9 @@ function Shell() {
           onPointerUp={handleProfilePointerUp}
           onPointerCancel={handleProfilePointerUp}
           onClick={handleProfileClick}
+          onContextMenu={(e) => e.preventDefault()}
           className={({ isActive }) =>
-            `relative flex min-h-[44px] w-24 flex-col items-center justify-center gap-0.5 pb-[env(safe-area-inset-bottom)] pl-2 pr-5 text-xs font-medium transition-colors ${
+            `relative flex min-h-[44px] w-24 touch-none select-none flex-col items-center justify-center gap-0.5 pb-[env(safe-area-inset-bottom)] pl-2 pr-5 text-xs font-medium transition-colors [-webkit-touch-callout:none] ${
               profilePhoto
                 ? "text-white"
                 : isActive
@@ -250,6 +251,7 @@ function Shell() {
         </div>
       </nav>
       <ProfileSwitchSheet open={switcherOpen} onClose={() => setSwitcherOpen(false)} />
+      {profileToast && <Toast message={profileToast} />}
     </div>
   );
 }
