@@ -1729,7 +1729,7 @@ function CreateEventWizard({
   setForm: Dispatch<SetStateAction<typeof EMPTY_FORM>>;
   formAthleteIds: number[];
   setFormAthleteIds: Dispatch<SetStateAction<number[]>>;
-  onSubmit: () => void;
+  onSubmit: () => Promise<void>;
   clubs: Club[];
   eventTypes: EventTypeRow[];
   modules: TrainingModule[];
@@ -1743,6 +1743,22 @@ function CreateEventWizard({
   const stages = createStagesFor(canPickAthletes);
   const [stageIndex, setStageIndex] = useState(0);
   const stage = stages[stageIndex];
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  async function handleCreate() {
+    setSubmitError(null);
+    setSubmitting(true);
+    try {
+      await onSubmit();
+    } catch (err) {
+      setSubmitError(
+        err instanceof ApiError ? err.message : "Something went wrong"
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   function goBack() {
     setStageIndex((s) => Math.max(0, s - 1));
@@ -2123,32 +2139,38 @@ function CreateEventWizard({
       )}
 
       {stage !== "type" && (
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={goBack}
-            className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700"
-          >
-            ← Back
-          </button>
-          {stageIndex < stages.length - 1 ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
             <button
               type="button"
-              onClick={goNext}
-              disabled={!canProceed}
-              className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+              onClick={goBack}
+              disabled={submitting}
+              className="min-h-[44px] flex-1 rounded-xl border border-stone-300 font-medium text-stone-700 disabled:opacity-50"
             >
-              Next →
+              ← Back
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onSubmit}
-              disabled={!canProceed}
-              className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
-            >
-              Create
-            </button>
+            {stageIndex < stages.length - 1 ? (
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={!canProceed}
+                className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+              >
+                Next →
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={!canProceed || submitting}
+                className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
+              >
+                {submitting ? "Creating..." : "Create"}
+              </button>
+            )}
+          </div>
+          {submitError && (
+            <p className="text-sm text-red-700">{submitError}</p>
           )}
         </div>
       )}
