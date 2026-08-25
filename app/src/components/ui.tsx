@@ -990,63 +990,99 @@ export function Toast({ message }: { message: string }) {
   );
 }
 
+// Linearly interpolates between two "#rrggbb" colors, t clamped to [0,1] -
+// used by DurationDial to darken its completed-laps ring the further past
+// one revolution the current value sits.
+function interpolateHexColor(from: string, to: string, t: number) {
+  const clamped = Math.max(0, Math.min(1, t));
+  const parse = (hex: string) => [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+  const [r1, g1, b1] = parse(from);
+  const [r2, g2, b2] = parse(to);
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * clamped);
+  const toHex = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${toHex(mix(r1, r2))}${toHex(mix(g1, g2))}${toHex(mix(b1, b2))}`;
+}
+
 // A drag-around-the-ring duration picker (think a parking-meter app's "how
 // long" dial) - purely the ring/thumb, no label of its own, so callers
 // render whatever "27min" / "Ends 14:53" text fits their own context above
-// it. One lap of the ring is `max` minutes, snapped to `step` as the
-// pointer moves; dragging past a full lap just clamps at `max` rather than
-// wrapping into a second lap, so this is meant for the "typical session"
-// range (a couple of hours) with an exact-date/time field as the fallback
-// for anything longer, not a general-purpose clock.
+// it. One lap of the ring is `lapMinutes`, snapped to `step`, but dragging
+// isn't capped at one lap - it tracks the pointer's continuous rotation
+// (clockwise adds, counter-clockwise subtracts, floored at 0 minutes)
+// rather than recomputing an absolute angle each move, so winding all the
+// way around keeps adding instead of snapping back to the start. Once
+// there's at least one completed lap, the whole ring's base color darkens
+// (progressively, the more laps) so the still-brighter current-lap arc
+// drawn on top of it marks exactly where the head is, even after several
+// laps' worth of overlap.
 export function DurationDial({
   minutes,
   onChange,
-  max = 180,
+  lapMinutes = 180,
   step = 15,
   size = 220,
 }: {
   minutes: number;
   onChange: (minutes: number) => void;
-  max?: number;
+  lapMinutes?: number;
   step?: number;
   size?: number;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  // Raw (unsnapped) running total, separate from the snapped `minutes`
+  // prop, so a slow drag's sub-step movements still accumulate instead of
+  // being discarded by step-rounding on every single pointermove.
+  const rawMinutesRef = useRef(minutes);
+  const lastAngleRef = useRef<number | null>(null);
 
-  function minutesFromPoint(clientX: number, clientY: number) {
+  function angleFromPoint(clientX: number, clientY: number) {
     const el = svgRef.current;
-    if (!el) return minutes;
+    if (!el) return 0;
     const rect = el.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
     const angle = (Math.atan2(clientY - cy, clientX - cx) * 180) / Math.PI;
     // atan2 is 0° at 3 o'clock; rotate so 0° is 12 o'clock and increases
     // clockwise, matching how the arc itself is drawn below.
-    const fromTop = (angle + 90 + 360) % 360;
-    const raw = (fromTop / 360) * max;
-    const snapped = Math.round(raw / step) * step;
-    return Math.min(max, Math.max(0, snapped));
-  }
-
-  function handleDrag(e: ReactPointerEvent<SVGSVGElement>) {
-    const next = minutesFromPoint(e.clientX, e.clientY);
-    if (next !== minutes) {
-      feedbackTick(400);
-      onChange(next);
-    }
+    return (angle + 90 + 360) % 360;
   }
 
   function handlePointerDown(e: ReactPointerEvent<SVGSVGElement>) {
     e.currentTarget.setPointerCapture(e.pointerId);
-    handleDrag(e);
+    rawMinutesRef.current = minutes;
+    lastAngleRef.current = angleFromPoint(e.clientX, e.clientY);
   }
 
   function handlePointerMove(e: ReactPointerEvent<SVGSVGElement>) {
-    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-    handleDrag(e);
+    if (lastAngleRef.current === null || !e.currentTarget.hasPointerCapture(e.pointerId)) {
+      return;
+    }
+    const angle = angleFromPoint(e.clientX, e.clientY);
+    // Shortest signed delta from the last angle, so crossing the 360°/0°
+    // seam reads as "a few more degrees clockwise" instead of a ~360°
+    // jump backward.
+    let delta = angle - lastAngleRef.current;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    lastAngleRef.current = angle;
+
+    rawMinutesRef.current = Math.max(0, rawMinutesRef.current + (delta / 360) * lapMinutes);
+    const snapped = Math.max(0, Math.round(rawMinutesRef.current / step) * step);
+    if (snapped !== minutes) {
+      feedbackTick(400);
+      onChange(snapped);
+    }
   }
 
-  const tickCount = Math.round(max / step);
+  function handlePointerEnd() {
+    lastAngleRef.current = null;
+  }
+
+  const tickCount = Math.round(lapMinutes / step);
   const ticks = Array.from({ length: tickCount }, (_, i) => {
     const deg = (i / tickCount) * 360;
     const major = i % 4 === 0;
@@ -1067,7 +1103,12 @@ export function DurationDial({
 
   const radius = 78;
   const circumference = 2 * Math.PI * radius;
-  const fraction = Math.min(1, minutes / max);
+  const laps = Math.floor(minutes / lapMinutes);
+  const currentLapFraction = (minutes - laps * lapMinutes) / lapMinutes;
+  // Darkens further with more completed laps, capped so it doesn't wash
+  // out to black after just a handful of revolutions.
+  const completedColor =
+    laps > 0 ? interpolateHexColor("#b91c1c", "#450a0a", Math.min(laps, 5) / 5) : null;
 
   return (
     <svg
@@ -1077,10 +1118,15 @@ export function DurationDial({
       height={size}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
       className="touch-none select-none"
     >
       <circle cx={100} cy={100} r={radius} fill="none" stroke="#e7e5e4" strokeWidth={14} />
-      {fraction > 0 && (
+      {completedColor && (
+        <circle cx={100} cy={100} r={radius} fill="none" stroke={completedColor} strokeWidth={14} />
+      )}
+      {currentLapFraction > 0 && (
         <circle
           cx={100}
           cy={100}
@@ -1090,7 +1136,7 @@ export function DurationDial({
           strokeWidth={14}
           strokeLinecap="round"
           strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - fraction)}
+          strokeDashoffset={circumference * (1 - currentLapFraction)}
           transform="rotate(-90 100 100)"
         />
       )}
