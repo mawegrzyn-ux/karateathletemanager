@@ -1,6 +1,15 @@
+import {
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { NavLink, Outlet, Route, Routes } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
+import { useProfileSwitching } from "./hooks/useProfileSwitching";
+import { feedbackTick } from "./utils/feedback";
 import { Avatar } from "./components/ui";
+import { ProfileSwitchSheet } from "./components/ProfileSwitchSheet";
 import Schedule from "./pages/Schedule";
 import Athletes from "./pages/Athletes";
 import Grades from "./pages/Grades";
@@ -47,9 +56,65 @@ const PROFILE_LABELS: Record<string, string> = {
   referee: "Referee",
 };
 
+// Matches Schedule.tsx's DayView long-press-to-drag thresholds, for the
+// same feel across the app's two press-and-hold gestures.
+const LONG_PRESS_MS = 350;
+const MOVE_CANCEL_PX = 10;
+
 function Shell() {
   const { user } = useAuth();
+  const { canSwitch } = useProfileSwitching();
   const hasProfile = !!(user?.athlete_id || user?.coach_id || user?.referee_id);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
+  const pressStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  function clearLongPressTimer() {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
+  // Press-and-hold the Profile tab to jump straight to the quick switcher
+  // (ProfileSwitchSheet) instead of navigating - only armed when there's
+  // actually more than one profile to switch between, so a single-profile
+  // account's long press does nothing extra. onClick below cancels the
+  // navigation a completed long press would otherwise still trigger on
+  // pointer-up, same justDraggedRef-style suppression DayView uses.
+  function handleProfilePointerDown(e: ReactPointerEvent) {
+    if (!canSwitch) return;
+    pressStartRef.current = { x: e.clientX, y: e.clientY };
+    clearLongPressTimer();
+    longPressTimerRef.current = setTimeout(() => {
+      longPressFiredRef.current = true;
+      feedbackTick(600);
+      setSwitcherOpen(true);
+    }, LONG_PRESS_MS);
+  }
+
+  function handleProfilePointerMove(e: ReactPointerEvent) {
+    if (!pressStartRef.current) return;
+    const dx = e.clientX - pressStartRef.current.x;
+    const dy = e.clientY - pressStartRef.current.y;
+    if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) {
+      clearLongPressTimer();
+      pressStartRef.current = null;
+    }
+  }
+
+  function handleProfilePointerUp() {
+    clearLongPressTimer();
+    pressStartRef.current = null;
+  }
+
+  function handleProfileClick(e: ReactMouseEvent) {
+    if (longPressFiredRef.current) {
+      e.preventDefault();
+      longPressFiredRef.current = false;
+    }
+  }
   const tabs = resolveNavTabs(
     { role: user?.role ?? null, is_admin: !!user?.is_admin },
     user?.club_forced_nav_tabs ?? user?.nav_tabs ?? null
@@ -105,6 +170,11 @@ function Shell() {
         ) : (
         <NavLink
           to="/profile"
+          onPointerDown={handleProfilePointerDown}
+          onPointerMove={handleProfilePointerMove}
+          onPointerUp={handleProfilePointerUp}
+          onPointerCancel={handleProfilePointerUp}
+          onClick={handleProfileClick}
           className={({ isActive }) =>
             `relative flex min-h-[44px] w-24 flex-col items-center justify-center gap-0.5 pb-[env(safe-area-inset-bottom)] pl-2 pr-5 text-xs font-medium transition-colors ${
               profilePhoto
@@ -179,6 +249,7 @@ function Shell() {
           ))}
         </div>
       </nav>
+      <ProfileSwitchSheet open={switcherOpen} onClose={() => setSwitcherOpen(false)} />
     </div>
   );
 }

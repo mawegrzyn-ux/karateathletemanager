@@ -2524,6 +2524,21 @@ unchanged.
   "Switch {role} profile" button opens that same picker directly, so a
   same-type multi-profile account always has a way to switch even
   without a second role type.
+- The switcher's data/logic (`availableRoles`, `singleRoleMultiProfile`,
+  `handleRoleClick`, the picker state) live in a shared
+  `useProfileSwitching()` hook (`app/src/hooks/useProfileSwitching.ts`),
+  used by both `Profile.tsx`'s own "Acting as" widget and a second entry
+  point: press-and-hold on the bottom nav's Profile tab
+  (`ProfileSwitchSheet.tsx`, wired up in `Shell` in `App.tsx`) opens the
+  same role-pills-or-picker UI in a `Modal` bottom sheet, for switching
+  identity without leaving the current page first. The long press only
+  arms (and only fires haptic feedback via `feedbackTick`) when the
+  account actually has more than one profile to switch between
+  (`canSwitch`); it uses the same 350ms hold / 10px move-cancel
+  thresholds as `Schedule.tsx`'s `DayView` drag-to-reorder gesture, and
+  suppresses the tap-navigation to `/profile` that would otherwise still
+  fire on pointer-up after a completed long press (same
+  `justDraggedRef`-style ref pattern `DayView` uses).
 - `athlete_name`/`coach_name` (the active profile's full name) are
   computed server-side and included on every user-returning auth
   response (`USER_SELECT_FIELDS` in `api/src/utils/userFields.js`).
