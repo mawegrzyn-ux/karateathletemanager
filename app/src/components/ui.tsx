@@ -628,6 +628,7 @@ export function DateTimeField({
             <span className="text-sm font-medium text-stone-700">Time</span>
             <input
               type="time"
+              step={900}
               required={required}
               value={time}
               onChange={(e) => onTimeChange(e.target.value)}
@@ -742,6 +743,7 @@ export function DateTimeRangeField({
                 <span className="text-sm font-medium text-stone-700">Time</span>
                 <input
                   type="time"
+                  step={900}
                   required={required}
                   value={startTime}
                   onChange={(e) => onStartTimeChange(e.target.value)}
@@ -768,6 +770,7 @@ export function DateTimeRangeField({
                 <span className="text-sm font-medium text-stone-700">Time</span>
                 <input
                   type="time"
+                  step={900}
                   required={required}
                   value={endTime}
                   onChange={(e) => onEndTimeChange(e.target.value)}
