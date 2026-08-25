@@ -62,6 +62,23 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
+            // Matched before the generic /api/ rule below (Workbox uses the
+            // first matching entry) so the schedule list responds from
+            // cache immediately rather than waiting out NetworkFirst's
+            // timeout - Schedule.tsx's own offlineSchedule.ts cache is the
+            // primary offline fallback (keyed by event id, not the sliding
+            // date-window query string this URL-keyed cache uses), but
+            // StaleWhileRevalidate here still helps the raw HTTP request
+            // itself resolve fast while offline instead of stalling.
+            urlPattern: ({ url }) => url.pathname === "/api/events",
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "events-cache",
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: { maxEntries: 60, maxAgeSeconds: 30 * 24 * 60 * 60 },
+            },
+          },
+          {
             urlPattern: ({ url }) => url.pathname.startsWith("/api/"),
             handler: "NetworkFirst",
             options: {

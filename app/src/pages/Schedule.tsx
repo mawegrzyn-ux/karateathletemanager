@@ -41,6 +41,7 @@ import { EventCompetitionResults } from "../components/CompetitionResults";
 import type { Post } from "../components/AthleteSocialProfile";
 import { todayStr, addDaysStr, dateLabel, groupByDate } from "../utils/dates";
 import { feedbackTick, feedbackConfirm } from "../utils/feedback";
+import { loadCachedSchedule, mergeIntoCachedSchedule } from "../utils/offlineSchedule";
 
 type CompletionStatus = "pending" | "completed" | "failed";
 
@@ -627,6 +628,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const api = useApi();
   const { user } = useAuth();
   const [events, setEvents] = useState<Event[] | null>(null);
+  const [offline, setOffline] = useState(false);
   const [athletes, setAthletes] = useState<Person[]>([]);
   const [modules, setModules] = useState<TrainingModule[]>([]);
   const [katas, setKatas] = useState<Kata[]>([]);
@@ -766,6 +768,10 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
 
   useEffect(() => {
     load();
+    // Retries automatically once connectivity returns, so the offline
+    // banner below clears itself instead of needing a manual reload.
+    window.addEventListener("online", load);
+    return () => window.removeEventListener("online", load);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -813,10 +819,20 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
         `/events?from=${from}&to=${to}`
       );
       setEvents((prev) => mergeEvents(prev, res.events));
+      mergeIntoCachedSchedule(res.events);
       loadedFromRef.current = from;
       feedbackTick(500);
     } catch {
-      // leave the window as-is; the next scroll near the edge retries
+      // leave the window as-is; the next scroll near the edge retries -
+      // but if there's anything already cached for this range, show it in
+      // the meantime rather than leaving the list stuck at its old edge.
+      const cached = loadCachedSchedule<Event>().filter(
+        (e) => e.end_date >= from && e.start_date <= to
+      );
+      if (cached.length > 0) {
+        setEvents((prev) => mergeEvents(prev, cached));
+        setOffline(true);
+      }
     } finally {
       loadingPastRef.current = false;
       setLoadingPast(false);
@@ -836,10 +852,20 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
         `/events?from=${from}&to=${to}`
       );
       setEvents((prev) => mergeEvents(prev, res.events));
+      mergeIntoCachedSchedule(res.events);
       loadedToRef.current = to;
       feedbackTick(500);
     } catch {
-      // leave the window as-is; the next scroll near the edge retries
+      // leave the window as-is; the next scroll near the edge retries -
+      // but if there's anything already cached for this range, show it in
+      // the meantime rather than leaving the list stuck at its old edge.
+      const cached = loadCachedSchedule<Event>().filter(
+        (e) => e.end_date >= from && e.start_date <= to
+      );
+      if (cached.length > 0) {
+        setEvents((prev) => mergeEvents(prev, cached));
+        setOffline(true);
+      }
     } finally {
       loadingFutureRef.current = false;
       setLoadingFuture(false);
@@ -851,8 +877,28 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
       .get<{ events: Event[] }>(
         `/events?from=${loadedFromRef.current}&to=${loadedToRef.current}`
       )
-      .then((res) => setEvents(res.events))
-      .catch(() => setError("Failed to load schedule"));
+      .then((res) => {
+        setEvents(res.events);
+        setError(null);
+        setOffline(false);
+        mergeIntoCachedSchedule(res.events);
+      })
+      .catch(() => {
+        // No network (or the request otherwise failed) - fall back to
+        // whatever's already been seen and cached locally for this same
+        // window, rather than blanking the whole page. Only a genuine
+        // first-ever load with nothing cached yet shows the error page.
+        const cached = loadCachedSchedule<Event>().filter(
+          (e) =>
+            e.end_date >= loadedFromRef.current && e.start_date <= loadedToRef.current
+        );
+        if (cached.length > 0) {
+          setEvents(cached);
+          setOffline(true);
+        } else {
+          setError("Failed to load schedule");
+        }
+      });
 
     if (canPickAthletes) {
       api
@@ -1040,7 +1086,16 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 flex flex-col bg-white/95 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_20px_-6px_rgba(28,25,23,0.10)] backdrop-blur">
+      {offline && (
+        <div className="-mx-4 -mt-4 bg-amber-100 px-4 py-1.5 text-center text-xs font-medium text-amber-800">
+          Offline — showing saved schedule
+        </div>
+      )}
+      <div
+        className={`sticky top-0 z-10 -mx-4 flex flex-col bg-white/95 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_20px_-6px_rgba(28,25,23,0.10)] backdrop-blur ${
+          offline ? "" : "-mt-4"
+        }`}
+      >
         {/* Same bg-white/95 + backdrop-blur treatment as the bottom tab nav
             in App.tsx (rather than the page's plain bg-stone-100), with a
             matching shadow - the nav's is signed negative (0_-1px.../

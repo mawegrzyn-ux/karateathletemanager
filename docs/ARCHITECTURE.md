@@ -1552,17 +1552,29 @@ coach-run attendance) — this is personal athlete itinerary planning.
   instead of exact minutes.
 - **The datetime stage's End field is a drag-around duration dial by
   default**, not a second date+time picker: `DurationDial` (`ui.tsx`) is
-  a generic, label-less drag-the-ring control (one lap = `max` minutes,
-  default 180, snapped to `step` minutes, default 15 - pointer angle from
-  center converted via `atan2`, rotated so 0° is 12 o'clock) that a
-  caller wraps with its own label/subtitle text. `CreateEventWizard`
-  renders `formatDuration(...)` ("27min" / "1h" / "1h 30m") and "Ends
-  {time}" above it, and `minutesBetweenDateTime`/`addMinutesToDateTime`
-  (`Schedule.tsx`, day-rollover-aware) convert between the dial's plain
+  a generic, label-less drag-the-ring control that a caller wraps with
+  its own label/subtitle text. One lap is `lapMinutes` (default 180),
+  snapped to `step` minutes (default 15), but dragging isn't capped at
+  one lap - it tracks the pointer's *continuous rotation* rather than
+  recomputing an absolute angle each move (a per-move signed delta,
+  wraparound-corrected at the 360°/0° seam, accumulated into a raw
+  unsnapped ref so slow sub-step drags aren't lost to rounding): winding
+  clockwise keeps adding minutes past a full lap instead of snapping back
+  to the start, counter-clockwise subtracts, floored at 0. Once
+  `minutes` passes a full lap, the ring's base color darkens (further
+  with each additional lap, capped at 5 lap-equivalents so it doesn't
+  wash out to black) and the brighter current-lap arc draws on top of
+  it, so the boundary between dark and bright always marks exactly where
+  the head is even after several laps' worth of visual overlap.
+  `CreateEventWizard` renders `formatDuration(...)` ("27min" / "1h" /
+  "1h 30m") and "Ends {time}" above it, and
+  `minutesBetweenDateTime`/`addMinutesToDateTime` (`Schedule.tsx`,
+  day-rollover-aware, so a multi-lap duration correctly rolls
+  `end_date` forward one or more days) convert between the dial's plain
   minutes and `form.end_date`/`end_time` so dragging the dial round-trips
   through the same form state the rest of the wizard uses. A "Set an
   exact end date & time instead" link swaps in the raw End
-  `DateTimeField` for anything the dial's one-lap range can't express (a
+  `DateTimeField` for anything still easier to type than spin (a
   multi-day event, or no `start_time` set yet) - `customEndOpen` opens
   there by default in exactly those two cases, otherwise defaults to the
   dial.
@@ -3178,15 +3190,43 @@ via `vite-plugin-pwa` (`app/vite.config.ts`):
   over silently on next load, no "update available" prompt — acceptable
   here since the app has no user-entered draft state worth preserving
   across an update) registered from `main.tsx` via
-  `virtual:pwa-register`. Workbox `runtimeCaching`: `/api/*` requests use
-  `NetworkFirst` (try the network, 5s timeout, fall back to the last
-  successful response when offline — this is the "check schedules with
-  patchy gym WiFi" case from the Design Principles above) and images use
-  `CacheFirst`. The app shell (JS/CSS/HTML) is precached, so the SPA
-  still boots offline even before any `/api` call has ever succeeded.
+  `virtual:pwa-register`. Workbox `runtimeCaching`: `GET /api/events`
+  (matched first, before the catch-all rule below) uses
+  `StaleWhileRevalidate` so the schedule list responds from cache
+  immediately rather than waiting out a timeout; every other `/api/*`
+  request uses `NetworkFirst` (try the network, 5s timeout, fall back to
+  the last successful response when offline — this is the "check
+  schedules with patchy gym WiFi" case from the Design Principles above)
+  and images use `CacheFirst`. The app shell (JS/CSS/HTML) is precached,
+  so the SPA still boots offline even before any `/api` call has ever
+  succeeded.
 - `navigateFallbackDenylist` excludes `/api/` paths from the SPA
   navigation fallback (not that this matters much in practice — `/api`
   calls are `fetch`, not page navigations — but keeps the rule explicit).
+- **Schedule entries specifically get a second, more reliable offline
+  cache on top of the Workbox one above** (`app/src/utils/
+  offlineSchedule.ts`) — deliberately entries only, no media (an event's
+  own JSON never embeds media, just a `has_media` flag; the media itself
+  lives in a separate gallery fetched on demand). The Workbox cache above
+  is keyed by the exact request URL, which bakes in `Schedule.tsx`'s
+  sliding `from`/`to` lazy-load window — since that window shifts by date
+  every day, a cache hit for "today's" query isn't reliable even if
+  similar data was fetched yesterday. `offlineSchedule.ts` instead keeps
+  a flat, `localStorage`-backed list of every event object already seen,
+  keyed by `id` (capped at 500, pruned to keep soonest-upcoming and
+  most-recently-past first if it ever grows past that), so anything
+  previously loaded stays available regardless of which window it was
+  originally fetched under. `ScheduleManager`'s `load()`,
+  `loadMorePast()`, and `loadMoreFuture()` all call
+  `mergeIntoCachedSchedule` on every successful fetch, and on a failed
+  fetch (`.catch`) fall back to `loadCachedSchedule().filter(...)` for
+  the requested date range instead of leaving the page blank or the
+  scroll window stuck. A `useState` `offline` flag drives a small amber
+  banner ("Offline — showing saved schedule") above the sticky header
+  when a cached fallback is actually being shown; the initial-mount
+  effect also listens for the browser's `online` event and re-runs
+  `load()`, so the banner clears itself once connectivity returns
+  without needing a manual reload.
 
 ### App icon & social image
 
