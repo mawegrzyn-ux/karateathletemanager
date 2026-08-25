@@ -1,16 +1,25 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, type Child, type Profile as ProfileRecord } from "../context/AuthContext";
+import { useProfileSwitching } from "../hooks/useProfileSwitching";
 import { ApiError, useApi } from "../hooks/useApi";
 import { Field, Drawer, MediaField, Toast, DeleteButton } from "../components/ui";
 import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
 import { StaffSelfProfile } from "../components/StaffSelfProfile";
 import { AthleteSocialProfile } from "../components/AthleteSocialProfile";
 
-type SwitchableRole = "athlete" | "coach" | "parent" | "referee";
-
 export default function Profile() {
-  const { user, updateProfile, switchRole, fetchMyProfiles } = useAuth();
+  const { user, updateProfile } = useAuth();
+  const {
+    availableRoles,
+    singleRoleMultiProfile,
+    handleRoleClick,
+    picker,
+    setPicker,
+    pickerOptions,
+    pickerSelectedId,
+    selectProfile,
+  } = useProfileSwitching();
   const [firstName, setFirstName] = useState(user?.first_name ?? "");
   const [lastName, setLastName] = useState(user?.last_name ?? "");
   const [phone, setPhone] = useState(user?.phone ?? "");
@@ -19,12 +28,6 @@ export default function Profile() {
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [profiles, setProfiles] = useState<{
-    athletes: ProfileRecord[];
-    coaches: ProfileRecord[];
-    referees: ProfileRecord[];
-  }>({ athletes: [], coaches: [], referees: [] });
-  const [picker, setPicker] = useState<SwitchableRole | null>(null);
   const [editing, setEditing] = useState(false);
 
   const showActiveNav = user?.status === "active" && user.role;
@@ -39,51 +42,6 @@ export default function Profile() {
     setToast(message);
     setTimeout(() => setToast(null), 4000);
   }
-
-  useEffect(() => {
-    if (user?.athlete_id || user?.coach_id || user?.referee_id) {
-      fetchMyProfiles().then(setProfiles);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.athlete_id, user?.coach_id, user?.referee_id]);
-
-  const availableRoles = (
-    [
-      { role: "athlete" as const, label: "Athlete", has: !!user?.athlete_id },
-      { role: "coach" as const, label: "Coach", has: !!user?.coach_id },
-      { role: "referee" as const, label: "Referee", has: !!user?.referee_id },
-      { role: "parent" as const, label: "Parent", has: !!user?.is_parent },
-    ]
-  ).filter((r) => r.has);
-
-  const profilesByRole: Record<SwitchableRole, ProfileRecord[]> = {
-    athlete: profiles.athletes,
-    coach: profiles.coaches,
-    referee: profiles.referees,
-    parent: [],
-  };
-
-  const singleRoleMultiProfile =
-    availableRoles.length === 1 &&
-    profilesByRole[availableRoles[0].role].length > 1;
-
-  async function handleRoleClick(role: SwitchableRole) {
-    if (profilesByRole[role].length > 1) {
-      setPicker(role);
-      return;
-    }
-    await switchRole(role);
-  }
-
-  const pickerOptions = picker ? profilesByRole[picker] : [];
-  const pickerSelectedId =
-    picker === "athlete"
-      ? user?.athlete_id
-      : picker === "coach"
-        ? user?.coach_id
-        : picker === "referee"
-          ? user?.referee_id
-          : null;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -161,11 +119,8 @@ export default function Profile() {
         >
           <ProfilePicker
             options={pickerOptions}
-            selectedId={pickerSelectedId ?? null}
-            onSelect={async (id) => {
-              if (picker) await switchRole(picker, id);
-              setPicker(null);
-            }}
+            selectedId={pickerSelectedId}
+            onSelect={selectProfile}
           />
         </Drawer>
 
@@ -250,7 +205,10 @@ export default function Profile() {
   );
 }
 
-function ProfilePicker({
+// Exported for reuse by the bottom nav's press-and-hold quick switcher
+// (components/ProfileSwitchSheet.tsx), which needs the identical
+// search-and-select list once a role's picker is showing.
+export function ProfilePicker({
   options,
   selectedId,
   onSelect,
