@@ -22,6 +22,7 @@ import {
   Badge,
   DateTimeField,
   DateTimeRangeField,
+  DurationDial,
   MediaField,
   Modal,
   Toast,
@@ -530,6 +531,43 @@ function minutesToTime(mins: number) {
   const h = Math.floor(clamped / 60);
   const m = Math.round(clamped % 60);
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+// The duration-dial pair for CreateEventWizard's End field: how many
+// minutes apart two date+time pairs are, and the reverse - a date+time
+// this many minutes after another - so dragging the dial can round-trip
+// through form.end_date/end_time without the caller doing its own day-
+// rollover math.
+function minutesBetweenDateTime(
+  startDate: string,
+  startTime: string,
+  endDate: string,
+  endTime: string
+) {
+  const startMin = timeToMinutes(startTime) ?? 0;
+  const endMin = timeToMinutes(endTime) ?? startMin;
+  const dayDelta = Math.round(
+    (new Date(`${endDate}T00:00:00Z`).getTime() -
+      new Date(`${startDate}T00:00:00Z`).getTime()) /
+      86400000
+  );
+  return dayDelta * 24 * 60 + (endMin - startMin);
+}
+
+function addMinutesToDateTime(dateStr: string, timeStr: string, minutesToAdd: number) {
+  const base = (timeToMinutes(timeStr) ?? 0) + minutesToAdd;
+  const dayDelta = Math.floor(base / (24 * 60));
+  const clockMinutes = ((base % (24 * 60)) + 24 * 60) % (24 * 60);
+  return { date: addDaysStr(dateStr, dayDelta), time: minutesToTime(clockMinutes) };
+}
+
+function formatDuration(minutes: number) {
+  const mins = Math.max(0, Math.round(minutes));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
 }
 
 const DAY_START_HOUR = 6;
@@ -1723,6 +1761,12 @@ function CreateEventWizard({
   const stage = stages[stageIndex];
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // The duration dial only makes sense for a same-day, has-a-start-time
+  // event - a duplicated multi-day event (or one with no start time set
+  // yet) opens straight into the exact End date/time fields instead.
+  const [customEndOpen, setCustomEndOpen] = useState(
+    form.start_date !== form.end_date || !form.start_time
+  );
 
   async function handleCreate() {
     setSubmitError(null);
@@ -1919,13 +1963,12 @@ function CreateEventWizard({
 
       {stage === "datetime" && (
         <>
-          <DateTimeRangeField
-            startDate={form.start_date}
-            startTime={form.start_time}
-            endDate={form.end_date}
-            endTime={form.end_time}
-            onStartDateChange={(v) => {
-              // Ends stay mirrored to start as long as they haven't been
+          <DateTimeField
+            label="Start"
+            date={form.start_date}
+            time={form.start_time}
+            onDateChange={(v) => {
+              // End stays mirrored to Start as long as it hasn't been
               // deliberately diverged - lets most events (which start and
               // end the same day) skip touching the End field entirely.
               const endLinked = form.end_date === form.start_date;
@@ -1935,7 +1978,7 @@ function CreateEventWizard({
                 end_date: endLinked ? v : form.end_date,
               });
             }}
-            onStartTimeChange={(v) => {
+            onTimeChange={(v) => {
               const endLinked = form.end_time === form.start_time;
               setForm({
                 ...form,
@@ -1943,9 +1986,67 @@ function CreateEventWizard({
                 end_time: endLinked ? v : form.end_time,
               });
             }}
-            onEndDateChange={(v) => setForm({ ...form, end_date: v })}
-            onEndTimeChange={(v) => setForm({ ...form, end_time: v })}
           />
+
+          {!customEndOpen ? (
+            <div className="flex flex-col items-center gap-3 rounded-2xl bg-stone-50 p-4">
+              <span className="text-3xl font-bold text-stone-900">
+                {formatDuration(
+                  minutesBetweenDateTime(
+                    form.start_date,
+                    form.start_time,
+                    form.end_date,
+                    form.end_time
+                  )
+                )}
+              </span>
+              <span className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-stone-700 shadow-sm">
+                🕐 Ends {form.end_time || "—"}
+              </span>
+              <DurationDial
+                minutes={Math.max(
+                  0,
+                  minutesBetweenDateTime(
+                    form.start_date,
+                    form.start_time,
+                    form.end_date,
+                    form.end_time
+                  )
+                )}
+                onChange={(mins) => {
+                  const next = addMinutesToDateTime(form.start_date, form.start_time, mins);
+                  setForm({ ...form, end_date: next.date, end_time: next.time });
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setCustomEndOpen(true)}
+                className="text-sm font-medium text-red-700"
+              >
+                Set an exact end date & time instead
+              </button>
+            </div>
+          ) : (
+            <>
+              <DateTimeField
+                label="End"
+                date={form.end_date}
+                time={form.end_time}
+                onDateChange={(v) => setForm({ ...form, end_date: v })}
+                onTimeChange={(v) => setForm({ ...form, end_time: v })}
+              />
+              {form.start_time && (
+                <button
+                  type="button"
+                  onClick={() => setCustomEndOpen(false)}
+                  className="text-sm font-medium text-red-700"
+                >
+                  Use the duration dial instead
+                </button>
+              )}
+            </>
+          )}
+
           {form.start_date && form.end_date && form.start_date !== form.end_date && (
             <label className="flex min-h-[44px] items-center gap-2 rounded-xl bg-stone-50 px-3 text-sm text-stone-700">
               <input

@@ -1541,14 +1541,31 @@ coach-run attendance) — this is personal athlete itinerary planning.
   the real type tiles even though it isn't backed by an `nk_event_types`
   row - so training-related choices read as one visual cluster.
 - **New Event's End date/time defaults to the Start, not +2h**, and stays
-  mirrored to Start as the user edits Start — `onStartDateChange`/
-  `onStartTimeChange` in `CreateEventWizard` only carry the End field
-  along if it still equals the old Start value (i.e. hasn't been
-  deliberately diverged yet), so a typical same-day event never requires
-  touching the End field at all. `DateTimeRangeField`/`DateTimeField`'s
-  time inputs (`ui.tsx`) also gained `step={900}` (15-minute increments),
-  which is enough for a native `<input type="time">` to round the mobile
-  wheel/scroll picker to quarter-hours instead of exact minutes.
+  mirrored to Start as the user edits Start — `onDateChange`/
+  `onTimeChange` on the Start `DateTimeField` in `CreateEventWizard` only
+  carry the End field along if it still equals the old Start value (i.e.
+  hasn't been deliberately diverged yet), so a typical same-day event
+  never requires touching the End field at all. `DateTimeRangeField`/
+  `DateTimeField`'s time inputs (`ui.tsx`) also gained `step={900}`
+  (15-minute increments), which is enough for a native `<input
+  type="time">` to round the mobile wheel/scroll picker to quarter-hours
+  instead of exact minutes.
+- **The datetime stage's End field is a drag-around duration dial by
+  default**, not a second date+time picker: `DurationDial` (`ui.tsx`) is
+  a generic, label-less drag-the-ring control (one lap = `max` minutes,
+  default 180, snapped to `step` minutes, default 15 - pointer angle from
+  center converted via `atan2`, rotated so 0° is 12 o'clock) that a
+  caller wraps with its own label/subtitle text. `CreateEventWizard`
+  renders `formatDuration(...)` ("27min" / "1h" / "1h 30m") and "Ends
+  {time}" above it, and `minutesBetweenDateTime`/`addMinutesToDateTime`
+  (`Schedule.tsx`, day-rollover-aware) convert between the dial's plain
+  minutes and `form.end_date`/`end_time` so dragging the dial round-trips
+  through the same form state the rest of the wizard uses. A "Set an
+  exact end date & time instead" link swaps in the raw End
+  `DateTimeField` for anything the dial's one-lap range can't express (a
+  multi-day event, or no `start_time` set yet) - `customEndOpen` opens
+  there by default in exactly those two cases, otherwise defaults to the
+  dial.
 - **Itinerary items are bound by their event's date range**: `POST
   /api/events/:id/items` and `PATCH /api/events/:id/items/:itemId`
   reject (400) an `item_date` — or, for a repeat, any generated
@@ -2569,17 +2586,24 @@ unchanged.
   `handleRoleClick`, the picker state) live in a shared
   `useProfileSwitching()` hook (`app/src/hooks/useProfileSwitching.ts`),
   used by both `Profile.tsx`'s own "Acting as" widget and a second entry
-  point: press-and-hold on the bottom nav's Profile tab
+  point: swiping up on the bottom nav's Profile tab
   (`ProfileSwitchSheet.tsx`, wired up in `Shell` in `App.tsx`) opens the
   same role-pills-or-picker UI in a `Modal` bottom sheet, for switching
-  identity without leaving the current page first. The long press only
-  arms (and only fires haptic feedback via `feedbackTick`) when the
-  account actually has more than one profile to switch between
-  (`canSwitch`); it uses the same 350ms hold / 10px move-cancel
-  thresholds as `Schedule.tsx`'s `DayView` drag-to-reorder gesture, and
-  suppresses the tap-navigation to `/profile` that would otherwise still
-  fire on pointer-up after a completed long press (same
-  `justDraggedRef`-style ref pattern `DayView` uses).
+  identity without leaving the current page first. This started as a
+  press-and-hold, but a *stationary* hold on an `<a>` trips the mobile
+  browser's own long-press context menu (copy link / open in new tab)
+  before any in-app timer gets a chance to fire, so the gesture is a
+  swipe instead: `Shell`'s pointer handlers fire once the drag exceeds
+  `SWIPE_THRESHOLD` (`ui.tsx`, the same 64px used by the row-swipe
+  components) upward while staying within that same distance sideways.
+  The tab also sets `touch-action: none`, `user-select: none`, and
+  `-webkit-touch-callout: none`, plus preempts `onContextMenu`, as extra
+  insurance against the native menu regardless of gesture. Swiping with
+  nothing to switch to (`!canSwitch`) shows a `Toast` ("No other profile
+  to switch to") instead of silently doing nothing. Either way the
+  gesture suppresses the tap-navigation to `/profile` that would
+  otherwise still fire on pointer-up afterward (same `justDraggedRef`-
+  style ref pattern `Schedule.tsx`'s `DayView` uses for its own drag).
 - `athlete_name`/`coach_name` (the active profile's full name) are
   computed server-side and included on every user-returning auth
   response (`USER_SELECT_FIELDS` in `api/src/utils/userFields.js`).

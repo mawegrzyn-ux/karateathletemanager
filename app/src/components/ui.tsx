@@ -990,6 +990,116 @@ export function Toast({ message }: { message: string }) {
   );
 }
 
+// A drag-around-the-ring duration picker (think a parking-meter app's "how
+// long" dial) - purely the ring/thumb, no label of its own, so callers
+// render whatever "27min" / "Ends 14:53" text fits their own context above
+// it. One lap of the ring is `max` minutes, snapped to `step` as the
+// pointer moves; dragging past a full lap just clamps at `max` rather than
+// wrapping into a second lap, so this is meant for the "typical session"
+// range (a couple of hours) with an exact-date/time field as the fallback
+// for anything longer, not a general-purpose clock.
+export function DurationDial({
+  minutes,
+  onChange,
+  max = 180,
+  step = 15,
+  size = 220,
+}: {
+  minutes: number;
+  onChange: (minutes: number) => void;
+  max?: number;
+  step?: number;
+  size?: number;
+}) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  function minutesFromPoint(clientX: number, clientY: number) {
+    const el = svgRef.current;
+    if (!el) return minutes;
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const angle = (Math.atan2(clientY - cy, clientX - cx) * 180) / Math.PI;
+    // atan2 is 0° at 3 o'clock; rotate so 0° is 12 o'clock and increases
+    // clockwise, matching how the arc itself is drawn below.
+    const fromTop = (angle + 90 + 360) % 360;
+    const raw = (fromTop / 360) * max;
+    const snapped = Math.round(raw / step) * step;
+    return Math.min(max, Math.max(0, snapped));
+  }
+
+  function handleDrag(e: ReactPointerEvent<SVGSVGElement>) {
+    const next = minutesFromPoint(e.clientX, e.clientY);
+    if (next !== minutes) {
+      feedbackTick(400);
+      onChange(next);
+    }
+  }
+
+  function handlePointerDown(e: ReactPointerEvent<SVGSVGElement>) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    handleDrag(e);
+  }
+
+  function handlePointerMove(e: ReactPointerEvent<SVGSVGElement>) {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    handleDrag(e);
+  }
+
+  const tickCount = Math.round(max / step);
+  const ticks = Array.from({ length: tickCount }, (_, i) => {
+    const deg = (i / tickCount) * 360;
+    const major = i % 4 === 0;
+    return (
+      <line
+        key={i}
+        x1={100}
+        y1={major ? 12 : 17}
+        x2={100}
+        y2={25}
+        stroke="#a8a29e"
+        strokeWidth={major ? 2.5 : 1.5}
+        strokeLinecap="round"
+        transform={`rotate(${deg} 100 100)`}
+      />
+    );
+  });
+
+  const radius = 78;
+  const circumference = 2 * Math.PI * radius;
+  const fraction = Math.min(1, minutes / max);
+
+  return (
+    <svg
+      ref={svgRef}
+      viewBox="0 0 200 200"
+      width={size}
+      height={size}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      className="touch-none select-none"
+    >
+      <circle cx={100} cy={100} r={radius} fill="none" stroke="#e7e5e4" strokeWidth={14} />
+      {fraction > 0 && (
+        <circle
+          cx={100}
+          cy={100}
+          r={radius}
+          fill="none"
+          stroke="#dc2626"
+          strokeWidth={14}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - fraction)}
+          transform="rotate(-90 100 100)"
+        />
+      )}
+      {ticks}
+      <circle cx={100} cy={100} r={60} fill="white" />
+    </svg>
+  );
+}
+
 export const SWIPE_THRESHOLD = 64;
 export const DEEP_SWIPE_THRESHOLD = 108;
 const CYCLE_HINT_WIDTH = 150;
