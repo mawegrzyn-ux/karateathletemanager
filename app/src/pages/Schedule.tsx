@@ -604,7 +604,6 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   const [typeFilterDrawerOpen, setTypeFilterDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [drawer, setDrawer] = useState<"closed" | "create" | Event>("closed");
-  const [addChoiceOpen, setAddChoiceOpen] = useState(false);
   const [programEnrollOpen, setProgramEnrollOpen] = useState(false);
   const [resultDrawerEvent, setResultDrawerEvent] = useState<Event | null>(
     null
@@ -863,14 +862,17 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
 
   function openCreate() {
     const start = splitLocalDateTime(new Date());
-    const end = nowPlusHours(2);
     setForm({
       ...EMPTY_FORM,
       club_id: clubs[0]?.id ?? null,
       start_date: start.date,
       start_time: start.time,
-      end_date: end.date,
-      end_time: end.time,
+      // Ends default to exactly the start (a point-in-time event) rather
+      // than an arbitrary +2h span - CreateEventWizard's datetime stage
+      // keeps them mirrored to start_date/start_time as the user edits
+      // those, until the user diverges the end fields themselves.
+      end_date: start.date,
+      end_time: start.time,
     });
     setFormAthleteIds([]);
     setDrawer("create");
@@ -1106,38 +1108,8 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
           without matching it here the FAB would sit too low and collide
           with the (taller, on iPhone) nav. */}
       <div className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] left-4 z-20">
-        <AddButton onClick={() => setAddChoiceOpen(true)} />
+        <AddButton onClick={openCreate} />
       </div>
-
-      {/* A single event, or enrolling in a whole training programme's
-          weekly pattern at once, are different enough operations (one
-          event vs. bulk-generating many) that they don't share a wizard -
-          this is just a quick fork so both are reachable from the same
-          "+" without needing two separate floating buttons. */}
-      <Modal open={addChoiceOpen} onClose={() => setAddChoiceOpen(false)}>
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setAddChoiceOpen(false);
-              openCreate();
-            }}
-            className="flex min-h-[44px] items-center gap-3 rounded-xl border border-stone-200 px-4 text-left font-medium"
-          >
-            📅 New event
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setAddChoiceOpen(false);
-              setProgramEnrollOpen(true);
-            }}
-            className="flex min-h-[44px] items-center gap-3 rounded-xl border border-stone-200 px-4 text-left font-medium"
-          >
-            📋 Training programme
-          </button>
-        </div>
-      </Modal>
 
       <EnrollInProgramDrawer
         open={programEnrollOpen}
@@ -1566,6 +1538,10 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
             formAthleteIds={formAthleteIds}
             setFormAthleteIds={setFormAthleteIds}
             onSubmit={createEvent}
+            onSwitchToProgramEnroll={() => {
+              setDrawer("closed");
+              setProgramEnrollOpen(true);
+            }}
             clubs={clubs}
             eventTypes={eventTypes}
             modules={modules}
@@ -1715,6 +1691,7 @@ function CreateEventWizard({
   formAthleteIds,
   setFormAthleteIds,
   onSubmit,
+  onSwitchToProgramEnroll,
   clubs,
   eventTypes,
   modules,
@@ -1730,6 +1707,7 @@ function CreateEventWizard({
   formAthleteIds: number[];
   setFormAthleteIds: Dispatch<SetStateAction<number[]>>;
   onSubmit: () => Promise<void>;
+  onSwitchToProgramEnroll: () => void;
   clubs: Club[];
   eventTypes: EventTypeRow[];
   modules: TrainingModule[];
@@ -1852,6 +1830,13 @@ function CreateEventWizard({
               </button>
             </div>
           )}
+          <button
+            type="button"
+            onClick={onSwitchToProgramEnroll}
+            className="min-h-[44px] text-center text-sm font-medium text-red-700"
+          >
+            📋 Enroll in a training programme instead
+          </button>
         </>
       )}
 
@@ -1909,13 +1894,29 @@ function CreateEventWizard({
       {stage === "datetime" && (
         <>
           <DateTimeRangeField
-            required
             startDate={form.start_date}
             startTime={form.start_time}
             endDate={form.end_date}
             endTime={form.end_time}
-            onStartDateChange={(v) => setForm({ ...form, start_date: v })}
-            onStartTimeChange={(v) => setForm({ ...form, start_time: v })}
+            onStartDateChange={(v) => {
+              // Ends stay mirrored to start as long as they haven't been
+              // deliberately diverged - lets most events (which start and
+              // end the same day) skip touching the End field entirely.
+              const endLinked = form.end_date === form.start_date;
+              setForm({
+                ...form,
+                start_date: v,
+                end_date: endLinked ? v : form.end_date,
+              });
+            }}
+            onStartTimeChange={(v) => {
+              const endLinked = form.end_time === form.start_time;
+              setForm({
+                ...form,
+                start_time: v,
+                end_time: endLinked ? v : form.end_time,
+              });
+            }}
             onEndDateChange={(v) => setForm({ ...form, end_date: v })}
             onEndTimeChange={(v) => setForm({ ...form, end_time: v })}
           />
@@ -2178,6 +2179,25 @@ function CreateEventWizard({
   );
 }
 
+// Fields it makes sense to apply to every occurrence in a series at once
+// when the "whole series" edit scope is chosen (EventDetail's updateEvent
+// below) - start_date/end_date are deliberately excluded since each
+// occurrence keeps its own place in the series regardless of scope, same
+// as the backend's PATCH /events/:id/series only ever touches these.
+const SERIES_EDITABLE_KEYS = new Set([
+  "title",
+  "event_type",
+  "start_time",
+  "end_time",
+  "daily_times",
+  "location",
+  "venue_id",
+  "notes",
+  "training_module_id",
+  "kata_id",
+  "icon",
+]);
+
 function EventDetail({
   eventId,
   canPickAthletes,
@@ -2216,8 +2236,32 @@ function EventDetail({
   const [items, setItems] = useState<EventItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [editScope, setEditScope] = useState<"one" | "series">("one");
+  const [scopePromptOpen, setScopePromptOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [myPost, setMyPost] = useState<Post | null>(null);
+
+  // hasSeries gates whether entering edit mode asks "this event or the
+  // whole series" first - a one-off event has nothing to ask about, so it
+  // goes straight into edit mode same as before this scope prompt existed.
+  function handleEditToggle() {
+    if (isEditing) {
+      setIsEditing(false);
+      return;
+    }
+    if (hasSeries) {
+      setScopePromptOpen(true);
+      return;
+    }
+    setEditScope("one");
+    setIsEditing(true);
+  }
+
+  function chooseEditScope(scope: "one" | "series") {
+    setEditScope(scope);
+    setScopePromptOpen(false);
+    setIsEditing(true);
+  }
 
   useEffect(() => {
     api
@@ -2255,6 +2299,24 @@ function EventDetail({
   }, [eventId, user?.athlete_id, athleteIds.join(",")]);
 
   async function updateEvent(patch: Record<string, unknown>) {
+    // A date field always applies to just this occurrence, even under
+    // "whole series" scope - only when every key in this particular patch
+    // is series-safe (see SERIES_EDITABLE_KEYS) does it fan out.
+    const useSeries =
+      editScope === "series" &&
+      Object.keys(patch).every((k) => SERIES_EDITABLE_KEYS.has(k));
+
+    if (useSeries) {
+      const { events: updatedEvents } = await api.patch<{ events: Event[] }>(
+        `/events/${eventId}/series`,
+        patch
+      );
+      const self = updatedEvents.find((e) => e.id === eventId);
+      if (self) setEvent(self);
+      updatedEvents.forEach((e) => onUpdated(e));
+      return;
+    }
+
     const { event: updated } = await api.patch<{ event: Event }>(
       `/events/${eventId}`,
       patch
@@ -2348,12 +2410,35 @@ function EventDetail({
           full-screen overlay. */}
       <button
         type="button"
-        onClick={() => setIsEditing((v) => !v)}
+        onClick={handleEditToggle}
         aria-label={isEditing ? "Done editing" : "Edit"}
         className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-xl text-white shadow-lg sm:absolute"
       >
         {isEditing ? "✓" : "✏️"}
       </button>
+
+      <Modal open={scopePromptOpen} onClose={() => setScopePromptOpen(false)}>
+        <div className="flex flex-col gap-3 p-2">
+          <p className="text-sm font-medium text-stone-700">
+            This event is part of a recurring series. What would you like to
+            edit?
+          </p>
+          <button
+            type="button"
+            onClick={() => chooseEditScope("one")}
+            className="flex min-h-[44px] items-center gap-3 rounded-xl border border-stone-200 px-4 text-left font-medium"
+          >
+            This event only
+          </button>
+          <button
+            type="button"
+            onClick={() => chooseEditScope("series")}
+            className="flex min-h-[44px] items-center gap-3 rounded-xl border border-stone-200 px-4 text-left font-medium"
+          >
+            The whole series
+          </button>
+        </div>
+      </Modal>
 
       {isEditing ? (
         <>
@@ -3486,7 +3571,8 @@ interface ProgramSummary {
 }
 
 // Browse existing training programmes and enroll straight from Schedule's
-// own "+" (see the addChoiceOpen fork above), instead of needing to go to
+// own "+" (reached via the Type stage's "Enroll in a training programme
+// instead" link in CreateEventWizard above), instead of needing to go to
 // the separate Training page first. Deliberately just the enroll step
 // (browse -> pick a start date -> optionally pick athletes) - creating or
 // editing a programme's own weekly pattern still only happens on the

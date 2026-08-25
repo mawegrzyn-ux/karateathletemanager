@@ -924,6 +924,116 @@ router.patch(
   })
 );
 
+// Applies the same field updates to every event sharing this event's
+// recurrence_id (i.e. the whole series), not just this one occurrence -
+// same recurrence_id grouping as the series delete below. start_date and
+// end_date are deliberately never part of the UPDATE here even if present
+// in the body: each occurrence keeps its own place in the series
+// regardless of which fields the caller sends, so the client can reuse
+// the exact same patch shape it already builds for the single-event PATCH
+// without needing to strip anything itself.
+router.patch(
+  "/:id/series",
+  asyncHandler(async (req, res) => {
+    if (!(await isEventEditor(req.user, req.params.id))) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rows: currentRows } = await pool.query(
+      `SELECT recurrence_id, club_id FROM nk_events WHERE id = $1`,
+      [req.params.id]
+    );
+    if (currentRows.length === 0) {
+      return res.status(404).json({ error: { message: "Event not found" } });
+    }
+    const recurrenceId = currentRows[0].recurrence_id;
+    if (!recurrenceId) {
+      return res
+        .status(400)
+        .json({ error: { message: "This event is not part of a recurring series" } });
+    }
+
+    const body = req.body ?? {};
+    const {
+      title,
+      event_type,
+      start_time,
+      end_time,
+      daily_times,
+      location,
+      venue_id,
+      notes,
+      training_module_id,
+      kata_id,
+      icon,
+    } = body;
+
+    if (icon !== undefined && icon != null && (typeof icon !== "string" || icon.length > 8)) {
+      return res
+        .status(400)
+        .json({ error: { message: "icon must be a string of 8 characters or fewer" } });
+    }
+
+    if (
+      event_type !== undefined &&
+      !(await isValidEventType(currentRows[0].club_id, event_type))
+    ) {
+      return res.status(400).json({ error: { message: "Invalid event_type" } });
+    }
+
+    const fields = {
+      title,
+      event_type,
+      start_time,
+      end_time,
+      daily_times,
+      location,
+      venue_id,
+      notes,
+      training_module_id,
+      kata_id,
+      icon,
+    };
+    const setClauses = [];
+    const values = [];
+    for (const [key, value] of Object.entries(fields)) {
+      if (key in body) {
+        values.push(key === "icon" && value === "" ? null : value);
+        setClauses.push(`${key} = $${values.length}`);
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: { message: "No fields to update" } });
+    }
+
+    values.push(recurrenceId);
+    const { rows } = await pool.query(
+      `UPDATE nk_events SET ${setClauses.join(", ")}, updated_at = NOW()
+       WHERE recurrence_id = $${values.length}
+       RETURNING ${EVENT_FIELDS}`,
+      values
+    );
+
+    const events = [];
+    for (const row of rows) {
+      const { rows: athletes } = await pool.query(
+        `SELECT a.id, a.first_name, a.last_name
+         FROM nk_event_athletes ea
+         JOIN nk_athletes a ON a.id = ea.athlete_id
+         WHERE ea.event_id = $1`,
+        [row.id]
+      );
+      syncToGoogleCalendar(() =>
+        googleCalendar.syncEventToConnectedUsers(row, athletes.map((a) => a.id))
+      );
+      events.push(await attachEventAthleteStatus(req.user, row, athletes));
+    }
+
+    res.json({ events });
+  })
+);
+
 // Deletes every event sharing this event's recurrence_id (i.e. the whole
 // series it was generated as part of), not just this one occurrence - same
 // idea as the itinerary item series delete below. An extra path segment

@@ -1508,6 +1508,40 @@ coach-run attendance) — this is personal athlete itinerary planning.
   "Delete series" button in `EventDetail`, shown only when the currently-
   loaded event list has more than one event with the same
   `recurrence_id`.
+- **Editing a recurring event asks which scope first**: tapping the ✏️
+  edit toggle in `EventDetail` on an event with `hasSeries` true opens a
+  `Modal` ("This event only" / "The whole series") before entering edit
+  mode at all — a one-off event skips straight to editing as before. The
+  choice is stored as local `editScope` state and only affects `PATCH`
+  routing, not which fields render: `updateEvent`'s per-field auto-save
+  pattern is unchanged, it just fans a "whole series" edit out to `PATCH
+  /api/events/:id/series` instead of `PATCH /api/events/:id` whenever
+  every key in that particular patch is series-safe (`SERIES_EDITABLE_KEYS`
+  in `Schedule.tsx` — everything except `start_date`/`end_date`, which
+  always stays per-occurrence regardless of scope, mirroring how the
+  backend route itself never touches those two columns even if sent). The
+  series route applies the same `SET` clause to every row sharing
+  `recurrence_id` and returns `{ events: [...] }`; the client updates its
+  own detail view from whichever returned row matches `eventId` and pushes
+  every other returned event through the same `onUpdated` callback the
+  single-event path uses, so the outer list reflects all of them.
+- **New Event's Type stage is the wizard's only entry point** — the old
+  "+" → choice-sheet (New event / Training programme) → Type grid detour
+  is gone; the floating "+" opens straight onto the Type grid (still
+  stage 1 of the wizard), with a plain "📋 Enroll in a training programme
+  instead" text link under the grid for the rarer bulk-enroll flow
+  (`onSwitchToProgramEnroll` closes the wizard drawer and opens
+  `EnrollInProgramDrawer`, same destination the old choice sheet's second
+  option led to).
+- **New Event's End date/time defaults to the Start, not +2h**, and stays
+  mirrored to Start as the user edits Start — `onStartDateChange`/
+  `onStartTimeChange` in `CreateEventWizard` only carry the End field
+  along if it still equals the old Start value (i.e. hasn't been
+  deliberately diverged yet), so a typical same-day event never requires
+  touching the End field at all. `DateTimeRangeField`/`DateTimeField`'s
+  time inputs (`ui.tsx`) also gained `step={900}` (15-minute increments),
+  which is enough for a native `<input type="time">` to round the mobile
+  wheel/scroll picker to quarter-hours instead of exact minutes.
 - **Itinerary items are bound by their event's date range**: `POST
   /api/events/:id/items` and `PATCH /api/events/:id/items/:itemId`
   reject (400) an `item_date` — or, for a repeat, any generated
