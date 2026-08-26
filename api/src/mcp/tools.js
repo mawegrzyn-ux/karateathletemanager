@@ -16,6 +16,7 @@ const {
   normalizeExerciseListItem,
   normalizeExerciseDetail,
 } = require("../utils/ascendApi");
+const { searchKnowledgeBase } = require("../utils/knowledgeBase");
 
 // Server "today" - UTC-based, same convention the rest of the backend uses
 // for date strings (see events.js) and that the frontend's todayStr() mirrors.
@@ -731,6 +732,24 @@ const tools = [
       } finally {
         client.release();
       }
+    },
+  },
+  {
+    name: "search_knowledge_base",
+    description:
+      "Search the admin-managed knowledge base (PDFs, Word docs, plain text, HTML, links, and images uploaded via More > Admin > Knowledge base) for content relevant to a question - club policy documents, technique notes, seminar handouts, reference images, etc. Returns the most relevant chunks with their source document's title and URL. Use this before saying you don't know something that might be documented, but note it only searches what's actually been uploaded - an empty result means nothing relevant was found, not that the knowledge base is empty. Requires a Voyage AI key to be configured (More > Configuration > Voyage AI key); if it isn't, this throws a clear error rather than a confusing one.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to search for, in plain language." },
+        limit: { type: "integer", description: "Max results, default 5." },
+      },
+      required: ["query"],
+    },
+    async handler({ query, limit }) {
+      if (!query || !query.trim()) throw new Error("query is required");
+      const results = await searchKnowledgeBase(query, limit);
+      return { results };
     },
   },
 ];

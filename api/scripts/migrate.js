@@ -1280,6 +1280,55 @@ const migrations = [
   // lands directly in `body` (the same field a typed note uses), not a
   // second piece of structured data.
   `ALTER TABLE nk_athlete_posts ADD COLUMN IF NOT EXISTS voice_note_url VARCHAR(500)`,
+
+  // Osu's knowledge base: an admin/coach-managed document repository
+  // (PDF, Word doc, plain text, HTML, a plain link, or a standalone
+  // image) embedded into pgvector so Osu can retrieve grounded context
+  // via the search_knowledge_base tool (api/src/mcp/tools.js). Requires
+  // the `vector` Postgres extension, which the app's own DB role can't
+  // self-provision (needs superuser or a "trusted" extension) - this is
+  // deliberately NOT `CREATE EXTENSION` here, since a failure here would
+  // roll back this whole migration transaction and break every future
+  // deploy. It's a one-time manual step instead, documented in
+  // docs/ARCHITECTURE.md alongside the existing createuser/createdb
+  // setup instructions: `CREATE EXTENSION IF NOT EXISTS vector;`, run
+  // once per environment before this migration runs there for the first
+  // time.
+  //
+  // Only a document uploaded AS a standalone image gets embedded via
+  // Voyage's image mode - extracting images embedded inside a PDF/DOCX
+  // is out of scope, hence no separate images-within-a-document table.
+  `CREATE TABLE IF NOT EXISTS nk_kb_documents (
+     id                  SERIAL PRIMARY KEY,
+     title               VARCHAR(300) NOT NULL,
+     source_type         VARCHAR(20) NOT NULL
+                            CHECK (source_type IN ('pdf','docx','text','html','link','image')),
+     source_url          VARCHAR(500),
+     raw_text            TEXT,
+     uploaded_by_user_id INTEGER REFERENCES nk_users(id) ON DELETE SET NULL,
+     status              VARCHAR(20) NOT NULL DEFAULT 'ready'
+                            CHECK (status IN ('ready','failed')),
+     error_message       TEXT,
+     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  // vector(1024) matches voyage-multimodal-3's output dimension. content
+  // is null for an image chunk (image_url set instead); chunk_index is
+  // generation order within its document, not meaningful across
+  // documents.
+  `CREATE TABLE IF NOT EXISTS nk_kb_chunks (
+     id            SERIAL PRIMARY KEY,
+     document_id   INTEGER NOT NULL REFERENCES nk_kb_documents(id) ON DELETE CASCADE,
+     chunk_index   INTEGER NOT NULL,
+     content       TEXT,
+     image_url     VARCHAR(500),
+     embedding     vector(1024) NOT NULL,
+     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     UNIQUE (document_id, chunk_index)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS nk_kb_chunks_embedding_idx
+     ON nk_kb_chunks USING hnsw (embedding vector_cosine_ops)`,
 ];
 
 async function migrate() {

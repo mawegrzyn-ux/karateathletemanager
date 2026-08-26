@@ -32,6 +32,7 @@ const googleCalendar = require("./googleCalendar");
 const trainingPrograms = require("./trainingPrograms");
 const ascendApi = require("./ascendApi");
 const exerciseSearch = require("./exerciseSearch");
+const knowledgeBase = require("./knowledgeBase");
 
 const router = Router();
 
@@ -68,5 +69,6 @@ router.use("/google-calendar", googleCalendar);
 router.use("/training-programs", trainingPrograms);
 router.use("/admin/ascend-api", ascendApi);
 router.use("/exercise-search", exerciseSearch);
+router.use("/kb", knowledgeBase);
 
 module.exports = router;
