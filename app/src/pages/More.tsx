@@ -86,6 +86,7 @@ export default function More() {
             <Tile to="/admin/osu-api-key" icon="🔑" label="Osu API key" />
             <Tile to="/admin/brave-api-key" icon="🔍" label="Web search key" />
             <Tile to="/admin/ascendapi-key" icon="🏋️" label="AscendAPI key" />
+            <Tile to="/admin/voyage-key" icon="📚" label="Voyage AI key" />
             <Tile to="/admin/s3-storage" icon="🪣" label="S3 storage" />
             <Tile
               to="/admin/google-calendar-config"
@@ -110,6 +111,7 @@ export default function More() {
               label="Manage training"
             />
             <Tile to="/admin/event-types" icon="🏷️" label="Schedule types" />
+            <Tile to="/admin/knowledge-base" icon="📚" label="Knowledge base" />
           </TileGrid>
         </div>
       )}

@@ -4,6 +4,7 @@ const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
 const asyncHandler = require("../utils/asyncHandler");
 const { getS3Config, publicUrlFor } = require("../utils/s3");
+const { embedTexts } = require("../utils/voyage");
 
 const router = Router();
 router.use(authorize.requireAdmin);
@@ -98,6 +99,30 @@ registerSecretRoutes("/google-client-secret", "google_client_secret", "GOOGLE_CL
 // instead of every exercise item being typed/uploaded by hand. See
 // api/src/routes/ascendApi.js for where this key is used.
 registerSecretRoutes("/ascendapi-key", "ascendapi_key", "ASCENDAPI_KEY");
+
+// Voyage AI's embeddings API, for Osu's knowledge base (api/src/routes/
+// knowledgeBase.js, api/src/utils/voyage.js) - embeds every uploaded
+// document/link/image into pgvector so search_knowledge_base
+// (api/src/mcp/tools.js) can retrieve grounded context.
+registerSecretRoutes("/voyage-key", "voyage_api_key", "VOYAGE_API_KEY");
+
+// Same "test connection" shape as /s3-config/test above - embeds a
+// sample string and reports the dimension back, so an admin can confirm
+// the key actually works before relying on it for the knowledge base.
+router.post(
+  "/voyage-key/test",
+  asyncHandler(async (req, res) => {
+    try {
+      const [embedding] = await embedTexts(["Nada Karate connection test"]);
+      res.json({ dimensions: embedding.length });
+    } catch (err) {
+      const status = err.status ?? 502;
+      res.status(status).json({
+        error: { message: err instanceof Error ? err.message : "Test embedding failed" },
+      });
+    }
+  })
+);
 
 // S3 storage for uploads (api/src/utils/s3.js, api/src/routes/uploads.js,
 // api/src/routes/publicBranding.js) - bucket/region/access key id aren't

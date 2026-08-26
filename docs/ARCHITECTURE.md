@@ -2842,6 +2842,11 @@ never drift apart on what a tool does or what it's called:
   `todayInfo()` directly (the same function `get_current_date`'s handler
   calls) so `osu.js` can state today's date up front in the system prompt
   (see below) without spending a tool round-trip on the common case.
+  `search_knowledge_base` retrieves grounded context from the admin/
+  coach-managed document repository - see "Osu Knowledge Base" below for
+  the full ingestion pipeline; the tool handler itself is just a thin
+  call into `searchKnowledgeBase()`, shared with the admin page's own
+  test-search panel.
 - `api/src/mcp/server.js` is a standalone MCP server (stdio transport, the
   low-level `@modelcontextprotocol/sdk` `Server` class — not the
   Zod-based `McpServer` convenience wrapper, precisely so it can reuse the
@@ -2922,6 +2927,82 @@ never drift apart on what a tool does or what it's called:
   environment, no extra plumbing. `BRAVE_API_KEY` is the equivalent
   `.env` fallback for web search, both optional given the in-app
   configuration pages above.
+
+### Osu Knowledge Base (vector search)
+
+An admin/coach-managed document repository (PDF, Word doc, plain text,
+HTML, a plain link, or a standalone image) embedded into
+[pgvector](https://github.com/pgvector/pgvector) so Osu's
+`search_knowledge_base` tool (above) can retrieve grounded context -
+club policy documents, technique notes, seminar handouts, reference
+images, etc. - instead of only ever answering from live app data.
+
+- **Embeddings: Voyage AI, `voyage-multimodal-3`** (`api/src/utils/
+  voyage.js`) - the same model embeds both text and images into one
+  vector space, so every source type here shares a single pipeline/index
+  rather than needing a separate image embedder. No official `voyageai`
+  SDK dependency - a hand-rolled `fetch` wrapper, matching
+  `api/src/utils/ascendApi.js`'s own shape for RapidAPI. Key stored the
+  same way as every other third-party key in this app
+  (`registerSecretRoutes("/voyage-key", "voyage_api_key",
+  "VOYAGE_API_KEY")` in `settings.js`, configured at
+  `admin/VoyageApiKey.tsx`, `/admin/voyage-key`, tile under More's
+  "Configuration" section) - plus a `POST /admin/settings/voyage-key/test`
+  route (same shape as S3's own connection test) that embeds a sample
+  string and reports the dimension count back.
+- **Vector store: pgvector**, a Postgres extension, on the app's own
+  database rather than a separate vector DB service. **Deployment
+  prerequisite**: the app's DB role can't self-provision the extension
+  (needs superuser or a "trusted" extension) - `CREATE EXTENSION IF NOT
+  EXISTS vector` is a one-time manual step per environment (see First-
+  time setup above), deliberately NOT part of `migrate.js`'s own
+  transactional statement list, since a failure there would roll back
+  every future migration on any environment where it hasn't been run yet.
+- **Schema** (`api/scripts/migrate.js`): `nk_kb_documents` (title,
+  `source_type` one of pdf/docx/text/html/link/image, `source_url`,
+  `raw_text`, `uploaded_by_user_id`, `status` ready/failed +
+  `error_message`) and `nk_kb_chunks` (`document_id`, `chunk_index`,
+  `content` or `image_url`, `embedding vector(1024)`, an HNSW index on
+  `embedding` with `vector_cosine_ops`). Only a document uploaded *as* a
+  standalone image gets embedded via Voyage's image mode - extracting
+  images embedded inside a PDF/DOCX is out of scope.
+- **Ingestion** (`api/src/routes/knowledgeBase.js`, `authorize("coach")`
+  throughout, mounted `/kb`): `POST /kb/documents` accepts either a
+  multipart file (extracted via `pdf-parse` v2's `PDFParse` class for
+  PDF, `mammoth` for .docx, `cheerio` for HTML/a link's fetched page,
+  direct UTF-8 read for plain text) or a JSON `{source_type: "link",
+  source_url}` body (fetched server-side). Uses a separate
+  `multer.memoryStorage()` (not `uploads.js`'s `ConfigurableStorage`,
+  which streams straight to disk/S3 without buffering) since text
+  extraction needs the raw buffer in-process; the buffer is then
+  persisted to the same local-disk-or-S3 destination
+  `getS3Config()`/`publicUrlFor()` (`api/src/utils/s3.js`) would choose,
+  landing in the same physical location `uploads.js`'s own
+  `express.static` already serves. Runs synchronously within the
+  request (extract → chunk → embed → insert, respond once done) - no
+  background-job infrastructure exists anywhere in this app, matching
+  how training-programme enrollment's own bulk event generation works.
+  A failure (bad file, Voyage API error) still inserts the document row
+  with `status: "failed"` and `error_message` set, no chunks, rather
+  than a bare 500 - the admin page shows it as a "Failed" badge instead
+  of silently vanishing. `chunkText()` (`api/src/utils/
+  knowledgeBase.js`) is simple fixed-size character chunking with
+  overlap, no semantic splitting.
+- **Search** (`searchKnowledgeBase()`, same `knowledgeBase.js` util,
+  shared by `GET /kb/search` and Osu's tool): embeds the query
+  (`input_type: "query"`, Voyage's asymmetric models expect this to
+  differ from how stored content was embedded), then `ORDER BY embedding
+  <=> $1 LIMIT $2` against `nk_kb_chunks` joined to its parent document.
+  Caps each returned chunk to ~800 characters - `osu.js`'s tool loop
+  (non-streaming, a flat `max_tokens`, tool results are raw
+  `JSON.stringify`'d) does no truncation or compaction of its own, so
+  this has to happen here.
+- **Admin page** (`admin/KnowledgeBase.tsx`, `/admin/knowledge-base`,
+  tile under More's "Coach" section since management is coach/admin like
+  Training Modules, not admin-only): standard list+drawer, an `AddButton`
+  drawer with a file-upload/paste-a-link toggle, and a "Test search"
+  panel at the bottom (query box hitting `GET /kb/search`) so an admin
+  can sanity-check retrieval without going through Osu at all.
 
 ### Google Calendar sync
 
@@ -3563,6 +3644,15 @@ The Lightsail instance has been wiped and has these system packages pre-installe
 sudo -u postgres createuser nadakarate
 sudo -u postgres createdb nadakarate -O nadakarate
 sudo -u postgres psql -c "ALTER USER nadakarate PASSWORD 'your-password';"
+
+# Required once per environment before migrate.js runs there for the
+# first time after the Knowledge Base feature is deployed - the app's
+# own DB role isn't superuser and can't run this itself (CREATE
+# EXTENSION needs superuser or a "trusted" extension), and putting it
+# inside migrate.js's own transactional statement list would break every
+# future migration wherever this hasn't been run yet.
+apt-get install -y postgresql-16-pgvector   # or your Postgres version's package
+sudo -u postgres psql -d nadakarate -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 # 2. Clone repo
 cd /var/www/nadakarate
