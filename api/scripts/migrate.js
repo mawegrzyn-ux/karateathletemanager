@@ -1272,6 +1272,14 @@ const migrations = [
   // <select><option> can only ever show plain text).
   `ALTER TABLE nk_event_types ADD COLUMN IF NOT EXISTS icon_url VARCHAR(500)`,
   `ALTER TABLE nk_training_module_types ADD COLUMN IF NOT EXISTS icon_url VARCHAR(500)`,
+
+  // A post's optional voice note - recorded in the Composer (MediaRecorder)
+  // alongside live browser speech-to-text that fills the note body as the
+  // author speaks. This column only stores the playable audio clip itself;
+  // there's no separate transcript column since the transcription already
+  // lands directly in `body` (the same field a typed note uses), not a
+  // second piece of structured data.
+  `ALTER TABLE nk_athlete_posts ADD COLUMN IF NOT EXISTS voice_note_url VARCHAR(500)`,
 ];
 
 async function migrate() {

@@ -794,7 +794,7 @@ router.patch(
 );
 
 const POST_JOIN_SQL = `
-  SELECT p.id, p.athlete_id, p.title, p.body, p.image_url, p.share_kind, p.created_at,
+  SELECT p.id, p.athlete_id, p.title, p.body, p.image_url, p.voice_note_url, p.share_kind, p.created_at,
          p.share_event_id, e.title AS share_event_title, e.start_date AS share_event_date,
          ei.title AS share_item_title, ei.item_date AS share_item_date,
          gl.name AS share_grade_name, gl.belt_color AS share_grade_color,
@@ -874,10 +874,12 @@ router.post(
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
-    const { title, body, image_url, share_kind, share_id } = req.body ?? {};
-    if (!title?.trim() && !body?.trim() && !image_url && !share_kind) {
+    const { title, body, image_url, voice_note_url, share_kind, share_id } = req.body ?? {};
+    if (!title?.trim() && !body?.trim() && !image_url && !voice_note_url && !share_kind) {
       return res.status(400).json({
-        error: { message: "Post must have a title, text, an image, or a shared item" },
+        error: {
+          message: "Post must have a title, text, an image, a voice note, or a shared item",
+        },
       });
     }
 
@@ -920,16 +922,17 @@ router.post(
 
     const { rows } = await pool.query(
       `INSERT INTO nk_athlete_posts
-         (athlete_id, title, body, image_url, share_kind, share_event_id,
+         (athlete_id, title, body, image_url, voice_note_url, share_kind, share_event_id,
           share_event_item_id, share_grading_id, share_competition_result_id,
           share_kata_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING id`,
       [
         req.params.id,
         title?.trim() || null,
         body?.trim() || null,
         image_url || null,
+        voice_note_url || null,
         share_kind || null,
         shareColumns.share_event_id,
         shareColumns.share_event_item_id,
@@ -949,7 +952,8 @@ router.post(
 
 // Editing a post is self-only, same as creating one - it's the athlete's
 // own voice, not something a coach/admin should be able to rewrite. Only
-// title/body/image_url can be changed; the share_* link (if any) is fixed
+// title/body/image_url/voice_note_url can be changed; the share_* link
+// (if any) is fixed
 // at creation time.
 router.patch(
   "/:id/posts/:postId",
@@ -966,6 +970,7 @@ router.patch(
       title: reqBody.title,
       body: reqBody.body,
       image_url: reqBody.image_url,
+      voice_note_url: reqBody.voice_note_url,
     };
     const setClauses = [];
     const values = [];
