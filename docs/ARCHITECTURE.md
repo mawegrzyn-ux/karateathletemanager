@@ -2594,6 +2594,14 @@ unchanged.
   "Switch {role} profile" button opens that same picker directly, so a
   same-type multi-profile account always has a way to switch even
   without a second role type.
+- Each role pill (both here and in `ProfileSwitchSheet.tsx`) shows the
+  currently-active profile's display name as a small subtitle under the
+  role label (`useProfileSwitching`'s `availableRoles[].name`, sourced
+  from `user.athlete_name`/`coach_name`/`referee_name` - `null` for
+  "parent", which has no separate named profile of its own) - so a
+  same-type multi-profile account can see *which* athlete/coach is
+  currently active at a glance, not just that the role itself is
+  available.
 - The switcher's data/logic (`availableRoles`, `singleRoleMultiProfile`,
   `handleRoleClick`, the picker state) live in a shared
   `useProfileSwitching()` hook (`app/src/hooks/useProfileSwitching.ts`),

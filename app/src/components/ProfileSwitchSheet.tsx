@@ -67,18 +67,23 @@ export function ProfileSwitchSheet({
           <>
             <p className="text-sm font-medium text-stone-700">Switch profile</p>
             <div className="flex flex-col gap-2">
-              {availableRoles.map(({ role, label }) => (
+              {availableRoles.map(({ role, label, name }) => (
                 <button
                   key={role}
                   type="button"
                   onClick={() => chooseRole(role)}
-                  className={`flex min-h-[44px] items-center justify-between rounded-xl border px-4 text-left font-medium ${
+                  className={`flex min-h-[44px] items-center justify-between rounded-xl border px-4 py-2 text-left font-medium ${
                     user?.role === role
                       ? "border-red-200 bg-red-50 text-red-700"
                       : "border-stone-200"
                   }`}
                 >
-                  {label}
+                  <span className="flex flex-col">
+                    <span>{label}</span>
+                    {name && (
+                      <span className="text-xs font-normal text-stone-500">{name}</span>
+                    )}
+                  </span>
                   {user?.role === role && <span className="text-sm">✓ Active</span>}
                 </button>
               ))}

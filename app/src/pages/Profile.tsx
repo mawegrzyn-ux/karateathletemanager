@@ -86,17 +86,26 @@ export default function Profile() {
             <span className="text-sm font-medium text-stone-700">Acting as</span>
             {availableRoles.length >= 2 ? (
               <div className="flex gap-1 rounded-full bg-stone-100 p-1">
-                {availableRoles.map(({ role, label }) => (
+                {availableRoles.map(({ role, label, name }) => (
                   <button
                     key={role}
                     onClick={() => handleRoleClick(role)}
-                    className={`min-h-[40px] flex-1 rounded-full px-3 text-sm font-medium transition-colors ${
+                    className={`flex min-h-[40px] flex-1 flex-col items-center justify-center rounded-full px-3 py-1 text-sm font-medium transition-colors ${
                       user?.role === role
                         ? "bg-red-600 text-white shadow-sm"
                         : "text-stone-600"
                     }`}
                   >
-                    {label}
+                    <span>{label}</span>
+                    {name && (
+                      <span
+                        className={`text-xs font-normal ${
+                          user?.role === role ? "text-red-100" : "text-stone-400"
+                        }`}
+                      >
+                        {name}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>

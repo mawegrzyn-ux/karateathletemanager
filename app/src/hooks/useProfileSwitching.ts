@@ -27,12 +27,33 @@ export function useProfileSwitching() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.athlete_id, user?.coach_id, user?.referee_id]);
 
+  // `name` is the currently-active profile's display name for that role
+  // (null for "parent", which has no separate named profile of its own) -
+  // shown alongside the role label wherever these pills render, so a
+  // same-type multi-profile account (e.g. two athlete profiles) can see
+  // *which* one is active before deciding whether to switch, not just
+  // that the "Athlete" role itself is available.
   const availableRoles = (
     [
-      { role: "athlete" as const, label: "Athlete", has: !!user?.athlete_id },
-      { role: "coach" as const, label: "Coach", has: !!user?.coach_id },
-      { role: "referee" as const, label: "Referee", has: !!user?.referee_id },
-      { role: "parent" as const, label: "Parent", has: !!user?.is_parent },
+      {
+        role: "athlete" as const,
+        label: "Athlete",
+        name: user?.athlete_name ?? null,
+        has: !!user?.athlete_id,
+      },
+      {
+        role: "coach" as const,
+        label: "Coach",
+        name: user?.coach_name ?? null,
+        has: !!user?.coach_id,
+      },
+      {
+        role: "referee" as const,
+        label: "Referee",
+        name: user?.referee_name ?? null,
+        has: !!user?.referee_id,
+      },
+      { role: "parent" as const, label: "Parent", name: null, has: !!user?.is_parent },
     ]
   ).filter((r) => r.has);
 
