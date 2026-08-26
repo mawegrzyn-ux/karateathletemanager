@@ -15,7 +15,7 @@ const router = Router();
 const UPLOADS_DIR = path.join(__dirname, "..", "..", "uploads");
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
-const ALLOWED_MIME_PREFIXES = ["image/", "video/"];
+const ALLOWED_MIME_PREFIXES = ["image/", "video/", "audio/"];
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 // Checks S3 config per-upload (not once at startup) so an admin turning
@@ -87,7 +87,7 @@ const upload = multer({
     const ok = ALLOWED_MIME_PREFIXES.some((prefix) =>
       file.mimetype.startsWith(prefix)
     );
-    cb(ok ? null : new Error("Only image or video files are allowed"), ok);
+    cb(ok ? null : new Error("Only image, video, or audio files are allowed"), ok);
   },
 });
 

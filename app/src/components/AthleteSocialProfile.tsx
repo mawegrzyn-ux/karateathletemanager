@@ -2,7 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { useApi } from "../hooks/useApi";
 import { usePhotoPalette } from "../lib/colorPalette";
 import { renderFormattedText } from "../utils/formatText";
-import { Avatar, BeltSwatch, DeleteButton, Drawer, MediaField, Spinner, Toast, isVideoUrl } from "./ui";
+import {
+  Avatar,
+  BeltSwatch,
+  DeleteButton,
+  Drawer,
+  MediaField,
+  Spinner,
+  Toast,
+  isVideoUrl,
+  uploadFile,
+} from "./ui";
 
 export interface SocialProfile {
   id: number;
@@ -23,6 +33,7 @@ export interface Post {
   title: string | null;
   body: string | null;
   image_url: string | null;
+  voice_note_url: string | null;
   share_kind: ShareKind | null;
   created_at: string;
   share_event_id: number | null;
@@ -218,6 +229,10 @@ export function PostCard({
           <img src={post.image_url} alt="" className="max-h-80 w-full object-cover" />
         )
       )}
+      {post.voice_note_url && (
+        // eslint-disable-next-line jsx-a11y/media-has-caption
+        <audio src={post.voice_note_url} controls className="w-full" />
+      )}
       <ShareBadge post={post} />
     </div>
   );
@@ -326,6 +341,185 @@ function ShareFromSchedulePicker({
   );
 }
 
+// Hand-rolled, minimal shape for the parts of the Web Speech API this
+// actually uses - TypeScript's bundled lib.dom.d.ts ships the supporting
+// SpeechRecognitionResult/ResultList/Alternative types but not
+// SpeechRecognition itself or its event (it's a non-standard, vendor-
+// prefixed API on most browsers), so there's nothing built-in to extend.
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: {
+    length: number;
+    [index: number]: { isFinal: boolean; [alt: number]: { transcript: string } };
+  };
+}
+
+function getSpeechRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
+  const w = window as unknown as {
+    SpeechRecognition?: new () => SpeechRecognitionLike;
+    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+function voiceNoteExtension(mimeType: string): string {
+  if (mimeType.includes("webm")) return "webm";
+  if (mimeType.includes("mp4")) return "m4a";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
+}
+
+// Records a voice note (MediaRecorder) while simultaneously live-
+// transcribing speech into the composer's note body via the browser's own
+// Speech Recognition, when available - no third-party transcription API
+// or key. The recorded clip itself is uploaded and kept only for
+// playback; the transcription lands straight in `body` (the same field a
+// typed note uses) rather than a second, separate structured field.
+// Feature-detected on both fronts: recording alone (no live transcript)
+// still works wherever MediaRecorder exists but Speech Recognition
+// doesn't (notably Safari/iOS), and the whole control hides itself where
+// MediaRecorder itself is unavailable.
+function VoiceNoteRecorder({
+  value,
+  onChange,
+  onTranscript,
+  onError,
+}: {
+  value: string;
+  onChange: (url: string) => void;
+  onTranscript: (text: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [recording, setRecording] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  const supportsRecording = typeof MediaRecorder !== "undefined";
+
+  async function start() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setRecording(true);
+
+      const RecognitionCtor = getSpeechRecognitionCtor();
+      if (RecognitionCtor) {
+        const recognition = new RecognitionCtor();
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.onresult = (event) => {
+          let text = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) text += event.results[i][0].transcript;
+          }
+          if (text.trim()) onTranscript(text.trim());
+        };
+        // Transcription is a bonus, not required - a failure (offline,
+        // unsupported locale, a permission race) just leaves the
+        // recording itself running without live-filled text.
+        recognition.onerror = () => {};
+        try {
+          recognition.start();
+          recognitionRef.current = recognition;
+        } catch {
+          recognitionRef.current = null;
+        }
+      }
+    } catch {
+      onError("Couldn't access the microphone");
+    }
+  }
+
+  async function stop() {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+
+    const blob = await new Promise<Blob>((resolve) => {
+      recorder.onstop = () =>
+        resolve(new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" }));
+      recorder.stop();
+    });
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    mediaRecorderRef.current = null;
+    setRecording(false);
+
+    setUploading(true);
+    try {
+      const file = new File([blob], `voice-note.${voiceNoteExtension(blob.type)}`, {
+        type: blob.type,
+      });
+      onChange(await uploadFile(file));
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to upload voice note");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  if (!supportsRecording) return null;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-sm font-medium text-stone-700">Voice note</span>
+      {value ? (
+        <div className="flex items-center gap-2">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <audio src={value} controls className="h-9 flex-1" />
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            aria-label="Remove voice note"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-stone-100 text-stone-600"
+          >
+            🗑
+          </button>
+        </div>
+      ) : recording ? (
+        <button
+          type="button"
+          onClick={stop}
+          className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-red-300 bg-red-50 font-medium text-red-700"
+        >
+          ⏹ Stop recording
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={start}
+          disabled={uploading}
+          className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-stone-300 font-medium text-stone-600 disabled:opacity-50"
+        >
+          {uploading ? <Spinner /> : "🎙 Record voice note"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Composer({
   athleteId,
   post,
@@ -348,6 +542,7 @@ export function Composer({
   const [title, setTitle] = useState(post?.title ?? "");
   const [body, setBody] = useState(post?.body ?? "");
   const [imageUrl, setImageUrl] = useState(post?.image_url ?? "");
+  const [voiceNoteUrl, setVoiceNoteUrl] = useState(post?.voice_note_url ?? "");
   const [share, setShare] = useState<{ kind: ShareKind; id: number; label: string } | null>(
     fixedShare ?? null
   );
@@ -385,7 +580,7 @@ export function Composer({
   }
 
   async function submit() {
-    if (!title.trim() && !body.trim() && !imageUrl && !share) return;
+    if (!title.trim() && !body.trim() && !imageUrl && !voiceNoteUrl && !share) return;
     setSubmitting(true);
     try {
       if (post) {
@@ -395,6 +590,7 @@ export function Composer({
             title: title.trim() || null,
             body: body.trim() || null,
             image_url: imageUrl || null,
+            voice_note_url: voiceNoteUrl || null,
           }
         );
         onSaved(updated);
@@ -405,6 +601,7 @@ export function Composer({
             title: title.trim() || undefined,
             body: body.trim() || undefined,
             image_url: imageUrl || undefined,
+            voice_note_url: voiceNoteUrl || undefined,
             share_kind: share?.kind,
             share_id: share?.id,
           }
@@ -413,6 +610,7 @@ export function Composer({
         setTitle("");
         setBody("");
         setImageUrl("");
+        setVoiceNoteUrl("");
         setShare(null);
       }
     } catch {
@@ -464,6 +662,12 @@ export function Composer({
         onChange={setImageUrl}
         onError={showToast}
       />
+      <VoiceNoteRecorder
+        value={voiceNoteUrl}
+        onChange={setVoiceNoteUrl}
+        onTranscript={(text) => setBody((prev) => (prev.trim() ? `${prev} ${text}` : text))}
+        onError={showToast}
+      />
       {share && (
         <div className="flex items-center justify-between rounded-xl bg-stone-100 px-3 py-2 text-sm">
           <span>{share.label}</span>
@@ -502,7 +706,10 @@ export function Composer({
         <button
           type="button"
           onClick={submit}
-          disabled={submitting || (!title.trim() && !body.trim() && !imageUrl && !share)}
+          disabled={
+            submitting ||
+            (!title.trim() && !body.trim() && !imageUrl && !voiceNoteUrl && !share)
+          }
           className="min-h-[44px] flex-1 rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
         >
           {post ? "Save" : "Post"}

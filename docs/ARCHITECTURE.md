@@ -1357,6 +1357,24 @@ coach-run attendance) — this is personal athlete itinerary planning.
   *view* an athlete's kata posts already can, via that athlete's own
   social profile feed, since kata-tagged posts render there too
   (`ShareBadge` gained a `"kata"` case: 🥋 name, style, WKF #).
+- **Voice notes on posts** (`Composer`/`PostCard`, `AthleteSocialProfile.tsx`):
+  a new `nk_athlete_posts.voice_note_url` column alongside `image_url`,
+  recorded via a `VoiceNoteRecorder` control in the composer (below the
+  photo/video `MediaField`) using `MediaRecorder` - `uploads.js`'s
+  `ALLOWED_MIME_PREFIXES` grew an `"audio/"` entry for this. While
+  recording, the browser's own Speech Recognition
+  (`SpeechRecognition`/`webkitSpeechRecognition`, feature-detected - not
+  in TS's bundled `lib.dom.d.ts`, hand-rolled minimal types instead) live-
+  transcribes into the note `body` textarea, the same field a typed note
+  uses - there's no separate transcript column, since the point is
+  filling in the note, not storing a second copy of it. No third-party
+  transcription API/key: recording alone still works wherever
+  `MediaRecorder` exists but Speech Recognition doesn't (notably Safari/
+  iOS), the whole control just hides itself where `MediaRecorder` itself
+  is unavailable. `PostCard` renders it as a plain `<audio controls>`,
+  same treatment for every `share_kind` including the kata tracker above,
+  since this lives in the shared `Composer`/`PostCard`, not anything
+  kata-specific.
 - **AscendAPI exercise import** (Training modules): a coach building an
   exercise item can search AscendAPI's ExerciseDB (RapidAPI) instead of
   typing/uploading name, explanation, video, and image by hand. Key
