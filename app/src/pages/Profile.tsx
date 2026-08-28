@@ -1,25 +1,16 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { useAuth, type Child, type Profile as ProfileRecord } from "../context/AuthContext";
+import { useAuth, type Child } from "../context/AuthContext";
 import { useProfileSwitching } from "../hooks/useProfileSwitching";
 import { ApiError, useApi } from "../hooks/useApi";
-import { Field, Drawer, MediaField, Toast, DeleteButton } from "../components/ui";
+import { Field, MediaField, Toast, DeleteButton } from "../components/ui";
 import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
 import { StaffSelfProfile } from "../components/StaffSelfProfile";
 import { AthleteSocialProfile } from "../components/AthleteSocialProfile";
 
 export default function Profile() {
   const { user, updateProfile } = useAuth();
-  const {
-    availableRoles,
-    singleRoleMultiProfile,
-    handleRoleClick,
-    picker,
-    setPicker,
-    pickerOptions,
-    pickerSelectedId,
-    selectProfile,
-  } = useProfileSwitching();
+  const { switchTargets, canSwitch, chooseTarget } = useProfileSwitching();
   const [firstName, setFirstName] = useState(user?.first_name ?? "");
   const [lastName, setLastName] = useState(user?.last_name ?? "");
   const [phone, setPhone] = useState(user?.phone ?? "");
@@ -81,57 +72,35 @@ export default function Profile() {
           </div>
         )}
 
-        {(availableRoles.length >= 2 || singleRoleMultiProfile) && (
+        {canSwitch && (
           <div className="flex flex-col gap-2 rounded-2xl bg-white p-3 shadow-card">
             <span className="text-sm font-medium text-stone-700">Acting as</span>
-            {availableRoles.length >= 2 ? (
-              <div className="flex gap-1 rounded-full bg-stone-100 p-1">
-                {availableRoles.map(({ role, label, name }) => (
-                  <button
-                    key={role}
-                    onClick={() => handleRoleClick(role)}
-                    className={`flex min-h-[40px] flex-1 flex-col items-center justify-center rounded-full px-3 py-1 text-sm font-medium transition-colors ${
-                      user?.role === role
-                        ? "bg-red-600 text-white shadow-sm"
-                        : "text-stone-600"
-                    }`}
-                  >
-                    <span>{label}</span>
-                    {name && (
-                      <span
-                        className={`text-xs font-normal ${
-                          user?.role === role ? "text-red-100" : "text-stone-400"
-                        }`}
-                      >
-                        {name}
+            <div className="flex flex-col gap-2">
+              {switchTargets.map((target) => (
+                <button
+                  key={target.key}
+                  type="button"
+                  onClick={() => chooseTarget(target)}
+                  className={`flex min-h-[44px] items-center justify-between rounded-xl border px-4 py-2 text-left font-medium ${
+                    target.active
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : "border-stone-200"
+                  }`}
+                >
+                  <span className="flex flex-col">
+                    <span>{target.label}</span>
+                    {target.name && (
+                      <span className="text-xs font-normal text-stone-500">
+                        {target.name}
                       </span>
                     )}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setPicker(availableRoles[0].role)}
-                className="min-h-[44px] rounded-full border border-stone-300 px-4 text-sm font-medium text-stone-700"
-              >
-                Switch {availableRoles[0].label.toLowerCase()} profile
-              </button>
-            )}
+                  </span>
+                  {target.active && <span className="text-sm">✓ Active</span>}
+                </button>
+              ))}
+            </div>
           </div>
         )}
-
-        <Drawer
-          open={picker !== null}
-          onClose={() => setPicker(null)}
-          title={`Choose ${picker ?? ""} profile`}
-        >
-          <ProfilePicker
-            options={pickerOptions}
-            selectedId={pickerSelectedId}
-            onSelect={selectProfile}
-          />
-        </Drawer>
 
         {user?.role === "athlete" && user.athlete_id && editing && (
           <div className="rounded-2xl bg-white p-4 shadow-card">
@@ -208,62 +177,6 @@ export default function Profile() {
           <Link to="/" className="text-center text-sm font-medium text-red-700">
             Back to app
           </Link>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Exported for reuse by the bottom nav's press-and-hold quick switcher
-// (components/ProfileSwitchSheet.tsx), which needs the identical
-// search-and-select list once a role's picker is showing.
-export function ProfilePicker({
-  options,
-  selectedId,
-  onSelect,
-}: {
-  options: ProfileRecord[];
-  selectedId: number | null;
-  onSelect: (id: number) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const q = query.trim().toLowerCase();
-  const results = options.filter((o) =>
-    `${o.first_name} ${o.last_name}`.toLowerCase().includes(q)
-  );
-
-  return (
-    <div className="flex flex-col gap-2">
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search profiles..."
-        className="min-h-[44px] rounded-xl border border-stone-300 px-3"
-      />
-      <div className="flex flex-col gap-1 overflow-y-auto">
-        {results.map((o) => {
-          const selected = selectedId === o.id;
-          return (
-            <button
-              key={o.id}
-              onClick={() => onSelect(o.id)}
-              className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-left ${
-                selected
-                  ? "border-green-200 bg-green-50 text-green-800"
-                  : "border-stone-200"
-              }`}
-            >
-              <span>
-                {o.first_name} {o.last_name}
-              </span>
-              <span className="text-sm">
-                {selected ? "✓ Selected" : "Select"}
-              </span>
-            </button>
-          );
-        })}
-        {results.length === 0 && (
-          <p className="px-1 py-2 text-sm text-stone-500">No matches.</p>
         )}
       </div>
     </div>
