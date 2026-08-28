@@ -341,7 +341,14 @@ function eventWhenLabel(event: Pick<Event, "start_date" | "end_date" | "start_ti
     ? toDateInput(event.start_date)
     : `${toDateInput(event.start_date)} – ${toDateInput(event.end_date)}`;
   const start = event.start_time ? toTimeInput(event.start_time) : null;
-  const end = event.end_time ? toTimeInput(event.end_time) : null;
+  // A same-instant start/end (e.g. a kata performance logged as one
+  // point in time rather than a span) isn't a real range - "from 09:00
+  // to 09:00" - so it's dropped here and falls through to "from start"
+  // below, same as if no end_time were set at all.
+  const end =
+    event.end_time && event.end_time !== event.start_time
+      ? toTimeInput(event.end_time)
+      : null;
   if (start && end) return `${datePart}, from ${start} to ${end}`;
   if (start) return `${datePart}, from ${start}`;
   if (end) return `${datePart}, until ${end}`;
@@ -397,10 +404,20 @@ function expandEventsForList(events: Event[]): EventOccurrence[] {
   return out;
 }
 
+// Untimed occurrences (an all-day event, or a later day of a continuous
+// multi-day span with no daily_times - matching isTimedOnDate's own
+// definition of "has a real time to show") sort before every timed one,
+// using -1 as a sentinel below any real minute-of-day value; timed
+// occurrences on the same day then sort by their actual start_time.
+function occurrenceSortKey(o: EventOccurrence): number {
+  if (!isTimedOnDate(o.event, o.date)) return -1;
+  return timeToMinutes(o.event.start_time) ?? -1;
+}
+
 function groupOccurrencesByDate(occurrences: EventOccurrence[]) {
   return groupByDate(occurrences, (o) => o.date).map(({ date, items }) => ({
     date,
-    occurrences: items,
+    occurrences: [...items].sort((a, b) => occurrenceSortKey(a) - occurrenceSortKey(b)),
   }));
 }
 
@@ -1482,7 +1499,9 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
                                   {occ.totalDays === 1 || e.daily_times ? (
                                     <>
                                       {e.start_time ? toTimeInput(e.start_time) : ""}
-                                      {e.end_time ? `–${toTimeInput(e.end_time)}` : ""}
+                                      {e.end_time && e.end_time !== e.start_time
+                                        ? `–${toTimeInput(e.end_time)}`
+                                        : ""}
                                     </>
                                   ) : (
                                     <>
@@ -4661,7 +4680,9 @@ function ItemsSection({
                 <div className="flex flex-col gap-3 border-t border-stone-200 p-3">
                   <div className="flex items-center gap-2 text-sm text-stone-500">
                     <span>
-                      {toTimeInput(item.start_time)}–{toTimeInput(item.end_time)}
+                      {toTimeInput(item.start_time)}
+                      {item.end_time !== item.start_time &&
+                        `–${toTimeInput(item.end_time)}`}
                     </span>
                   </div>
                   {item.notes && (
