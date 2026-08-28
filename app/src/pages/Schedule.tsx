@@ -4694,7 +4694,9 @@ function ItemsSection({
                       const module = modules.find(
                         (m) => m.id === item.training_module_id
                       );
-                      return module ? <TrainingModuleView module={module} /> : null;
+                      return module ? (
+                        <TrainingModuleView module={module} showTitle />
+                      ) : null;
                     })()}
                   {item.item_type === "kata_performance" && item.kata_id && (
                     <p className="text-sm text-stone-600">
