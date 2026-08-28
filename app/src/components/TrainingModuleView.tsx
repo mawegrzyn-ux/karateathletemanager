@@ -67,9 +67,28 @@ export function itemSummary(it: TrainingModuleItem) {
 // and image previews — reused anywhere a linked module needs to be shown
 // without its editing controls (the admin Training Modules page for
 // non-editors, and inline on a Schedule training item/event).
-export function TrainingModuleView({ module }: { module: TrainingModule }) {
+//
+// `showTitle` is opt-in (default off) since two of its three call sites
+// already show the module's title via their own surrounding UI (the
+// admin page's Drawer header, the event detail drawer's own prominent
+// title) - rendering it again here would just duplicate it. Only
+// Schedule's itinerary item view (ItemsSection) has nothing else showing
+// the linked session's name prominently, so that's the one call site
+// that turns this on.
+export function TrainingModuleView({
+  module,
+  showTitle,
+}: {
+  module: TrainingModule;
+  showTitle?: boolean;
+}) {
   return (
     <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      {showTitle && (
+        <h3 className="px-1 text-lg font-bold tracking-tight text-stone-900">
+          {module.title}
+        </h3>
+      )}
       {module.type_name && (
         <span className="w-fit rounded-full bg-stone-200 px-2 py-0.5 text-xs font-medium text-stone-700">
           {module.type_name}
@@ -86,35 +105,57 @@ export function TrainingModuleView({ module }: { module: TrainingModule }) {
           const youTubeId = item.video_url
             ? extractYouTubeId(item.video_url)
             : null;
+          // A small fixed-size box rather than a full-width player/image -
+          // this renders inline per exercise in what's often a list of
+          // several, so a photo/video is a compact visual cue here, not
+          // the primary content. YouTube gets its own thumbnail image
+          // (light - no iframe per exercise) wrapped in a link out to
+          // actually watch it, rather than an inline embed; a direct
+          // video file stays a real (small) <video> so it's still
+          // playable inline without leaving the page.
+          const mediaBox = youTubeId ? (
+            <a
+              href={item.video_url ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="relative block h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-stone-200"
+            >
+              <img
+                src={`https://img.youtube.com/vi/${youTubeId}/mqdefault.jpg`}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+              <span className="absolute inset-0 flex items-center justify-center text-2xl text-white drop-shadow">
+                ▶
+              </span>
+            </a>
+          ) : item.video_url ? (
+            // eslint-disable-next-line jsx-a11y/media-has-caption
+            <video
+              src={item.video_url}
+              controls
+              className="h-20 w-20 shrink-0 rounded-lg object-cover"
+            />
+          ) : item.image_url ? (
+            <img
+              src={item.image_url}
+              alt={item.name ?? "Exercise"}
+              className="h-20 w-20 shrink-0 rounded-lg object-cover"
+            />
+          ) : null;
+
           return (
             <div
               key={item.id}
-              className="flex flex-col gap-2 rounded-xl border border-stone-200 bg-white p-3"
+              className="flex items-start gap-3 rounded-xl border border-stone-200 bg-white p-3"
             >
-              <span className="font-medium">{itemSummary(item)}</span>
-              {item.explanation && (
-                <p className="text-sm text-stone-600">{item.explanation}</p>
-              )}
-              {youTubeId ? (
-                <iframe
-                  className="aspect-video w-full rounded-xl"
-                  src={`https://www.youtube.com/embed/${youTubeId}`}
-                  title="Video preview"
-                  allowFullScreen
-                />
-              ) : (
-                item.video_url && (
-                  // eslint-disable-next-line jsx-a11y/media-has-caption
-                  <video src={item.video_url} controls className="w-full rounded-xl" />
-                )
-              )}
-              {item.image_url && (
-                <img
-                  src={item.image_url}
-                  alt={item.name ?? "Exercise"}
-                  className="max-h-40 w-full rounded-xl object-cover"
-                />
-              )}
+              <div className="flex flex-1 flex-col gap-1">
+                <span className="font-medium">{itemSummary(item)}</span>
+                {item.explanation && (
+                  <p className="text-sm text-stone-600">{item.explanation}</p>
+                )}
+              </div>
+              {mediaBox}
             </div>
           );
         })}
