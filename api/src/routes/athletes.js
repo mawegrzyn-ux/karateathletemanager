@@ -29,8 +29,14 @@ router.get(
     const { q } = req.query;
     const { rows } = q
       ? await pool.query(
+          // Matches first_name/last_name individually AND the two
+          // concatenated together, so a full-name query like "Nada
+          // Wegrzyn" finds someone whose name is split across both
+          // fields, not just a query matching one field alone.
           `SELECT ${FIELDS} FROM nk_athletes
-           WHERE first_name ILIKE $1 OR last_name ILIKE $1
+           WHERE first_name ILIKE $1
+              OR last_name ILIKE $1
+              OR (first_name || ' ' || last_name) ILIKE $1
            ORDER BY last_name, first_name`,
           [`%${q}%`]
         )
