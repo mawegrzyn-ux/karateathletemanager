@@ -397,10 +397,20 @@ function expandEventsForList(events: Event[]): EventOccurrence[] {
   return out;
 }
 
+// Untimed occurrences (an all-day event, or a later day of a continuous
+// multi-day span with no daily_times - matching isTimedOnDate's own
+// definition of "has a real time to show") sort before every timed one,
+// using -1 as a sentinel below any real minute-of-day value; timed
+// occurrences on the same day then sort by their actual start_time.
+function occurrenceSortKey(o: EventOccurrence): number {
+  if (!isTimedOnDate(o.event, o.date)) return -1;
+  return timeToMinutes(o.event.start_time) ?? -1;
+}
+
 function groupOccurrencesByDate(occurrences: EventOccurrence[]) {
   return groupByDate(occurrences, (o) => o.date).map(({ date, items }) => ({
     date,
-    occurrences: items,
+    occurrences: [...items].sort((a, b) => occurrenceSortKey(a) - occurrenceSortKey(b)),
   }));
 }
 
