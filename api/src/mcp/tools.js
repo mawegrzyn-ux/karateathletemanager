@@ -139,6 +139,11 @@ const tools = [
       },
     },
     async handler({ query }) {
+      // Matches first_name/last_name individually AND the two
+      // concatenated together, so a full-name query like "Nada Wegrzyn"
+      // finds someone whose name is split across both fields, not just
+      // a query matching one field alone (see athletes.js's GET / for
+      // the same fix on the real search endpoint).
       const { rows } = await pool.query(
         `SELECT a.id, a.first_name, a.last_name, a.is_active, g.name AS grade_name
          FROM nk_athletes a
@@ -146,6 +151,7 @@ const tools = [
          WHERE $1::text IS NULL
             OR a.first_name ILIKE '%' || $1 || '%'
             OR a.last_name ILIKE '%' || $1 || '%'
+            OR (a.first_name || ' ' || a.last_name) ILIKE '%' || $1 || '%'
          ORDER BY a.last_name, a.first_name
          LIMIT 50`,
         [query ?? null]
