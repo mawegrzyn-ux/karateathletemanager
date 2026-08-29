@@ -28,7 +28,7 @@ const MAX_REPEAT_OCCURRENCES = 60;
 const STATUS_VALUES = ["pending", "completed", "failed"];
 
 const EVENT_FIELDS = `id, title, event_type, club_id, start_date, end_date, start_time, end_time, daily_times, location, venue_id, kata_id, notes, training_module_id, recurrence_id, icon, created_at`;
-const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, kata_id, recurrence_id`;
+const ITEM_FIELDS = `id, event_id, item_type, title, item_date, start_time, end_time, notes, training_module_id, training_module_item_id, kata_id, recurrence_id`;
 
 router.use(authorize());
 
@@ -262,7 +262,7 @@ async function copyModuleItemsToEventItems(
     preloadedItems ??
     (
       await client.query(
-        `SELECT item_type, name, explanation, sets, reps, duration_seconds, distance_meters
+        `SELECT id, item_type, name, explanation, sets, reps, duration_seconds, distance_meters
          FROM nk_training_module_items WHERE module_id = $1 ORDER BY position`,
         [moduleId]
       )
@@ -275,8 +275,9 @@ async function copyModuleItemsToEventItems(
       : 1;
     const end = addMinutesToTime(start, durationMinutes);
     await client.query(
-      `INSERT INTO nk_event_items (event_id, item_type, title, item_date, start_time, end_time, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `INSERT INTO nk_event_items
+         (event_id, item_type, title, item_date, start_time, end_time, notes, training_module_item_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         eventId,
         mi.item_type === "rest" ? "rest" : "training",
@@ -285,6 +286,7 @@ async function copyModuleItemsToEventItems(
         start,
         end,
         mi.explanation,
+        mi.id ?? null,
       ]
     );
     cursor = end;
@@ -1312,6 +1314,7 @@ router.post(
       end_time,
       notes,
       training_module_id,
+      training_module_item_id,
       kata_id,
       repeat,
     } = req.body ?? {};
@@ -1372,8 +1375,8 @@ router.post(
         const { rows } = await client.query(
           `INSERT INTO nk_event_items
              (event_id, item_type, title, item_date, start_time, end_time, notes,
-              training_module_id, kata_id, recurrence_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+              training_module_id, training_module_item_id, kata_id, recurrence_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING ${ITEM_FIELDS}`,
           [
             req.params.id,
@@ -1384,6 +1387,7 @@ router.post(
             end_time,
             notes,
             training_module_id ?? null,
+            training_module_item_id ?? null,
             kata_id ?? null,
             recurrenceId,
           ]
@@ -1431,6 +1435,7 @@ router.patch(
       end_time,
       notes,
       training_module_id,
+      training_module_item_id,
       kata_id,
     } = body;
 
@@ -1474,6 +1479,7 @@ router.patch(
       end_time,
       notes,
       training_module_id,
+      training_module_item_id,
       kata_id,
     };
     const setClauses = [];

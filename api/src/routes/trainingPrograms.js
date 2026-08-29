@@ -307,7 +307,7 @@ router.post(
         [moduleIds]
       );
       const { rows: itemRows } = await pool.query(
-        `SELECT module_id, item_type, name, explanation, sets, reps, duration_seconds, distance_meters
+        `SELECT id, module_id, item_type, name, explanation, sets, reps, duration_seconds, distance_meters
          FROM nk_training_module_items WHERE module_id = ANY($1::int[]) ORDER BY module_id, position`,
         [moduleIds]
       );

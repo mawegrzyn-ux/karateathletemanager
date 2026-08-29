@@ -46,21 +46,132 @@ export function moduleIconUrl(
   return module.icon ? null : module.type_icon_url ?? null;
 }
 
+// The measurement portion alone (no name) - "4 × 12", "30s", "50m" - or
+// null for a plain exercise with no sets/reps/duration/distance set.
+// Shared by itemSummary (which prefixes the name) and
+// TrainingModuleItemDetail (which shows the name as its own big title
+// instead, so it needs the measurement on its own).
+export function itemMeasurement(it: TrainingModuleItem) {
+  if (it.item_type === "rest") {
+    return it.duration_seconds ? `${it.duration_seconds}s` : null;
+  }
+  if (it.distance_meters != null) return `${it.distance_meters}m`;
+  if (it.duration_seconds != null && it.sets == null) {
+    return `${it.duration_seconds}s`;
+  }
+  if (it.sets != null && it.reps != null) return `${it.sets} × ${it.reps}`;
+  return null;
+}
+
 export function itemSummary(it: TrainingModuleItem) {
   if (it.item_type === "rest") {
-    return it.duration_seconds ? `Rest ${it.duration_seconds}s` : "Rest";
+    return itemMeasurement(it) ? `Rest ${itemMeasurement(it)}` : "Rest";
   }
   const name = it.name?.trim() || "Untitled exercise";
-  if (it.distance_meters != null) {
-    return `${name} — ${it.distance_meters}m`;
+  const measurement = itemMeasurement(it);
+  return measurement ? `${name} — ${measurement}` : name;
+}
+
+// A small fixed-size photo/video box for one exercise - compact rather
+// than full-width since this renders inline per exercise in what's often
+// a list of several, so it's a visual cue here, not the primary content.
+// YouTube gets its own thumbnail image (light - no iframe per exercise)
+// wrapped in a link out to actually watch it, rather than an inline
+// embed; a direct video file stays a real (small) <video> so it's still
+// playable inline without leaving the page.
+export function ExerciseMediaBox({ item }: { item: TrainingModuleItem }) {
+  const youTubeId = item.video_url ? extractYouTubeId(item.video_url) : null;
+  if (youTubeId) {
+    return (
+      <a
+        href={item.video_url ?? undefined}
+        target="_blank"
+        rel="noreferrer"
+        className="relative block h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-stone-200"
+      >
+        <img
+          src={`https://img.youtube.com/vi/${youTubeId}/mqdefault.jpg`}
+          alt=""
+          className="h-full w-full object-cover"
+        />
+        <span className="absolute inset-0 flex items-center justify-center text-2xl text-white drop-shadow">
+          ▶
+        </span>
+      </a>
+    );
   }
-  if (it.duration_seconds != null && it.sets == null) {
-    return `${name} — ${it.duration_seconds}s`;
+  if (item.video_url) {
+    return (
+      // eslint-disable-next-line jsx-a11y/media-has-caption
+      <video
+        src={item.video_url}
+        controls
+        className="h-20 w-20 shrink-0 rounded-lg object-cover"
+      />
+    );
   }
-  if (it.sets != null && it.reps != null) {
-    return `${name} — ${it.sets} × ${it.reps}`;
+  if (item.image_url) {
+    return (
+      <img
+        src={item.image_url}
+        alt={item.name ?? "Exercise"}
+        className="h-20 w-20 shrink-0 rounded-lg object-cover"
+      />
+    );
   }
-  return name;
+  return null;
+}
+
+// One exercise's compact row within a module's list - name+measurement
+// and description on the left, a small media box on the right.
+export function ExerciseItemRow({ item }: { item: TrainingModuleItem }) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-stone-200 bg-white p-3">
+      <div className="flex flex-1 flex-col gap-1">
+        <span className="font-medium">{itemSummary(item)}</span>
+        {item.explanation && (
+          <p className="text-sm text-stone-600">{item.explanation}</p>
+        )}
+      </div>
+      <ExerciseMediaBox item={item} />
+    </div>
+  );
+}
+
+// Full detail for ONE exercise, linked directly to an itinerary item via
+// training_module_item_id (as opposed to TrainingModuleView, which shows
+// a whole module's exercise list via training_module_id) - a big title
+// (the exercise's own name) above its measurement/description/media, in
+// the same compact row shape as ExerciseItemRow but without repeating the
+// name inside the row since the title above already carries it.
+export function TrainingModuleItemDetail({
+  item,
+  showTitle,
+}: {
+  item: TrainingModuleItem;
+  showTitle?: boolean;
+}) {
+  const measurement = itemMeasurement(item);
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      {showTitle && (
+        <h3 className="px-1 text-lg font-bold tracking-tight text-stone-900">
+          {item.name?.trim() || "Untitled exercise"}
+        </h3>
+      )}
+      <div className="flex items-start gap-3 rounded-xl border border-stone-200 bg-white p-3">
+        <div className="flex flex-1 flex-col gap-1">
+          {measurement && (
+            <span className="font-medium">{measurement}</span>
+          )}
+          {item.explanation && (
+            <p className="text-sm text-stone-600">{item.explanation}</p>
+          )}
+        </div>
+        <ExerciseMediaBox item={item} />
+      </div>
+    </div>
+  );
 }
 
 // Read-only display of a training module's exercises/rest — with video
@@ -101,64 +212,9 @@ export function TrainingModuleView({
         Exercises &amp; rest ({module.items.length})
       </span>
       <div className="flex flex-col gap-2">
-        {module.items.map((item) => {
-          const youTubeId = item.video_url
-            ? extractYouTubeId(item.video_url)
-            : null;
-          // A small fixed-size box rather than a full-width player/image -
-          // this renders inline per exercise in what's often a list of
-          // several, so a photo/video is a compact visual cue here, not
-          // the primary content. YouTube gets its own thumbnail image
-          // (light - no iframe per exercise) wrapped in a link out to
-          // actually watch it, rather than an inline embed; a direct
-          // video file stays a real (small) <video> so it's still
-          // playable inline without leaving the page.
-          const mediaBox = youTubeId ? (
-            <a
-              href={item.video_url ?? undefined}
-              target="_blank"
-              rel="noreferrer"
-              className="relative block h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-stone-200"
-            >
-              <img
-                src={`https://img.youtube.com/vi/${youTubeId}/mqdefault.jpg`}
-                alt=""
-                className="h-full w-full object-cover"
-              />
-              <span className="absolute inset-0 flex items-center justify-center text-2xl text-white drop-shadow">
-                ▶
-              </span>
-            </a>
-          ) : item.video_url ? (
-            // eslint-disable-next-line jsx-a11y/media-has-caption
-            <video
-              src={item.video_url}
-              controls
-              className="h-20 w-20 shrink-0 rounded-lg object-cover"
-            />
-          ) : item.image_url ? (
-            <img
-              src={item.image_url}
-              alt={item.name ?? "Exercise"}
-              className="h-20 w-20 shrink-0 rounded-lg object-cover"
-            />
-          ) : null;
-
-          return (
-            <div
-              key={item.id}
-              className="flex items-start gap-3 rounded-xl border border-stone-200 bg-white p-3"
-            >
-              <div className="flex flex-1 flex-col gap-1">
-                <span className="font-medium">{itemSummary(item)}</span>
-                {item.explanation && (
-                  <p className="text-sm text-stone-600">{item.explanation}</p>
-                )}
-              </div>
-              {mediaBox}
-            </div>
-          );
-        })}
+        {module.items.map((item) => (
+          <ExerciseItemRow key={item.id} item={item} />
+        ))}
         {module.items.length === 0 && (
           <p className="px-1 py-2 text-sm text-stone-500">No exercises yet.</p>
         )}

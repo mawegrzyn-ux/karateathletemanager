@@ -1329,6 +1329,18 @@ const migrations = [
 
   `CREATE INDEX IF NOT EXISTS nk_kb_chunks_embedding_idx
      ON nk_kb_chunks USING hnsw (embedding vector_cosine_ops)`,
+
+  // Links an itinerary item to one specific exercise within a training
+  // module, as opposed to training_module_id (which links the item to
+  // the whole module). copyModuleItemsToEventItems (events.js) sets this
+  // on every itinerary item it generates from a module's exercise list,
+  // so each becomes independently traceable back to its own exercise's
+  // description/measurement/media rather than just a plain title+notes
+  // copy of it - see ItemsSection in Schedule.tsx for the itinerary
+  // detail view this feeds.
+  `ALTER TABLE nk_event_items
+     ADD COLUMN IF NOT EXISTS training_module_item_id INTEGER
+       REFERENCES nk_training_module_items(id) ON DELETE SET NULL`,
 ];
 
 async function migrate() {
