@@ -34,7 +34,9 @@ import {
 } from "../components/ui";
 import {
   TrainingModuleView,
+  TrainingModuleItemDetail,
   moduleIcon,
+  itemSummary,
   type TrainingModule,
 } from "../components/TrainingModuleView";
 import { EventCompetitionResults } from "../components/CompetitionResults";
@@ -85,6 +87,7 @@ interface EventItem {
   end_time: string | null;
   notes: string | null;
   training_module_id: number | null;
+  training_module_item_id: number | null;
   kata_id: number | null;
   recurrence_id: string | null;
   athlete_status: AthleteStatus[];
@@ -313,6 +316,7 @@ const EMPTY_ITEM_FORM = {
   end_time: "",
   notes: "",
   training_module_id: null as number | null,
+  training_module_item_id: null as number | null,
   kata_id: null as number | null,
   repeat_freq: "none",
   repeat_interval: 1,
@@ -4431,6 +4435,16 @@ function ItemsSection({
     )
   );
 
+  // Every exercise across every module, flattened - lets an itinerary
+  // item link to one specific exercise (training_module_item_id) instead
+  // of a whole session (training_module_id), e.g. for a training event
+  // whose itinerary was auto-generated one item per exercise.
+  const exerciseOptions = modules.flatMap((m) =>
+    m.items
+      .filter((mi) => mi.item_type === "exercise")
+      .map((mi) => ({ id: mi.id, label: `${itemSummary(mi)} (${m.title})` }))
+  );
+
   async function addItem(e: FormEvent) {
     e.preventDefault();
     if (
@@ -4450,6 +4464,10 @@ function ItemsSection({
       notes: addForm.notes,
       training_module_id:
         addForm.item_type === "training" ? addForm.training_module_id : null,
+      training_module_item_id:
+        addForm.item_type === "training"
+          ? addForm.training_module_item_id
+          : null,
       kata_id:
         addForm.item_type === "kata_performance" ? addForm.kata_id : null,
     };
@@ -4538,6 +4556,7 @@ function ItemsSection({
       end_time: toTimeInput(item.end_time),
       notes: item.notes ?? "",
       training_module_id: item.training_module_id,
+      training_module_item_id: item.training_module_item_id,
       kata_id: item.kata_id,
       repeat_freq: "none",
       repeat_interval: 1,
@@ -4685,10 +4704,21 @@ function ItemsSection({
                         `–${toTimeInput(item.end_time)}`}
                     </span>
                   </div>
-                  {item.notes && (
+                  {item.notes && !item.training_module_item_id && (
                     <p className="text-sm text-stone-700">{item.notes}</p>
                   )}
                   {item.item_type === "training" &&
+                    item.training_module_item_id &&
+                    (() => {
+                      const exercise = modules
+                        .flatMap((m) => m.items)
+                        .find((mi) => mi.id === item.training_module_item_id);
+                      return exercise ? (
+                        <TrainingModuleItemDetail item={exercise} showTitle />
+                      ) : null;
+                    })()}
+                  {item.item_type === "training" &&
+                    !item.training_module_item_id &&
                     item.training_module_id &&
                     (() => {
                       const module = modules.find(
@@ -4779,8 +4809,33 @@ function ItemsSection({
                       options={modules.map((m) => ({ id: m.id, label: m.title }))}
                       selectedId={item.training_module_id}
                       onSelect={(id) =>
-                        updateItem(item.id, { training_module_id: id })
+                        updateItem(item.id, {
+                          training_module_id: id,
+                          training_module_item_id: id
+                            ? null
+                            : item.training_module_item_id,
+                        })
                       }
+                    />
+                  )}
+                  {item.item_type === "training" && (
+                    <SingleSelectPicker
+                      label="Exercise"
+                      placeholder="Search exercises..."
+                      options={exerciseOptions}
+                      selectedId={item.training_module_item_id}
+                      onSelect={(id) => {
+                        const picked = id
+                          ? modules
+                              .flatMap((m) => m.items)
+                              .find((mi) => mi.id === id)
+                          : null;
+                        updateItem(item.id, {
+                          training_module_item_id: id,
+                          training_module_id: id ? null : item.training_module_id,
+                          ...(picked ? { title: itemSummary(picked) } : {}),
+                        });
+                      }}
                     />
                   )}
                   {item.item_type === "kata_performance" && (
@@ -4928,8 +4983,33 @@ function ItemsSection({
               options={modules.map((m) => ({ id: m.id, label: m.title }))}
               selectedId={addForm.training_module_id}
               onSelect={(id) =>
-                setAddForm({ ...addForm, training_module_id: id })
+                setAddForm({
+                  ...addForm,
+                  training_module_id: id,
+                  training_module_item_id: id
+                    ? null
+                    : addForm.training_module_item_id,
+                })
               }
+            />
+          )}
+          {addForm.item_type === "training" && (
+            <SingleSelectPicker
+              label="Exercise"
+              placeholder="Search exercises..."
+              options={exerciseOptions}
+              selectedId={addForm.training_module_item_id}
+              onSelect={(id) => {
+                const picked = id
+                  ? modules.flatMap((m) => m.items).find((mi) => mi.id === id)
+                  : null;
+                setAddForm({
+                  ...addForm,
+                  training_module_item_id: id,
+                  training_module_id: id ? null : addForm.training_module_id,
+                  title: picked ? itemSummary(picked) : addForm.title,
+                });
+              }}
             />
           )}
           {addForm.item_type === "kata_performance" && (
