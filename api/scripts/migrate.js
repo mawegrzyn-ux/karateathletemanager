@@ -1343,19 +1343,40 @@ const migrations = [
        REFERENCES nk_training_module_items(id) ON DELETE SET NULL`,
 ];
 
+// Each statement runs in its own transaction rather than one big
+// all-or-nothing block: every statement here is already written to be
+// idempotent (CREATE TABLE/INDEX IF NOT EXISTS, ADD COLUMN IF NOT
+// EXISTS, ON CONFLICT DO NOTHING), so re-running a past success is
+// always a safe no-op, and isolating failures means one environment
+// missing an optional prerequisite (e.g. the pgvector extension the
+// Knowledge Base tables need - see docs/ARCHITECTURE.md) only skips the
+// statements that actually depend on it instead of silently rolling
+// back and permanently blocking every unrelated migration appended
+// after it.
 async function migrate() {
   const client = await pool.connect();
+  let failures = 0;
   try {
-    await client.query("BEGIN");
     for (const statement of migrations) {
-      await client.query(statement);
+      try {
+        await client.query("BEGIN");
+        await client.query(statement);
+        await client.query("COMMIT");
+      } catch (err) {
+        await client.query("ROLLBACK");
+        failures++;
+        console.error("Migration statement failed, skipped:", err.message);
+        console.error(statement.slice(0, 200));
+      }
     }
-    await client.query("COMMIT");
-    console.log(`Ran ${migrations.length} migration statements successfully.`);
-  } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("Migration failed, rolled back:", err);
-    process.exitCode = 1;
+    if (failures > 0) {
+      console.error(
+        `${failures} of ${migrations.length} migration statements failed (see above) - the rest were applied.`
+      );
+      process.exitCode = 1;
+    } else {
+      console.log(`Ran ${migrations.length} migration statements successfully.`);
+    }
   } finally {
     client.release();
     await pool.end();
