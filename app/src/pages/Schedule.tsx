@@ -37,8 +37,11 @@ import {
   TrainingModuleItemDetail,
   moduleIcon,
   itemSummary,
+  itemMeasurement,
   type TrainingModule,
+  type TrainingModuleItem,
 } from "../components/TrainingModuleView";
+import { PlaybackPlayer, type PlaybackStep } from "../components/PlaybackPlayer";
 import { EventCompetitionResults } from "../components/CompetitionResults";
 import type { Post } from "../components/AthleteSocialProfile";
 import { todayStr, addDaysStr, dateLabel, groupByDate } from "../utils/dates";
@@ -4425,6 +4428,82 @@ function AthleteStatusList({
   );
 }
 
+// Flattens an event's itinerary into one playback step per exercise, in
+// itinerary order - a training item linking a whole session
+// (training_module_id) expands into one step per exercise in that
+// session, one linking a single exercise (training_module_item_id) is
+// already exactly one step, and anything else (a plain training item
+// with just a title/notes, or a non-training item like a kata
+// performance) falls back to a title/notes-only step so playback can
+// still page through the full itinerary rather than silently skipping
+// entries with no exercise data. `itemId` is kept on every step (even
+// ones expanded from the same module-linked item) since "mark complete"
+// still targets the parent itinerary item's own athlete_status, not
+// something per-exercise that doesn't exist in the data model.
+function buildPlaybackSteps(
+  items: EventItem[],
+  modules: TrainingModule[]
+): PlaybackStep[] {
+  const sorted = [...items].sort((a, b) =>
+    `${a.item_date}${a.start_time ?? ""}`.localeCompare(
+      `${b.item_date}${b.start_time ?? ""}`
+    )
+  );
+
+  function exerciseStep(item: EventItem, ex: TrainingModuleItem, key: string) {
+    return {
+      key,
+      itemId: item.id,
+      name:
+        ex.item_type === "rest"
+          ? ex.duration_seconds
+            ? `Rest ${ex.duration_seconds}s`
+            : "Rest"
+          : ex.name?.trim() || "Untitled exercise",
+      measurement: itemMeasurement(ex),
+      video_url: ex.video_url,
+      image_url: ex.image_url,
+      explanation: ex.explanation,
+    };
+  }
+
+  function fallbackStep(item: EventItem): PlaybackStep {
+    return {
+      key: `item-${item.id}`,
+      itemId: item.id,
+      name: item.title,
+      measurement: null,
+      video_url: null,
+      image_url: null,
+      explanation: item.notes,
+    };
+  }
+
+  const steps: PlaybackStep[] = [];
+  for (const item of sorted) {
+    if (item.training_module_item_id) {
+      const ex = modules
+        .flatMap((m) => m.items)
+        .find((mi) => mi.id === item.training_module_item_id);
+      steps.push(
+        ex ? exerciseStep(item, ex, `item-${item.id}`) : fallbackStep(item)
+      );
+    } else if (item.training_module_id) {
+      const module = modules.find((m) => m.id === item.training_module_id);
+      if (module && module.items.length > 0) {
+        for (const ex of module.items) {
+          steps.push(exerciseStep(item, ex, `item-${item.id}-ex-${ex.id}`));
+        }
+      } else {
+        steps.push(fallbackStep(item));
+      }
+    } else {
+      steps.push(fallbackStep(item));
+    }
+  }
+  return steps;
+}
+
 function ItemsSection({
   eventId,
   items,
@@ -4455,6 +4534,10 @@ function ItemsSection({
   const [adding, setAdding] = useState(false);
   const [addForm, setAddForm] = useState(EMPTY_ITEM_FORM);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [playbackOpen, setPlaybackOpen] = useState(false);
+
+  const playbackSteps = buildPlaybackSteps(items, modules);
+  const myAthleteId = user?.role === "athlete" ? user.athlete_id : null;
 
   const sorted = [...items].sort((a, b) =>
     `${a.item_date}${a.start_time ?? ""}`.localeCompare(
@@ -4599,6 +4682,15 @@ function ItemsSection({
 
   return (
     <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-2">
+      {playbackSteps.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setPlaybackOpen(true)}
+          className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-red-600 font-medium text-white"
+        >
+          ▶ Playback
+        </button>
+      )}
       <span className="text-xs font-medium text-stone-600">
         Itinerary ({items.length})
       </span>
@@ -5251,6 +5343,18 @@ function ItemsSection({
           + Add itinerary item
         </button>
       ))}
+      {playbackOpen && (
+        <PlaybackPlayer
+          steps={playbackSteps}
+          canComplete={!!myAthleteId}
+          onClose={() => setPlaybackOpen(false)}
+          onComplete={(itemId) => {
+            if (myAthleteId) {
+              updateAthleteStatus(itemId, myAthleteId, { status: "completed" });
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
