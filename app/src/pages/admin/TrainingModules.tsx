@@ -13,6 +13,7 @@ import {
   DeleteButton,
   Field,
   MediaField,
+  RichTextField,
   Toast,
   Badge,
   SwipeableRow,
@@ -503,14 +504,12 @@ function ItemStageContent({
           >
             🔍 Import from ExerciseDB
           </button>
-          <Field label="Explanation">
-            <textarea
-              key={`explanation-${importVersion}`}
-              defaultValue={item.explanation}
-              onBlur={(e) => onChange({ explanation: e.target.value })}
-              className="rounded-xl border border-stone-300 px-3 py-2"
-            />
-          </Field>
+          <RichTextField
+            key={`explanation-${importVersion}`}
+            label="Explanation"
+            value={item.explanation}
+            onChange={(html) => onChange({ explanation: html })}
+          />
           <ExerciseImportDrawer
             open={importOpen}
             onClose={() => setImportOpen(false)}

@@ -7,6 +7,7 @@ import {
   type PropsWithChildren,
   type ReactNode,
 } from "react";
+import DOMPurify from "dompurify";
 import { dateLabel } from "../utils/dates";
 import { useApi } from "../hooks/useApi";
 import { feedbackTick, feedbackConfirm } from "../utils/feedback";
@@ -537,6 +538,137 @@ export function Field({
       <span className="text-sm font-medium text-stone-700">{label}</span>
       {children}
     </label>
+  );
+}
+
+// A shared allowlist for any rich-text field in the app (currently a
+// training module exercise's explanation) - bold/italic/lists/line
+// breaks only, no links/images/scripts/attributes. Used both when saving
+// from RichTextField and again at render time in RichText, so content
+// written directly to the database (e.g. by Osu's create_training_session
+// tool, which is told to use this same small tag set) is just as safe as
+// anything typed through the editor.
+const RICH_TEXT_ALLOWED_TAGS = ["b", "strong", "i", "em", "ul", "ol", "li", "br", "p"];
+
+export function sanitizeRichText(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: RICH_TEXT_ALLOWED_TAGS,
+    ALLOWED_ATTR: [],
+  });
+}
+
+// Read-only rendering of a sanitized rich-text value (an exercise's
+// explanation) - the `[&_ul]:...` arbitrary-variant selectors restore
+// list bullets/numbers Tailwind's preflight otherwise strips, since this
+// content's <ul>/<ol> tags come from dangerouslySetInnerHTML rather than
+// JSX we could put a class directly on.
+export function RichText({
+  html,
+  className = "text-sm text-stone-600",
+}: {
+  html: string | null | undefined;
+  className?: string;
+}) {
+  if (!html || !html.trim()) return null;
+  return (
+    <div
+      className={`${className} [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_li]:mb-0.5 [&_p]:mb-1.5 [&_p:last-child]:mb-0`}
+      dangerouslySetInnerHTML={{ __html: sanitizeRichText(html) }}
+    />
+  );
+}
+
+// A lightweight WYSIWYG editor for a rich-text field - a Bold/Italic/
+// Bullet-list/Numbered-list toolbar over a contentEditable div, built on
+// the browser's own document.execCommand rather than pulling in a full
+// rich-text editor library, matching this app's otherwise dependency-light
+// style. Saves (onChange) on blur, same auto-save-per-field convention as
+// every other input in the app - no separate Save button.
+//
+// The contentEditable div's initial content is set once via
+// dangerouslySetInnerHTML from a ref (not the `value` prop directly) so
+// that a parent re-render never overwrites what the user is mid-typing;
+// it's only ever updated again from onBlur's own sanitized-html result,
+// keeping the DOM and the ref in sync without fighting the browser's own
+// editing of the node. Don't wrap this in <Field> for the same reason
+// DateTimeField isn't: the toolbar buttons are separate interactive
+// controls from the editable area itself, and a <label> wrapping more
+// than one control re-fires its click-forwarding unpredictably.
+export function RichTextField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | null | undefined;
+  onChange: (html: string) => void;
+}) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const lastSavedHtml = useRef(sanitizeRichText(value ?? ""));
+
+  function exec(command: string) {
+    editorRef.current?.focus();
+    document.execCommand(command);
+  }
+
+  function handleBlur() {
+    const html = sanitizeRichText(editorRef.current?.innerHTML ?? "");
+    if (html !== lastSavedHtml.current) {
+      lastSavedHtml.current = html;
+      onChange(html);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-sm font-medium text-stone-700">{label}</span>
+      <div className="flex gap-1 rounded-t-xl border border-b-0 border-stone-300 bg-stone-50 p-1">
+        <button
+          type="button"
+          aria-label="Bold"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("bold")}
+          className="flex h-8 w-8 items-center justify-center rounded-lg font-bold text-stone-700 hover:bg-stone-200"
+        >
+          B
+        </button>
+        <button
+          type="button"
+          aria-label="Italic"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("italic")}
+          className="flex h-8 w-8 items-center justify-center rounded-lg italic text-stone-700 hover:bg-stone-200"
+        >
+          I
+        </button>
+        <button
+          type="button"
+          aria-label="Bullet list"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("insertUnorderedList")}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-700 hover:bg-stone-200"
+        >
+          •≡
+        </button>
+        <button
+          type="button"
+          aria-label="Numbered list"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("insertOrderedList")}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-sm text-stone-700 hover:bg-stone-200"
+        >
+          1.
+        </button>
+      </div>
+      <div
+        ref={editorRef}
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={handleBlur}
+        dangerouslySetInnerHTML={{ __html: lastSavedHtml.current }}
+        className="min-h-[88px] rounded-b-xl border border-stone-300 px-3 py-2 text-sm [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5"
+      />
+    </div>
   );
 }
 

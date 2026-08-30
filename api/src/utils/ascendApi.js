@@ -60,22 +60,35 @@ function normalizeExerciseListItem(e) {
   };
 }
 
+function escapeHtml(str) {
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // Maps one AscendAPI exercise detail onto name/explanation/video_url/
 // image_url - the exact shape a training-module exercise item (or Osu's
 // create_training_session item) already has, so both callers can hand
 // this straight through rather than each doing their own translation.
+// explanation is built as the same small rich-text HTML subset every
+// exercise explanation uses (see RICH_TEXT_ALLOWED_TAGS in ui.tsx) - a
+// <p> overview followed by an <ol> of numbered steps - rather than
+// "\n"-joined plain text, so it renders as a real formatted list instead
+// of one run-on paragraph once the frontend stopped preserving literal
+// newlines in favor of rich text. Each piece of API-sourced text is
+// escaped since it's third-party content landing straight in HTML.
 function normalizeExerciseDetail(d) {
   const instructions = Array.isArray(d.instructions) ? d.instructions : [];
   const explanationParts = [];
-  if (d.overview) explanationParts.push(String(d.overview).trim());
+  if (d.overview) {
+    explanationParts.push(`<p>${escapeHtml(String(d.overview).trim())}</p>`);
+  }
   if (instructions.length > 0) {
     explanationParts.push(
-      instructions.map((step, i) => `${i + 1}. ${step}`).join("\n")
+      `<ol>${instructions.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol>`
     );
   }
   return {
     name: (d.name || "").trim(),
-    explanation: explanationParts.join("\n\n") || null,
+    explanation: explanationParts.join("") || null,
     video_url: d.videoUrl ?? null,
     image_url: d.imageUrls?.["720p"] ?? d.imageUrl ?? null,
   };
