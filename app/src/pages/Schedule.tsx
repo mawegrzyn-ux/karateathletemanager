@@ -608,14 +608,15 @@ const GRID_HOURS = Array.from(
   (_, i) => DAY_START_HOUR + i
 );
 
-// The list view initially loads only from today forward (a 2-week window,
-// so today - or the next upcoming date if nothing's scheduled today - is
-// always the first item, with nothing from the past pre-loaded above it)
-// rather than the whole schedule, then lazy-loads another 2 weeks in
-// whichever direction the user scrolls toward (scrolling up past the top
-// reaches yesterday and earlier on demand), capped a year out either way
-// so an empty schedule can't make the observer fetch forever.
-const INITIAL_WINDOW_DAYS = 14;
+// The list view initially loads a week either side of today (rather than
+// the whole schedule), then lazy-loads another 2 weeks in whichever
+// direction the user scrolls toward, capped a year out either way so an
+// empty schedule can't make the observer fetch forever. Since today now
+// has real content above it, the initial scroll position is explicitly
+// jumped to today right after this first load (see the initialScrollRef
+// effect below) rather than just relying on today being the first item.
+const INITIAL_WINDOW_PAST_DAYS = 7;
+const INITIAL_WINDOW_FUTURE_DAYS = 7;
 const LAZY_LOAD_STEP_DAYS = 14;
 const MAX_WINDOW_DAYS = 365;
 
@@ -682,8 +683,9 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
   );
   const [focusedDate, setFocusedDate] = useState(todayStr());
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const loadedFromRef = useRef(todayStr());
-  const loadedToRef = useRef(addDaysStr(todayStr(), INITIAL_WINDOW_DAYS));
+  const loadedFromRef = useRef(addDaysStr(todayStr(), -INITIAL_WINDOW_PAST_DAYS));
+  const loadedToRef = useRef(addDaysStr(todayStr(), INITIAL_WINDOW_FUTURE_DAYS));
+  const initialScrollRef = useRef(false);
   const loadingPastRef = useRef(false);
   const loadingFutureRef = useRef(false);
   const [loadingPast, setLoadingPast] = useState(false);
@@ -795,6 +797,31 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     return () => window.removeEventListener("online", load);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Now that the initial load window spans a week either side of today
+  // instead of starting exactly at today, the first render would
+  // otherwise land scrolled to the top of that window (a week in the
+  // past) rather than on today. Jumps to today once, right after the
+  // first successful load, without the scroll animation (behavior
+  // "auto") since this is establishing the starting position, not
+  // responding to a user action. Landing on today after only a week of
+  // past content is often within the near-top lazy-load threshold, so
+  // this suppresses loadMorePast the same way an animated jump does -
+  // otherwise the resulting scroll event would immediately fetch
+  // another 2 weeks into the past right on load, silently blowing past
+  // the intended -7/+7 starting window.
+  useEffect(() => {
+    if (viewMode !== "list" || initialScrollRef.current || !events) return;
+    initialScrollRef.current = true;
+    suppressLazyLoadRef.current = true;
+    scrollToToday("auto");
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        suppressLazyLoadRef.current = false;
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events, viewMode]);
 
   // List view lazy-loads further past/future weeks only in response to an
   // actual scroll gesture on the page's scroll container (App.tsx's
