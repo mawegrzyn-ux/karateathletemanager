@@ -1,9 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { useAuth, type Child } from "../context/AuthContext";
+import { useAuth, type GuardianAthlete } from "../context/AuthContext";
 import { useProfileSwitching } from "../hooks/useProfileSwitching";
-import { ApiError, useApi } from "../hooks/useApi";
-import { Field, MediaField, Toast, DeleteButton } from "../components/ui";
+import { ApiError } from "../hooks/useApi";
+import { Field, MediaField, Toast } from "../components/ui";
 import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
 import { StaffSelfProfile } from "../components/StaffSelfProfile";
 import { AthleteSocialProfile } from "../components/AthleteSocialProfile";
@@ -22,12 +22,6 @@ export default function Profile() {
   const [editing, setEditing] = useState(false);
 
   const showActiveNav = user?.status === "active" && user.role;
-  // A join-link registrant is registering as an athlete, not a parent -
-  // don't offer to link a child (whether they're already active as an
-  // athlete, or still pending approval with that intent recorded).
-  const isAthleteOnly =
-    user?.role === "athlete" ||
-    (user?.status === "pending" && user?.wants_athlete);
 
   function showToast(message: string) {
     setToast(message);
@@ -170,7 +164,7 @@ export default function Profile() {
           </form>
         )}
 
-        {!isAthleteOnly && <LinkChild />}
+        <LinkGuardian />
         {toast && <Toast message={toast} />}
 
         {showActiveNav && (
@@ -183,22 +177,26 @@ export default function Profile() {
   );
 }
 
-function LinkChild() {
-  const api = useApi();
-  const { linkChild, unlinkChild } = useAuth();
-  const [children, setChildren] = useState<Child[] | null>(null);
-  const [pin, setPin] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [confirmed, setConfirmed] = useState<Child | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+// Extracts the token from a pasted full guardian-invite link
+// (?guardian=<token>), or treats the input as the bare token itself if
+// it isn't a URL - covers both "clicked" and "entered via their profile"
+// per the guardian-invite link's own two redemption paths.
+function extractGuardianToken(input: string): string {
+  const trimmed = input.trim();
+  try {
+    const url = new URL(trimmed);
+    return url.searchParams.get("guardian") ?? trimmed;
+  } catch {
+    return trimmed;
+  }
+}
 
-  useEffect(() => {
-    api
-      .get<{ children: Child[] }>("/auth/my-children")
-      .then((res) => setChildren(res.children))
-      .catch(() => setChildren([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+function LinkGuardian() {
+  const { linkGuardian } = useAuth();
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState<GuardianAthlete | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -206,10 +204,9 @@ function LinkChild() {
     setConfirmed(null);
     setSubmitting(true);
     try {
-      const child = await linkChild(pin);
-      setConfirmed(child);
-      setChildren((prev) => (prev ? [...prev, child] : [child]));
-      setPin("");
+      const athlete = await linkGuardian(extractGuardianToken(value));
+      setConfirmed(athlete);
+      setValue("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");
     } finally {
@@ -217,59 +214,24 @@ function LinkChild() {
     }
   }
 
-  async function handleUnlink(child: Child) {
-    try {
-      await unlinkChild(child.id);
-      setChildren((prev) => (prev ? prev.filter((c) => c.id !== child.id) : prev));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong");
-    }
-  }
-
   return (
     <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-card">
-      <h2 className="font-semibold">Link a child</h2>
+      <h2 className="font-semibold">Link a guardian</h2>
       <p className="text-sm text-stone-600">
-        Ask your child (or their coach) for the 6-digit code from their
-        athlete profile, then enter it here.
+        Ask an athlete (or their coach) for their guardian invite link,
+        then paste it here to access their profile.
       </p>
-
-      {children && children.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-stone-700">
-            Your children
-          </span>
-          {children.map((c) => (
-            <div
-              key={c.id}
-              className="flex items-center justify-between gap-2"
-            >
-              <span className="text-sm text-stone-600">
-                {c.first_name} {c.last_name}
-              </span>
-              <DeleteButton
-                onClick={() => handleUnlink(c)}
-                itemLabel={`${c.first_name} ${c.last_name}`}
-                label="Unlink"
-                iconOnly
-              />
-            </div>
-          ))}
-        </div>
-      )}
 
       <form onSubmit={handleSubmit} className="flex gap-2">
         <input
-          value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-          inputMode="numeric"
-          maxLength={6}
-          placeholder="123456"
-          className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3 tracking-widest"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Paste link or code"
+          className="min-h-[44px] flex-1 rounded-xl border border-stone-300 px-3"
         />
         <button
           type="submit"
-          disabled={submitting || pin.length !== 6}
+          disabled={submitting || !value.trim()}
           className="min-h-[44px] rounded-full bg-red-600 px-4 font-medium text-white disabled:opacity-50"
         >
           Link
@@ -278,7 +240,8 @@ function LinkChild() {
       {error && <p className="text-sm text-red-700">{error}</p>}
       {confirmed && (
         <p className="text-sm text-green-700">
-          Linked to {confirmed.first_name} {confirmed.last_name}.
+          Linked to {confirmed.first_name} {confirmed.last_name}. Switch to
+          it from "Acting as" above.
         </p>
       )}
     </div>

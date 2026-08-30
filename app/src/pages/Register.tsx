@@ -17,6 +17,12 @@ interface ProfileInvite {
   club_name: string | null;
 }
 
+interface GuardianInviteAthlete {
+  id: number;
+  first_name: string;
+  last_name: string;
+}
+
 const PROFILE_TYPE_LABEL: Record<ProfileInvite["profile_type"], string> = {
   athlete: "an athlete",
   coach: "a coach",
@@ -30,6 +36,7 @@ export default function Register() {
   const [searchParams] = useSearchParams();
   const joinToken = searchParams.get("join");
   const inviteToken = searchParams.get("invite");
+  const guardianToken = searchParams.get("guardian");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [wantsAthlete, setWantsAthlete] = useState(false);
@@ -43,6 +50,9 @@ export default function Register() {
   const [invite, setInvite] = useState<ProfileInvite | null | undefined>(
     inviteToken ? undefined : null
   );
+  const [guardianAthlete, setGuardianAthlete] = useState<
+    GuardianInviteAthlete | null | undefined
+  >(guardianToken ? undefined : null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -79,6 +89,17 @@ export default function Register() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inviteToken]);
 
+  useEffect(() => {
+    if (!guardianToken) return;
+    api
+      .get<{ athlete: GuardianInviteAthlete }>(
+        `/public/guardian-invite/${guardianToken}`
+      )
+      .then((res) => setGuardianAthlete(res.athlete))
+      .catch(() => setGuardianAthlete(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guardianToken]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -86,6 +107,10 @@ export default function Register() {
     try {
       if (invite) {
         await register(email, password, { invite_token: inviteToken! });
+      } else if (guardianAthlete) {
+        await register(email, password, {
+          guardian_invite_token: guardianToken!,
+        });
       } else {
         await register(email, password, {
           wants_athlete: joinClub ? true : wantsAthlete,
@@ -118,6 +143,32 @@ export default function Register() {
         <p className="text-sm text-red-700">
           This invite link is invalid or has expired. Ask whoever sent it to
           generate a new one.
+        </p>
+        <p className="text-sm text-stone-600">
+          <Link to="/login" className="font-medium text-red-700">
+            Log in
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
+  if (guardianToken && guardianAthlete === undefined) {
+    return (
+      <div className="flex min-h-full flex-col justify-center gap-6 p-6 pt-[calc(1.5rem+env(safe-area-inset-top))]">
+        <h1 className="text-2xl font-bold tracking-tight">Create account</h1>
+        <p className="text-sm text-stone-500">Loading guardian link...</p>
+      </div>
+    );
+  }
+
+  if (guardianToken && guardianAthlete === null) {
+    return (
+      <div className="flex min-h-full flex-col justify-center gap-6 p-6 pt-[calc(1.5rem+env(safe-area-inset-top))]">
+        <h1 className="text-2xl font-bold tracking-tight">Create account</h1>
+        <p className="text-sm text-red-700">
+          This guardian link is invalid. Ask whoever sent it to generate a
+          new one.
         </p>
         <p className="text-sm text-stone-600">
           <Link to="/login" className="font-medium text-red-700">
@@ -182,6 +233,15 @@ export default function Register() {
         ) : joinClub ? (
           <p className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-800">
             You're joining <strong>{joinClub.name}</strong> as an athlete.
+          </p>
+        ) : guardianAthlete ? (
+          <p className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-800">
+            You're creating an account as{" "}
+            <strong>
+              {guardianAthlete.first_name} {guardianAthlete.last_name}
+            </strong>
+            's guardian, with full access to their profile. You'll be
+            approved automatically.
           </p>
         ) : (
           <>

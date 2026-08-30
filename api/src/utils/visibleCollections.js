@@ -5,7 +5,7 @@ const asyncHandler = require("./asyncHandler");
 // squad/group" shortcut: admins see every club's, coaches see only
 // those belonging to clubs they're a member of. Not used outside
 // event-editing UI, which only coaches/admins reach, so anyone else
-// (athlete/parent/referee) just gets an empty list.
+// (athlete/referee) just gets an empty list.
 function registerVisibilityRoute(router, { key, table, joinTable, joinKey }) {
   router.get(
     "/",

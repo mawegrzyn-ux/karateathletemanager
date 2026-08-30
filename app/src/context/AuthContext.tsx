@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useApi } from "../hooks/useApi";
 
-export type Role = "admin" | "coach" | "athlete" | "parent" | "referee";
+export type Role = "admin" | "coach" | "athlete" | "referee";
 export type Status = "pending" | "active" | "disabled";
 
 export interface User {
@@ -17,7 +17,6 @@ export interface User {
   role: Role | null;
   status: Status;
   is_admin: boolean;
-  is_parent: boolean;
   athlete_id: number | null;
   coach_id: number | null;
   referee_id: number | null;
@@ -51,9 +50,10 @@ export interface RegisterOptions {
   wants_referee?: boolean;
   requested_club_id?: number | null;
   invite_token?: string;
+  guardian_invite_token?: string;
 }
 
-export interface Child {
+export interface GuardianAthlete {
   id: number;
   first_name: string;
   last_name: string;
@@ -63,6 +63,10 @@ export interface Profile {
   id: number;
   first_name: string;
   last_name: string;
+}
+
+export interface AthleteProfile extends Profile {
+  is_guardian_link: boolean;
 }
 
 interface AuthContextValue {
@@ -77,13 +81,12 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   updateProfile: (update: ProfileUpdate) => Promise<void>;
   switchRole: (
-    role: "athlete" | "coach" | "parent" | "referee",
+    role: "athlete" | "coach" | "referee",
     profileId?: number
   ) => Promise<void>;
-  linkChild: (pin: string) => Promise<Child>;
-  unlinkChild: (athleteId: number) => Promise<void>;
+  linkGuardian: (token: string) => Promise<GuardianAthlete>;
   fetchMyProfiles: () => Promise<{
-    athletes: Profile[];
+    athletes: AthleteProfile[];
     coaches: Profile[];
     referees: Profile[];
   }>;
@@ -148,10 +151,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const switchRole = useCallback(
-    async (
-      role: "athlete" | "coach" | "parent" | "referee",
-      profileId?: number
-    ) => {
+    async (role: "athlete" | "coach" | "referee", profileId?: number) => {
       const { user } = await api.post<{ user: User }>("/auth/switch-role", {
         role,
         profile_id: profileId,
@@ -164,28 +164,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const fetchMyProfiles = useCallback(async () => {
     return api.get<{
-      athletes: Profile[];
+      athletes: AthleteProfile[];
       coaches: Profile[];
       referees: Profile[];
     }>("/auth/my-profiles");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const linkChild = useCallback(async (pin: string) => {
-    const { user, child } = await api.post<{ user: User; child: Child }>(
-      "/auth/link-child",
-      { pin }
+  const linkGuardian = useCallback(async (token: string) => {
+    const { athlete } = await api.post<{ athlete: GuardianAthlete }>(
+      "/auth/link-guardian",
+      { token }
     );
-    setUser(user);
-    return child;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const unlinkChild = useCallback(async (athleteId: number) => {
-    const { user } = await api.del<{ user: User }>(
-      `/auth/my-children/${athleteId}`
-    );
-    setUser(user);
+    return athlete;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -207,8 +198,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         logout,
         updateProfile,
         switchRole,
-        linkChild,
-        unlinkChild,
+        linkGuardian,
         fetchMyProfiles,
         updateNavTabs,
       }}

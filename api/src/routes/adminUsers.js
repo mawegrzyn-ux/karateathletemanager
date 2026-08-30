@@ -5,7 +5,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const { activateUser } = require("../utils/activateUser");
 
 const router = Router();
-const ROLES = ["coach", "athlete", "parent", "referee"];
+const ROLES = ["coach", "athlete", "referee"];
 const STATUSES = ["pending", "active", "disabled"];
 
 router.use(authorize.requireAdmin);
@@ -150,44 +150,6 @@ router.delete(
       return res.status(404).json({ error: { message: "User not found" } });
     }
     res.status(204).end();
-  })
-);
-
-router.put(
-  "/:id/parent-athletes",
-  asyncHandler(async (req, res) => {
-    const { athleteIds } = req.body ?? {};
-    if (!Array.isArray(athleteIds)) {
-      return res
-        .status(400)
-        .json({ error: { message: "athleteIds must be an array" } });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query(`DELETE FROM nk_parent_athletes WHERE user_id = $1`, [
-        req.params.id,
-      ]);
-      for (const athleteId of athleteIds) {
-        await client.query(
-          `INSERT INTO nk_parent_athletes (user_id, athlete_id) VALUES ($1, $2)`,
-          [req.params.id, athleteId]
-        );
-      }
-      await client.query("COMMIT");
-      res.json({ athleteIds });
-    } catch (err) {
-      await client.query("ROLLBACK");
-      if (err.code === "23503") {
-        return res
-          .status(400)
-          .json({ error: { message: "One or more athlete IDs do not exist" } });
-      }
-      throw err;
-    } finally {
-      client.release();
-    }
   })
 );
 

@@ -1409,7 +1409,7 @@ export default function TrainingModules({
   const api = useApi();
   const { user } = useAuth();
   const canEdit = !!user?.is_admin || user?.role === "coach";
-  // A plain athlete/referee/parent viewer has no edit rights over Training
+  // A plain athlete/referee viewer has no edit rights over Training
   // Sessions at all (see trainingModules.js's authorize("coach") write
   // routes) - rather than showing them a Sessions tab that's entirely
   // read-only with nothing they can act on, they land straight on

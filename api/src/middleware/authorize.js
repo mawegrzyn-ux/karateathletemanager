@@ -2,7 +2,7 @@
 // authorize('coach') -> logged-in, active, and (role === 'coach' or is_admin)
 // authorize('coach', 'athlete') -> role is one of the given roles, or is_admin
 // is_admin always bypasses the roles check - it's a durable privilege,
-// independent of whichever role (athlete/coach/parent) the user is
+// independent of whichever role (athlete/coach/referee) the user is
 // currently acting as.
 function authorize(...roles) {
   return (req, res, next) => {

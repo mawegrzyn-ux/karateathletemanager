@@ -3,7 +3,6 @@ const bcrypt = require("bcryptjs");
 const pool = require("../db/pool");
 const { signSession, SESSION_MAX_AGE_MS } = require("../utils/jwt");
 const asyncHandler = require("../utils/asyncHandler");
-const pinRateLimit = require("../utils/pinRateLimit");
 const { USER_SELECT_FIELDS } = require("../utils/userFields");
 const {
   findInviteByToken,
@@ -94,12 +93,81 @@ async function registerViaInvite(req, res, token) {
   }
 }
 
+// Registering via a guardian-invite link creates a brand-new account
+// pre-linked as that athlete's guardian: role/athlete_id go straight to
+// 'athlete'/the guarded athlete's id (same as being that athlete, full
+// parity - see nk_user_athletes.is_guardian_link's migration comment),
+// and a nk_user_athletes row records the link as guardian-flagged so it
+// can be told apart from the athlete's own primary profile later. Unlike
+// registerViaInvite's token, this one is multi-use (nk_clubs.join_token
+// convention) so it's never consumed here - it stays valid for every
+// guardian who registers with it until revoked/regenerated.
+async function registerViaGuardianInvite(req, res, token) {
+  const { password } = req.body ?? {};
+  if (typeof password !== "string" || password.length < 8) {
+    return res.status(400).json({
+      error: { message: "Password must be at least 8 characters" },
+    });
+  }
+  const { email } = req.body ?? {};
+  if (typeof email !== "string" || !EMAIL_RE.test(email)) {
+    return res.status(400).json({ error: { message: "Invalid email" } });
+  }
+
+  const { rows: athleteRows } = await pool.query(
+    `SELECT id FROM nk_athletes WHERE guardian_invite_token = $1`,
+    [token]
+  );
+  if (athleteRows.length === 0) {
+    return res
+      .status(400)
+      .json({ error: { message: "Invalid or expired guardian invite link" } });
+  }
+  const athleteId = athleteRows[0].id;
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `INSERT INTO nk_users (email, password_hash, status, is_admin, role, athlete_id)
+       VALUES ($1, $2, 'active', FALSE, 'athlete', $3)
+       RETURNING ${USER_SELECT_FIELDS}`,
+      [email.toLowerCase(), passwordHash, athleteId]
+    );
+    const user = rows[0];
+
+    await client.query(
+      `INSERT INTO nk_user_athletes (user_id, athlete_id, is_guardian_link)
+       VALUES ($1, $2, true) ON CONFLICT DO NOTHING`,
+      [user.id, athleteId]
+    );
+
+    await client.query("COMMIT");
+    setSessionCookie(res, user.id);
+    res.status(201).json({ user });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.code === "23505") {
+      return res.status(409).json({
+        error: { message: "An account with that email already exists" },
+      });
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 router.post(
   "/register",
   asyncHandler(async (req, res) => {
-    const { invite_token } = req.body ?? {};
+    const { invite_token, guardian_invite_token } = req.body ?? {};
     if (typeof invite_token === "string" && invite_token) {
       return registerViaInvite(req, res, invite_token);
+    }
+    if (typeof guardian_invite_token === "string" && guardian_invite_token) {
+      return registerViaGuardianInvite(req, res, guardian_invite_token);
     }
 
     const {
@@ -304,16 +372,9 @@ router.post(
     }
 
     const { role, profile_id } = req.body ?? {};
-    if (
-      role !== "athlete" &&
-      role !== "coach" &&
-      role !== "parent" &&
-      role !== "referee"
-    ) {
+    if (role !== "athlete" && role !== "coach" && role !== "referee") {
       return res.status(400).json({
-        error: {
-          message: "role must be 'athlete', 'coach', 'parent', or 'referee'",
-        },
+        error: { message: "role must be 'athlete', 'coach', or 'referee'" },
       });
     }
 
@@ -390,12 +451,6 @@ router.post(
       }
     }
 
-    if (role === "parent" && !req.user.is_parent) {
-      return res
-        .status(400)
-        .json({ error: { message: "You don't have any linked children" } });
-    }
-
     const { rows } = await pool.query(
       `UPDATE nk_users SET role = $1, athlete_id = $2, coach_id = $3, referee_id = $4, updated_at = NOW()
        WHERE id = $5
@@ -416,7 +471,7 @@ router.get(
 
     const [athletes, coaches, referees] = await Promise.all([
       pool.query(
-        `SELECT a.id, a.first_name, a.last_name
+        `SELECT a.id, a.first_name, a.last_name, ua.is_guardian_link
          FROM nk_user_athletes ua
          JOIN nk_athletes a ON a.id = ua.athlete_id
          WHERE ua.user_id = $1
@@ -449,120 +504,48 @@ router.get(
   })
 );
 
-router.get(
-  "/my-children",
+// The "enter via their profile to link" path for an already-logged-in
+// account (the "click a link" path is POST /register's
+// guardian_invite_token branch instead, for someone with no account
+// yet). Multi-use, like the token itself - redeeming it doesn't consume
+// it, so a second guardian can use the same link/code afterward.
+router.post(
+  "/link-guardian",
   asyncHandler(async (req, res) => {
     if (!req.user) {
       return res.status(401).json({ error: { message: "Not authenticated" } });
+    }
+
+    const { token } = req.body ?? {};
+    if (typeof token !== "string" || !token.trim()) {
+      return res.status(400).json({ error: { message: "Link or code is required" } });
     }
 
     const { rows } = await pool.query(
-      `SELECT a.id, a.first_name, a.last_name
-       FROM nk_parent_athletes pa
-       JOIN nk_athletes a ON a.id = pa.athlete_id
-       WHERE pa.user_id = $1
-       ORDER BY a.last_name, a.first_name`,
-      [req.user.id]
+      `SELECT id, first_name, last_name FROM nk_athletes
+       WHERE guardian_invite_token = $1`,
+      [token.trim()]
     );
-    res.json({ children: rows });
-  })
-);
-
-// Parent-initiated unlink - the athlete-side equivalent lives at
-// DELETE /athletes/:id/parents/:userId, deleting the same nk_parent_athletes
-// row from the other direction.
-router.delete(
-  "/my-children/:athleteId",
-  asyncHandler(async (req, res) => {
-    if (!req.user) {
-      return res.status(401).json({ error: { message: "Not authenticated" } });
-    }
-
-    const { rowCount } = await pool.query(
-      `DELETE FROM nk_parent_athletes WHERE user_id = $1 AND athlete_id = $2`,
-      [req.user.id, req.params.athleteId]
-    );
-    if (rowCount === 0) {
-      return res.status(404).json({ error: { message: "Link not found" } });
-    }
-    const { rows: userRows } = await pool.query(
-      `SELECT ${USER_SELECT_FIELDS} FROM nk_users WHERE id = $1`,
-      [req.user.id]
-    );
-    res.json({ user: userRows[0] });
-  })
-);
-
-router.post(
-  "/link-child",
-  asyncHandler(async (req, res) => {
-    if (!req.user) {
-      return res.status(401).json({ error: { message: "Not authenticated" } });
-    }
-
-    if (pinRateLimit.checkLocked(req.user.id)) {
-      return res.status(429).json({
-        error: {
-          message: "Too many attempts. Try again in a few minutes.",
-        },
-      });
-    }
-
-    const { pin } = req.body ?? {};
-    if (typeof pin !== "string" || !/^\d{6}$/.test(pin)) {
+    if (rows.length === 0) {
       return res
         .status(400)
-        .json({ error: { message: "PIN must be 6 digits" } });
+        .json({ error: { message: "Invalid or expired guardian link" } });
     }
 
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      const { rows } = await client.query(
-        `SELECT id, first_name, last_name FROM nk_athletes
-         WHERE link_pin = $1 AND link_pin_expires_at > NOW()`,
-        [pin]
-      );
+    const athlete = rows[0];
+    await pool.query(
+      `INSERT INTO nk_user_athletes (user_id, athlete_id, is_guardian_link)
+       VALUES ($1, $2, true) ON CONFLICT DO NOTHING`,
+      [req.user.id, athlete.id]
+    );
 
-      if (rows.length === 0) {
-        await client.query("ROLLBACK");
-        pinRateLimit.recordFailure(req.user.id);
-        return res
-          .status(400)
-          .json({ error: { message: "Invalid or expired PIN" } });
-      }
-
-      const athlete = rows[0];
-
-      await client.query(
-        `INSERT INTO nk_parent_athletes (user_id, athlete_id)
-         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-        [req.user.id, athlete.id]
-      );
-      await client.query(
-        `UPDATE nk_athletes SET link_pin = NULL, link_pin_expires_at = NULL
-         WHERE id = $1`,
-        [athlete.id]
-      );
-      const { rows: userRows } = await client.query(
-        `UPDATE nk_users SET role = COALESCE(role, 'parent'), updated_at = NOW()
-         WHERE id = $1
-         RETURNING ${USER_SELECT_FIELDS}`,
-        [req.user.id]
-      );
-
-      await client.query("COMMIT");
-      pinRateLimit.reset(req.user.id);
-      res.json({
-        user: userRows[0],
-        child: { id: athlete.id, first_name: athlete.first_name, last_name: athlete.last_name },
-      });
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    } finally {
-      client.release();
-    }
+    res.json({
+      athlete: {
+        id: athlete.id,
+        first_name: athlete.first_name,
+        last_name: athlete.last_name,
+      },
+    });
   })
 );
 

@@ -8,8 +8,8 @@
 // referee's actual photo rather than falling back to initials.
 // wants_athlete/date_of_birth are exposed so the client can tell a
 // pending join-link registrant is athlete-only before their role/
-// athlete_id are set (e.g. to hide the "link a child" section) and so
-// they can stage their DOB ahead of admin approval.
+// athlete_id are set, and so they can stage their DOB ahead of admin
+// approval.
 // nav_tabs is the user's own bottom-nav tab customization (NULL = role
 // default). club_forced_nav_tabs resolves any club the active athlete
 // profile belongs to that has set a forced menu for all its athletes
@@ -29,10 +29,7 @@ const USER_SELECT_FIELDS = `
   (SELECT photo_url FROM nk_coaches WHERE id = nk_users.coach_id) AS coach_photo_url,
   (SELECT photo_url FROM nk_referees WHERE id = nk_users.referee_id) AS referee_photo_url,
   (SELECT c.forced_nav_tabs FROM nk_athlete_clubs ac JOIN nk_clubs c ON c.id = ac.club_id
-   WHERE ac.athlete_id = nk_users.athlete_id AND c.forced_nav_tabs IS NOT NULL LIMIT 1) AS club_forced_nav_tabs,
-  EXISTS(
-    SELECT 1 FROM nk_parent_athletes WHERE user_id = nk_users.id
-  ) AS is_parent
+   WHERE ac.athlete_id = nk_users.athlete_id AND c.forced_nav_tabs IS NOT NULL LIMIT 1) AS club_forced_nav_tabs
 `;
 
 module.exports = { USER_SELECT_FIELDS };

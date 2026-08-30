@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
-import { useAuth, type Profile as ProfileRecord } from "../context/AuthContext";
+import {
+  useAuth,
+  type AthleteProfile,
+  type Profile as ProfileRecord,
+} from "../context/AuthContext";
 
-export type SwitchableRole = "athlete" | "coach" | "parent" | "referee";
+export type SwitchableRole = "athlete" | "coach" | "referee";
 
 // One switchable identity - the flat list's actual unit. A role with two
 // linked profiles (e.g. two athlete registrations under the same
-// account) produces two of these, one per profile, rather than one
-// per role - switching is driven by which PROFILE to become, not just
-// which role, since "Athlete" alone doesn't say which of two linked
-// athletes that means. "Parent" has no separate profile record of its
-// own, so it always produces exactly one target with `id: null`.
+// account, or an athlete profile of your own plus one you guard) produces
+// two of these, one per profile, rather than one per role - switching is
+// driven by which PROFILE to become, not just which role.
 export interface SwitchTarget {
   key: string;
   role: SwitchableRole;
@@ -19,12 +21,11 @@ export interface SwitchTarget {
   active: boolean;
 }
 
-const ROLE_ORDER: SwitchableRole[] = ["athlete", "coach", "referee", "parent"];
+const ROLE_ORDER: SwitchableRole[] = ["athlete", "coach", "referee"];
 const ROLE_LABELS: Record<SwitchableRole, string> = {
   athlete: "Athlete",
   coach: "Coach",
   referee: "Referee",
-  parent: "Parent",
 };
 
 // Shared by Profile.tsx's own "Acting as" widget and the bottom nav's
@@ -38,7 +39,7 @@ const ROLE_LABELS: Record<SwitchableRole, string> = {
 export function useProfileSwitching() {
   const { user, switchRole, fetchMyProfiles } = useAuth();
   const [profiles, setProfiles] = useState<{
-    athletes: ProfileRecord[];
+    athletes: AthleteProfile[];
     coaches: ProfileRecord[];
     referees: ProfileRecord[];
   }>({ athletes: [], coaches: [], referees: [] });
@@ -54,21 +55,18 @@ export function useProfileSwitching() {
     athlete: profiles.athletes,
     coach: profiles.coaches,
     referee: profiles.referees,
-    parent: [],
   };
 
   const activeIdByRole: Record<SwitchableRole, number | null> = {
     athlete: user?.athlete_id ?? null,
     coach: user?.coach_id ?? null,
     referee: user?.referee_id ?? null,
-    parent: null,
   };
 
   const hasRole: Record<SwitchableRole, boolean> = {
     athlete: !!user?.athlete_id,
     coach: !!user?.coach_id,
     referee: !!user?.referee_id,
-    parent: !!user?.is_parent,
   };
 
   // Expands each held role into one target per actual linked profile
@@ -77,12 +75,14 @@ export function useProfileSwitching() {
   // there's nothing to flatten. Falls back to one nameless target if the
   // profile list hasn't loaded yet (or came back empty despite the role
   // being held), rather than showing nothing for a role the account
-  // genuinely has.
+  // genuinely has. An athlete profile linked via guardianship (rather
+  // than being the account's own) gets "(Guardian)" appended to its name
+  // so the switcher visibly distinguishes the two.
   const switchTargets: SwitchTarget[] = ROLE_ORDER.filter(
     (role) => hasRole[role]
   ).flatMap((role): SwitchTarget[] => {
     const records = profilesByRole[role];
-    if (role === "parent" || records.length === 0) {
+    if (records.length === 0) {
       return [
         {
           key: role,
@@ -99,7 +99,10 @@ export function useProfileSwitching() {
       role,
       id: r.id,
       label: ROLE_LABELS[role],
-      name: `${r.first_name} ${r.last_name}`,
+      name:
+        role === "athlete" && (r as AthleteProfile).is_guardian_link
+          ? `${r.first_name} ${r.last_name} (Guardian)`
+          : `${r.first_name} ${r.last_name}`,
       active: user?.role === role && activeIdByRole[role] === r.id,
     }));
   });

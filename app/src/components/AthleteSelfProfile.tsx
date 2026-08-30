@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { useApi } from "../hooks/useApi";
 import { Spinner, Avatar, BeltSwatch, DeleteButton } from "./ui";
 import { CompetitionResultsSection } from "./CompetitionResults";
+import { GuardianInviteLink } from "./GuardianInviteLink";
 
-interface Parent {
+interface Guardian {
   id: number;
   first_name: string | null;
   last_name: string | null;
@@ -68,96 +69,42 @@ export function ReadOnlyField({
   );
 }
 
-export function LinkParentPin({ athleteId }: { athleteId: number }) {
+export function LinkedGuardians({ athleteId }: { athleteId: number }) {
   const api = useApi();
-  const [pin, setPin] = useState<string | null>(null);
-  const [expiresAt, setExpiresAt] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function generate() {
-    setError(null);
-    setSubmitting(true);
-    try {
-      const res = await api.post<{ pin: string; expires_at: string }>(
-        `/athletes/${athleteId}/generate-pin`,
-        {}
-      );
-      setPin(res.pin);
-      setExpiresAt(res.expires_at);
-    } catch {
-      setError("Failed to generate a PIN");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-3">
-      <span className="text-sm font-medium text-stone-700">
-        Link a parent
-      </span>
-      <p className="text-sm text-stone-600">
-        Generate a one-time code and share it with your parent. They enter
-        it on their own profile to link to yours.
-      </p>
-      {pin && (
-        <div className="flex flex-col items-center gap-1 rounded-xl border border-stone-200 bg-white py-3">
-          <span className="text-3xl font-semibold tracking-widest">
-            {pin}
-          </span>
-          <span className="text-xs text-stone-500">
-            Expires {new Date(expiresAt!).toLocaleTimeString()} or once used
-          </span>
-        </div>
-      )}
-      {error && <p className="text-sm text-red-700">{error}</p>}
-      <button
-        type="button"
-        onClick={generate}
-        disabled={submitting}
-        className="min-h-[44px] rounded-full bg-red-600 font-medium text-white disabled:opacity-50"
-      >
-        {pin ? "Generate new PIN" : "Generate PIN"}
-      </button>
-    </div>
-  );
-}
-
-export function LinkedParents({ athleteId }: { athleteId: number }) {
-  const api = useApi();
-  const [parents, setParents] = useState<Parent[] | null>(null);
+  const [guardians, setGuardians] = useState<Guardian[] | null>(null);
 
   useEffect(() => {
     api
-      .get<{ parents: Parent[] }>(`/athletes/${athleteId}/parents`)
-      .then((res) => setParents(res.parents))
-      .catch(() => setParents([]));
+      .get<{ guardians: Guardian[] }>(`/athletes/${athleteId}/guardians`)
+      .then((res) => setGuardians(res.guardians))
+      .catch(() => setGuardians([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [athleteId]);
 
-  async function handleUnlink(parent: Parent) {
-    await api.del(`/athletes/${athleteId}/parents/${parent.id}`);
-    setParents((prev) => (prev ? prev.filter((p) => p.id !== parent.id) : prev));
+  async function handleUnlink(guardian: Guardian) {
+    await api.del(`/athletes/${athleteId}/guardians/${guardian.id}`);
+    setGuardians((prev) =>
+      prev ? prev.filter((g) => g.id !== guardian.id) : prev
+    );
   }
 
-  if (!parents || parents.length === 0) return null;
+  if (!guardians || guardians.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-2 rounded-xl bg-stone-50 p-3">
       <span className="text-sm font-medium text-stone-700">
-        Linked parents
+        Linked guardians
       </span>
-      {parents.map((p) => {
+      {guardians.map((g) => {
         const name =
-          p.first_name || p.last_name
-            ? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim()
-            : p.email;
+          g.first_name || g.last_name
+            ? `${g.first_name ?? ""} ${g.last_name ?? ""}`.trim()
+            : g.email;
         return (
-          <div key={p.id} className="flex items-center justify-between gap-2">
+          <div key={g.id} className="flex items-center justify-between gap-2">
             <span className="text-sm text-stone-600">{name}</span>
             <DeleteButton
-              onClick={() => handleUnlink(p)}
+              onClick={() => handleUnlink(g)}
               itemLabel={name}
               label="Unlink"
               iconOnly
@@ -290,8 +237,8 @@ export function AthleteSelfProfile({ athleteId }: { athleteId: number }) {
 
       <CompetitionResultsSection athleteId={athlete.id} />
 
-      <LinkedParents athleteId={athlete.id} />
-      <LinkParentPin athleteId={athlete.id} />
+      <LinkedGuardians athleteId={athlete.id} />
+      <GuardianInviteLink endpoint={`/athletes/${athlete.id}/guardian-invite-link`} />
     </div>
   );
 }
