@@ -450,7 +450,11 @@ const tools = [
             properties: {
               item_type: { type: "string", enum: ["exercise", "rest"] },
               name: { type: "string", description: "Required for exercise items." },
-              explanation: { type: "string" },
+              explanation: {
+                type: "string",
+                description:
+                  "Plain text, or simple HTML for formatting when it actually helps readability (numbered cues, a short bulleted list of coaching points) - not by default for a one-line description. Only these tags render: <b>/<strong>, <i>/<em>, <ul>/<ol>/<li>, <br>, <p> - anything else (links, images, styles, other tags) is stripped before display, so don't use them. E.g. '<p>Keep your back straight.</p><ul><li>Chamber the knee first</li><li>Snap, don\\'t push</li></ul>'.",
+              },
               video_url: {
                 type: "string",
                 description:
@@ -480,7 +484,8 @@ const tools = [
           {
             item_type: "exercise",
             name: "Front kicks",
-            explanation: "Chamber the knee before extending.",
+            explanation:
+              "<p>Chamber the knee before extending.</p><ul><li>Keep the supporting knee slightly bent</li><li>Snap the kick back after extension</li></ul>",
             sets: 3,
             reps: 10,
           },

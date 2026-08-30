@@ -1,4 +1,4 @@
-import { extractYouTubeId } from "./ui";
+import { extractYouTubeId, RichText } from "./ui";
 
 export type TrainingModuleItemType = "exercise" | "rest";
 
@@ -129,9 +129,7 @@ export function ExerciseItemRow({ item }: { item: TrainingModuleItem }) {
     <div className="flex items-start gap-3 rounded-xl border border-stone-200 bg-white p-3">
       <div className="flex flex-1 flex-col gap-1">
         <span className="font-medium">{itemSummary(item)}</span>
-        {item.explanation && (
-          <p className="text-sm text-stone-600">{item.explanation}</p>
-        )}
+        <RichText html={item.explanation} />
       </div>
       <ExerciseMediaBox item={item} />
     </div>
