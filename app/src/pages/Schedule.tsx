@@ -792,6 +792,15 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     });
   }
 
+  // Re-fetches whenever the active profile actually changes - switching
+  // between two profiles that share the same role (e.g. your own athlete
+  // profile and one you guard, both role: "athlete") re-renders this same
+  // component instance without unmounting it, so a mount-only effect
+  // would otherwise keep showing the previous profile's stale schedule
+  // until a manual page refresh. Left as a plain background re-fetch
+  // (events isn't cleared first) rather than a full reload, same as the
+  // existing "retry on reconnect" behavior below - whatever's already on
+  // screen stays up until the new data actually arrives.
   useEffect(() => {
     load();
     // Retries automatically once connectivity returns, so the offline
@@ -799,7 +808,7 @@ function ScheduleManager({ canPickAthletes }: { canPickAthletes: boolean }) {
     window.addEventListener("online", load);
     return () => window.removeEventListener("online", load);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.role, user?.athlete_id, user?.coach_id]);
 
   // Now that the initial load window spans a week either side of today
   // instead of starting exactly at today, the first render would
