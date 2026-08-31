@@ -54,7 +54,6 @@ const tabClassName = ({ isActive }: { isActive: boolean }) =>
 const PROFILE_LABELS: Record<string, string> = {
   athlete: "Athlete",
   coach: "Coach",
-  parent: "Parent",
   referee: "Referee",
 };
 

@@ -28,7 +28,7 @@ interface Person {
 
 type ProfileKind = "athlete" | "coach" | "referee";
 
-const ROLES: Role[] = ["coach", "athlete", "parent", "referee"];
+const ROLES: Role[] = ["coach", "athlete", "referee"];
 const STATUSES: Status[] = ["pending", "active", "disabled"];
 
 export default function AdminUsers() {

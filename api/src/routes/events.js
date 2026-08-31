@@ -530,12 +530,16 @@ router.get(
     let query;
     let params;
 
-    if (req.user.is_admin) {
-      query = `SELECT ${EVENT_FIELDS} FROM nk_events e
-               ${hasRange ? "WHERE e.end_date >= $1 AND e.start_date <= $2" : ""}
-               ORDER BY start_date`;
-      params = hasRange ? [from, to] : [];
-    } else if (req.user.role === "athlete" && req.user.athlete_id) {
+    // Role-scoped branches are checked before the is_admin fallback:
+    // is_admin is a durable privilege that bypasses *route* authorization
+    // regardless of active role (see authorize.js), but it must not also
+    // bypass *data scoping* here - an admin account that's actively
+    // switched to role: 'athlete' (e.g. to view their own linked profile,
+    // or a guardian's) should see exactly that athlete's own schedule,
+    // the same as any plain athlete would, not every event in the club.
+    // is_admin only gets the unfiltered view as a last resort, when the
+    // active role isn't one of the scoped ones at all.
+    if (req.user.role === "athlete" && req.user.athlete_id) {
       query = `SELECT ${EVENT_FIELDS} FROM nk_events e
                WHERE EXISTS (
                  SELECT 1 FROM nk_event_athletes ea
@@ -557,6 +561,11 @@ router.get(
                ${hasRange ? "AND e.end_date >= $2 AND e.start_date <= $3" : ""}
                ORDER BY start_date`;
       params = hasRange ? [req.user.coach_id, from, to] : [req.user.coach_id];
+    } else if (req.user.is_admin) {
+      query = `SELECT ${EVENT_FIELDS} FROM nk_events e
+               ${hasRange ? "WHERE e.end_date >= $1 AND e.start_date <= $2" : ""}
+               ORDER BY start_date`;
+      params = hasRange ? [from, to] : [];
     } else {
       return res.json({ events: [] });
     }

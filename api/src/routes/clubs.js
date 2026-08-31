@@ -426,9 +426,9 @@ router.get(
 );
 
 // Generates (or replaces) this club's join token - a long random, multi-use,
-// no-expiry string embedded in a shareable registration link. Unlike
-// nk_athletes.link_pin (single-use, cleared on redemption), this token stays
-// valid for every registrant until a club admin regenerates or revokes it.
+// no-expiry string embedded in a shareable registration link, same shape
+// as nk_athletes.guardian_invite_token. It stays valid for every
+// registrant until a club admin regenerates or revokes it.
 router.post(
   "/:id/join-link",
   asyncHandler(async (req, res) => {

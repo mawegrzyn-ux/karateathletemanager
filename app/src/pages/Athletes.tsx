@@ -12,9 +12,10 @@ import {
   Toast,
   BeltSwatch,
 } from "../components/ui";
-import { AthleteSelfProfile } from "../components/AthleteSelfProfile";
+import { AthleteSelfProfile, LinkedGuardians } from "../components/AthleteSelfProfile";
 import { CompetitionResultsSection } from "../components/CompetitionResults";
 import { ProfileInviteLink } from "../components/ProfileInviteLink";
+import { GuardianInviteLink } from "../components/GuardianInviteLink";
 
 interface Athlete {
   id: number;
@@ -489,6 +490,10 @@ function AthletesManager({ isAdmin }: { isAdmin: boolean }) {
             <ProfileInviteLink
               endpoint={`/athletes/${editing.id}/invite-link`}
               showClubPicker
+            />
+            <LinkedGuardians athleteId={editing.id} />
+            <GuardianInviteLink
+              endpoint={`/athletes/${editing.id}/guardian-invite-link`}
             />
             <label className="flex items-center gap-2 text-sm text-stone-600">
               <input

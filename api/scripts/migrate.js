@@ -1341,6 +1341,51 @@ const migrations = [
   `ALTER TABLE nk_event_items
      ADD COLUMN IF NOT EXISTS training_module_item_id INTEGER
        REFERENCES nk_training_module_items(id) ON DELETE SET NULL`,
+
+  // Redesigns the old "parent" role as Guardian: rather than a separate
+  // role/table, guardian access is now just another nk_user_athletes row
+  // (the same table that already lets one account own multiple athlete
+  // profiles), flagged with is_guardian_link so it can be told apart from
+  // an account's own primary profile for listing/revoking purposes. Once
+  // a guardian switches to that athlete profile via the existing
+  // switch-role flow, nk_users.role/athlete_id become indistinguishable
+  // from being that athlete - every existing self-access check in the
+  // app (isEventEditor, the many `role === 'athlete' && athlete_id ===
+  // X` checks, etc.) already keys off exactly that pair, so this is full
+  // parity access with zero changes to any of them.
+  `ALTER TABLE nk_user_athletes
+     ADD COLUMN IF NOT EXISTS is_guardian_link BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  `INSERT INTO nk_user_athletes (user_id, athlete_id, is_guardian_link)
+     SELECT user_id, athlete_id, true FROM nk_parent_athletes
+     ON CONFLICT (user_id, athlete_id) DO NOTHING`,
+
+  // Any account still sitting in role='parent' becomes a plain athlete
+  // profile switch away from guarding - same shape as any multi-profile
+  // athlete account, just picking whichever linked athlete happens to be
+  // the "currently active" one if it didn't already have one of its own.
+  `UPDATE nk_users u SET role = 'athlete',
+     athlete_id = COALESCE(u.athlete_id, (SELECT athlete_id FROM nk_user_athletes WHERE user_id = u.id LIMIT 1))
+     WHERE u.role = 'parent'`,
+
+  `DROP TABLE IF EXISTS nk_parent_athletes`,
+
+  // link_pin was single-use/short-lived (1 hour); guardian_invite_token
+  // is a long random, multi-use, no-expiry string embedded in a
+  // shareable link - same "regenerate replaces" convention as
+  // nk_clubs.join_token, since an athlete may share the same link with
+  // more than one guardian (e.g. both parents).
+  `ALTER TABLE nk_athletes
+     DROP COLUMN IF EXISTS link_pin,
+     DROP COLUMN IF EXISTS link_pin_expires_at`,
+  `ALTER TABLE nk_athletes ADD COLUMN IF NOT EXISTS guardian_invite_token VARCHAR(64)`,
+  `ALTER TABLE nk_athletes DROP CONSTRAINT IF EXISTS nk_athletes_guardian_invite_token_unique`,
+  `ALTER TABLE nk_athletes ADD CONSTRAINT nk_athletes_guardian_invite_token_unique UNIQUE (guardian_invite_token)`,
+
+  // Safe to rerun every deploy: the DROP happens first each time.
+  `ALTER TABLE nk_users DROP CONSTRAINT IF EXISTS nk_users_role_check`,
+  `ALTER TABLE nk_users ADD CONSTRAINT nk_users_role_check
+     CHECK (role IN ('admin', 'coach', 'athlete', 'referee'))`,
 ];
 
 // Each statement runs in its own transaction rather than one big

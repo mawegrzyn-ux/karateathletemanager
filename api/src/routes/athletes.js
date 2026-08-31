@@ -1,4 +1,5 @@
 const { Router } = require("express");
+const crypto = require("crypto");
 const pool = require("../db/pool");
 const authorize = require("../middleware/authorize");
 const asyncHandler = require("../utils/asyncHandler");
@@ -209,8 +210,17 @@ router.delete(
   })
 );
 
-router.post(
-  "/:id/generate-pin",
+// Guardian invite link: a long random, multi-use, no-expiry string
+// embedded in a shareable registration link, same "regenerate replaces"
+// convention as nk_clubs.join_token - an athlete may share the same link
+// with more than one guardian (e.g. both parents), so unlike the old
+// single-use link_pin this stays valid until regenerated or revoked. See
+// POST /auth/register's guardian_invite_token handling (fresh account)
+// and POST /auth/link-guardian (an already-logged-in account) for how
+// the link is consumed. Self/coach/admin, matching the old generate-pin
+// permission - not the stricter club-admin-only canManageProfileInvite.
+router.get(
+  "/:id/guardian-invite-link",
   asyncHandler(async (req, res) => {
     const isSelf =
       req.user.role === "athlete" &&
@@ -219,43 +229,58 @@ router.post(
       return res.status(403).json({ error: { message: "Forbidden" } });
     }
 
-    let pin;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const candidate = String(Math.floor(Math.random() * 1000000)).padStart(
-        6,
-        "0"
-      );
-      const { rows } = await pool.query(
-        `SELECT 1 FROM nk_athletes
-         WHERE link_pin = $1 AND link_pin_expires_at > NOW()`,
-        [candidate]
-      );
-      if (rows.length === 0) {
-        pin = candidate;
-        break;
-      }
-    }
-    if (!pin) {
-      return res
-        .status(500)
-        .json({ error: { message: "Could not generate a PIN, try again" } });
-    }
-
     const { rows } = await pool.query(
-      `UPDATE nk_athletes SET
-         link_pin = $1,
-         link_pin_expires_at = NOW() + INTERVAL '1 hour'
-       WHERE id = $2
-       RETURNING link_pin, link_pin_expires_at`,
-      [pin, req.params.id]
+      `SELECT guardian_invite_token FROM nk_athletes WHERE id = $1`,
+      [req.params.id]
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: { message: "Athlete not found" } });
     }
-    res.json({
-      pin: rows[0].link_pin,
-      expires_at: rows[0].link_pin_expires_at,
-    });
+    res.json({ guardian_invite_token: rows[0].guardian_invite_token });
+  })
+);
+
+router.post(
+  "/:id/guardian-invite-link",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!req.user.is_admin && req.user.role !== "coach" && !isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const token = crypto.randomBytes(24).toString("hex");
+    const { rows } = await pool.query(
+      `UPDATE nk_athletes SET guardian_invite_token = $1 WHERE id = $2
+       RETURNING guardian_invite_token`,
+      [token, req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: { message: "Athlete not found" } });
+    }
+    res.json({ guardian_invite_token: rows[0].guardian_invite_token });
+  })
+);
+
+router.delete(
+  "/:id/guardian-invite-link",
+  asyncHandler(async (req, res) => {
+    const isSelf =
+      req.user.role === "athlete" &&
+      req.user.athlete_id === Number(req.params.id);
+    if (!req.user.is_admin && req.user.role !== "coach" && !isSelf) {
+      return res.status(403).json({ error: { message: "Forbidden" } });
+    }
+
+    const { rowCount } = await pool.query(
+      `UPDATE nk_athletes SET guardian_invite_token = NULL WHERE id = $1`,
+      [req.params.id]
+    );
+    if (rowCount === 0) {
+      return res.status(404).json({ error: { message: "Athlete not found" } });
+    }
+    res.status(204).end();
   })
 );
 
@@ -263,8 +288,8 @@ router.post(
 // link for this specific athlete record, so whoever it belongs to can
 // create their own login pre-linked to it (and, optionally, pre-joined to
 // a club) - see POST /auth/register's invite_token handling for how the
-// link is consumed. Unlike generate-pin (parent linking, self-serve), this
-// is admin/club-admin only - there's no "isSelf" bypass.
+// link is consumed. Unlike the guardian-invite-link above (self-serve,
+// any coach), this is admin/club-admin only - there's no "isSelf" bypass.
 router.get(
   "/:id/invite-link",
   asyncHandler(async (req, res) => {
@@ -335,7 +360,7 @@ router.delete(
 );
 
 router.get(
-  "/:id/parents",
+  "/:id/guardians",
   asyncHandler(async (req, res) => {
     const isSelf =
       req.user.role === "athlete" &&
@@ -346,21 +371,22 @@ router.get(
 
     const { rows } = await pool.query(
       `SELECT u.id, u.first_name, u.last_name, u.email
-       FROM nk_parent_athletes pa
-       JOIN nk_users u ON u.id = pa.user_id
-       WHERE pa.athlete_id = $1
+       FROM nk_user_athletes ua
+       JOIN nk_users u ON u.id = ua.user_id
+       WHERE ua.athlete_id = $1 AND ua.is_guardian_link = true
        ORDER BY u.last_name, u.first_name`,
       [req.params.id]
     );
-    res.json({ parents: rows });
+    res.json({ guardians: rows });
   })
 );
 
-// Athlete-initiated unlink - the parent-side equivalent lives at
-// DELETE /auth/my-children/:athleteId, deleting the same
-// nk_parent_athletes row from the other direction.
+// Athlete-initiated unlink. The is_guardian_link guard means this can
+// only ever remove a guardian's access, never the athlete's own primary
+// nk_user_athletes row - even if userId happened to be the athlete's own
+// account.
 router.delete(
-  "/:id/parents/:userId",
+  "/:id/guardians/:userId",
   asyncHandler(async (req, res) => {
     const isSelf =
       req.user.role === "athlete" &&
@@ -370,7 +396,8 @@ router.delete(
     }
 
     const { rowCount } = await pool.query(
-      `DELETE FROM nk_parent_athletes WHERE athlete_id = $1 AND user_id = $2`,
+      `DELETE FROM nk_user_athletes
+       WHERE athlete_id = $1 AND user_id = $2 AND is_guardian_link = true`,
       [req.params.id, req.params.userId]
     );
     if (rowCount === 0) {
